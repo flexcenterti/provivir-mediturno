@@ -42,3 +42,31 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
   padding: 1.4rem; margin-top: 1rem; }
 .chip { font-family: var(--fm); background: var(--teal-soft); color: var(--teal-ink);
   padding: .18rem .55rem; border-radius: 7px; font-size: .85rem; }
+
+/* ══════════ Pantalla de sala (kiosk) ══════════ */
+.tv { min-height: 100vh; background: #0C3B3A; color: #EAF4F2; display: flex; flex-direction: column; }
+.tv-error { min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: #0C3B3A; color: #EAF4F2; font-size: 1.4rem; }
+.tv-cab { display: flex; align-items: center; gap: 1rem; padding: 1.2rem 2rem; background: rgba(0,0,0,.2); }
+.tv-cab h1 { font-size: 1.4rem; }
+.tv-sala { margin-left: auto; opacity: .75; font-size: 1rem; }
+.tv-cuerpo { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; padding: 1.5rem 2rem; }
+.tv-turnos { display: flex; flex-direction: column; gap: 1.2rem; }
+.tv-actual { background: rgba(255,255,255,.08); border-radius: 18px; padding: 2rem;
+  display: flex; flex-direction: column; gap: .4rem; }
+.tv-etiqueta { text-transform: uppercase; letter-spacing: .12em; font-size: .9rem; opacity: .7; }
+.tv-codigo { font-family: var(--fm); font-size: 5rem; line-height: 1; letter-spacing: .06em; }
+.tv-paciente { font-size: 1.8rem; }
+.tv-consultorio { font-size: 1.4rem; color: #7FD8CF; }
+.tv-lista { list-style: none; display: flex; flex-direction: column; gap: .5rem; }
+.tv-lista li { display: flex; align-items: baseline; gap: 1rem; background: rgba(255,255,255,.05);
+  border-radius: 12px; padding: .8rem 1.2rem; font-size: 1.2rem; }
+.tv-lista strong { font-family: var(--fm); font-size: 1.6rem; }
+.tv-consultorio-min { margin-left: auto; color: #7FD8CF; }
+.tv-media { position: relative; border-radius: 18px; overflow: hidden; background: #000; min-height: 320px; }
+.tv-frame { width: 100%; height: 100%; }
+.tv-media-etiqueta { position: absolute; left: 1rem; bottom: 1rem; background: rgba(0,0,0,.6);
+  padding: .3rem .8rem; border-radius: 999px; font-size: .85rem; }
+.tv-pie { padding: 1rem 2rem; background: rgba(0,0,0,.25); font-size: 1.1rem; text-align: center; }
+
+@media (max-width: 1100px) { .tv-cuerpo { grid-template-columns: 1fr; } }

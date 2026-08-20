@@ -28,6 +28,11 @@ Precedencia si algo se contradice: Lógica de Negocio > Especificación > Arquit
 - **RN-04 · Cupos múltiples:** un servicio puede ocupar N slots (ecografía Doppler = 2).
 - **RN-06 · El prestador ve su agenda en solo lectura.** Solo administración crea/bloquea/modifica disponibilidad.
 - **RN-08 · Foto de orden médica manuscrita → escala inmediato, sin OCR.** La imagen queda adjunta como soporte.
+- **Zona horaria:** "hoy" se calcula SIEMPRE con `hoyEnSede()`/`fechaEnZona()` de `@provivir/shared`.
+  La clínica opera en Cali (UTC−5) y el servidor puede estar en otra zona; usar la del servidor
+  desplaza el día entero. Nunca `new Date().toISOString().slice(0,10)`.
+- **El motor es el único que calcula reglas.** `citas.reglas.ts` tiene las funciones puras;
+  `citas.service.ts` las orquesta en transacciones. Ningún otro módulo replica lógica de agendamiento.
 
 ## Stack y comandos
 
@@ -43,8 +48,8 @@ npm test                           # unitarias (shared) + e2e (api)
 npm run lint
 ```
 
-**Sin Docker en la máquina:** `npm run db:local -w @provivir/api` levanta un PostgreSQL 16 real
-con binarios de usuario, sin root. Redis no tiene equivalente: las colas de la Fase 1 exigen Docker.
+**Sin Docker en la máquina:** `npm run db:local -w @provivir/api` levanta PostgreSQL 16 real con
+binarios de usuario, y `npm run redis:local -w @provivir/api` un Redis 7.2, ambos sin root.
 
 Usuarios del seed (solo desarrollo, password `Provivir2026!`):
 `admin@` · `asistente@` · `osorio@` (rol prestador, ficha `ao`) · `pantalla@` — todos `@provivir.local`.
@@ -75,10 +80,16 @@ Borrar migraciones · cambiar el esquema de auditoría · tocar la verificación
 
 | Fase | Estado |
 |---|---|
-| 0 · Fundaciones | **Completa** — ver `docs/changelog-fase0.md` |
-| 1 · Núcleo de datos + carga masiva | Siguiente |
-| 2 · Motor de agendamiento | La fase crítica: test-first sobre RN-01 a RN-04 |
-| 3–6 | Ver la Guía de desarrollo |
+| 0 · Fundaciones | **Completa** — `docs/changelog-fase0.md` |
+| 1 · Núcleo de datos + carga masiva | **Completa** — `docs/changelog-fase1.md` |
+| 2 · Motor de agendamiento | **Completa** — `docs/changelog-fase2.md` |
+| 3 · Operación en sede | **Completa** (backend; frontend parcial) — `docs/changelog-fase3.md` |
+| 4 · WhatsApp + IA + bandeja | Siguiente |
+| 5 · Autoagendamiento web | Ver la Guía §2 |
+| 6 · Métricas, endurecimiento y piloto | Ver la Guía §2 |
+
+**Pendiente de confirmar con el cliente:** la interpretación de RN-01.5 sobre qué cuenta como
+"control consecutivo" (ver `docs/changelog-fase2.md`).
 
 ## Definición de hecho (DoD) por tarea
 

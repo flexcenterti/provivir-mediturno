@@ -1,0 +1,10 @@
+import { Module } from '@nestjs/common';
+import { AgendasController } from './agendas.controller';
+import { AgendasService } from './agendas.service';
+
+@Module({
+  controllers: [AgendasController],
+  providers: [AgendasService],
+  exports: [AgendasService],
+})
+export class AgendasModule {}

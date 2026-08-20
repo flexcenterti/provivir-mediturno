@@ -8,6 +8,18 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { AuditoriaModule } from './auditoria/auditoria.module';
+import { ConfiguracionModule } from './configuracion/configuracion.module';
+import { ColasModule } from './colas/colas.module';
+import { PacientesModule } from './pacientes/pacientes.module';
+import { PrestadoresModule } from './prestadores/prestadores.module';
+import { ServiciosModule } from './servicios/servicios.module';
+import { AgendasModule } from './agendas/agendas.module';
+import { CargaModule } from './carga/carga.module';
+import { CitasModule } from './citas/citas.module';
+import { TurnosModule } from './turnos/turnos.module';
+import { PantallasModule } from './pantallas/pantallas.module';
+import { MetricasModule } from './metricas/metricas.module';
 
 @Module({
   imports: [
@@ -23,8 +35,23 @@ import { RolesGuard } from './auth/guards/roles.guard';
       ],
     }),
     PrismaModule,
+    AuditoriaModule,
+    ConfiguracionModule,
+    ColasModule,
     HealthModule,
     AuthModule,
+    // Fase 1 · núcleo de datos
+    PacientesModule,
+    PrestadoresModule,
+    ServiciosModule,
+    AgendasModule,
+    CargaModule,
+    // Fase 2 · motor de agendamiento
+    CitasModule,
+    // Fase 3 · operación en sede
+    TurnosModule,
+    PantallasModule,
+    MetricasModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

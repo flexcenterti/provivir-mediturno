@@ -1,4 +1,7 @@
-import { violaIntercalado, aMinutos, aHHMM, SEDE_ID, HISTORIAL_SERVICIOS_VISIBLES } from '../dominio';
+import {
+  violaIntercalado, aMinutos, aHHMM, SEDE_ID, HISTORIAL_SERVICIOS_VISIBLES,
+  fechaEnZona, hoyEnSede, ZONA_SEDE,
+} from '../dominio';
 import { puedeModificarAgenda, ROLES } from '../roles';
 
 /**
@@ -83,5 +86,22 @@ describe('Constantes de dominio', () => {
 
   it('define exactamente los cuatro roles del sistema', () => {
     expect([...ROLES]).toEqual(['admin', 'asistente', 'prestador', 'pantalla']);
+  });
+});
+
+describe('Zona horaria de la sede', () => {
+  it('calcula la fecha en Cali, no en la del servidor', () => {
+    // 2026-08-21 00:30 en Berlín (UTC+2) es todavía 2026-08-20 en Cali (UTC−5).
+    const momento = new Date('2026-08-20T22:30:00Z');
+    expect(fechaEnZona(momento, 'America/Bogota')).toBe('2026-08-20');
+    expect(fechaEnZona(momento, 'Europe/Berlin')).toBe('2026-08-21');
+  });
+
+  it('la sede opera en America/Bogota', () => {
+    expect(ZONA_SEDE).toBe('America/Bogota');
+  });
+
+  it('hoyEnSede devuelve medianoche UTC del día de la sede', () => {
+    expect(hoyEnSede().toISOString()).toMatch(/T00:00:00\.000Z$/);
   });
 });

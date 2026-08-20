@@ -16,6 +16,7 @@
     ]
   },
   "moduleNameMapper": {
+    "^(\\.{1,2}/.*)\\.js$": "$1",
     "^@provivir/shared$": "<rootDir>/../../packages/shared/src/index.ts"
   },
   "setupFiles": [

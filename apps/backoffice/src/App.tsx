@@ -1,52 +1,99 @@
-import { useState, type FormEvent } from 'react';
-import { login, type UsuarioSesion } from './api';
+import { useEffect, useState, type FormEvent } from 'react';
+import { api, token, type UsuarioSesion } from './api';
+import { Dashboard } from './vistas/Dashboard';
+import { Consolidada } from './vistas/Consolidada';
+import { Mostrador } from './vistas/Mostrador';
+import { VistaPrestador } from './vistas/Prestador';
 
-const ETIQUETA_ROL: Record<UsuarioSesion['rol'], string> = {
-  admin: 'Administración',
-  asistente: 'Asistente',
-  prestador: 'Prestador',
-  pantalla: 'Pantalla de sala',
-};
+type Vista = 'dashboard' | 'consolidada' | 'mostrador' | 'prestador';
+
+/** D1 · sin selector de sede: la capacidad multi-sede vive en el modelo, no en la UI. */
+const MENU: Array<{ id: Vista; etiqueta: string; roles: UsuarioSesion['rol'][] }> = [
+  { id: 'dashboard', etiqueta: 'Dashboard', roles: ['admin', 'asistente'] },
+  { id: 'consolidada', etiqueta: 'Agenda consolidada', roles: ['admin', 'asistente'] },
+  { id: 'mostrador', etiqueta: 'Mostrador', roles: ['admin', 'asistente'] },
+  { id: 'prestador', etiqueta: 'Mi consulta', roles: ['prestador', 'admin'] },
+];
 
 export function App() {
   const [usuario, setUsuario] = useState<UsuarioSesion | null>(null);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    if (!token.leer()) { setCargando(false); return; }
+    api.yo()
+      .then((u) => setUsuario(u as UsuarioSesion))
+      .catch(() => token.borrar())
+      .finally(() => setCargando(false));
+  }, []);
+
+  if (cargando) return <div className="cargando">Cargando…</div>;
+  if (!usuario) return <Login onEntrar={setUsuario} />;
+  return <Consola usuario={usuario} onSalir={() => { token.borrar(); setUsuario(null); }} />;
+}
+
+function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => void }) {
+  const disponibles = MENU.filter((m) => m.roles.includes(usuario.rol));
+  const [vista, setVista] = useState<Vista>(disponibles[0]?.id ?? 'dashboard');
+
+  return (
+    <div className="consola">
+      <aside className="lateral">
+        <div className="brand">
+          <div className="brand-mark">GP</div>
+          <div>
+            <strong>Grupo Provivir</strong>
+            <span className="sede">CDC Oriente</span>
+          </div>
+        </div>
+
+        <nav>
+          {disponibles.map((m) => (
+            <button key={m.id} className={`nav-item ${vista === m.id ? 'activo' : ''}`} onClick={() => setVista(m.id)}>
+              {m.etiqueta}
+            </button>
+          ))}
+        </nav>
+
+        <div className="usuario">
+          <span>{usuario.nombre}</span>
+          <span className="muted">{usuario.rol}</span>
+          <button className="btn btn-ghost" onClick={onSalir}>Salir</button>
+        </div>
+      </aside>
+
+      <main className="contenido">
+        {vista === 'dashboard' && <Dashboard />}
+        {vista === 'consolidada' && <Consolidada />}
+        {vista === 'mostrador' && <Mostrador />}
+        {vista === 'prestador' && (
+          usuario.prestadorId
+            ? <VistaPrestador prestadorId={usuario.prestadorId} />
+            : <p className="nota">Este usuario no está asociado a una ficha de prestador.</p>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function Login({ onEntrar }: { onEntrar: (u: UsuarioSesion) => void }) {
   const [email, setEmail] = useState('admin@provivir.local');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [cargando, setCargando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
-    setError('');
-    setCargando(true);
+    setError(''); setEnviando(true);
     try {
-      const r = await login(email, password);
-      sessionStorage.setItem('accessToken', r.accessToken);
-      setUsuario(r.usuario);
+      const r = await api.login(email, password);
+      token.guardar(r.accessToken);
+      onEntrar(r.usuario);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado');
     } finally {
-      setCargando(false);
+      setEnviando(false);
     }
-  }
-
-  if (usuario) {
-    return (
-      <div className="panel">
-        <h1>Grupo Provivir · CDC Oriente</h1>
-        <div className="card">
-          <p>
-            Sesión iniciada como <strong>{usuario.nombre}</strong>
-          </p>
-          <p style={{ marginTop: '.6rem' }}>
-            Rol: <span className="chip">{ETIQUETA_ROL[usuario.rol]}</span>
-          </p>
-          <p style={{ marginTop: '1rem', color: 'var(--muted)', fontSize: '.86rem' }}>
-            Fase 0 · fundaciones. El backoffice se construye en la Fase 3.
-          </p>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -57,33 +104,17 @@ export function App() {
           <h1>Grupo Provivir</h1>
         </div>
         <p className="login-sub">CDC Oriente · Plataforma de agendamiento</p>
-
         {error && <div className="error">{error}</div>}
-
         <div className="field">
           <label htmlFor="email">Correo</label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="username"
-            required
-          />
+          <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required />
         </div>
         <div className="field">
           <label htmlFor="password">Contraseña</label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
+          <input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
         </div>
-        <button className="btn btn-primary" type="submit" disabled={cargando}>
-          {cargando ? 'Entrando…' : 'Entrar'}
+        <button className="btn btn-primary" type="submit" disabled={enviando}>
+          {enviando ? 'Entrando…' : 'Entrar'}
         </button>
       </form>
     </div>

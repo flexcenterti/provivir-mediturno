@@ -52,3 +52,23 @@ export function aHHMM(minutos: number): string {
   const m = minutos % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
+
+/**
+ * Zona horaria de la sede. La clínica opera en Cali (UTC−5) y el servidor puede
+ * estar en cualquier otra: calcular "hoy" con la hora del servidor desplaza el día
+ * entero y las citas de la mañana caen en la fecha equivocada.
+ */
+export const ZONA_SEDE = 'America/Bogota';
+
+/** Fecha AAAA-MM-DD del momento dado en la zona indicada. */
+export function fechaEnZona(momento: Date = new Date(), zona: string = ZONA_SEDE): string {
+  // 'en-CA' produce exactamente AAAA-MM-DD.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: zona, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(momento);
+}
+
+/** El día de hoy en la sede, como Date UTC a medianoche (así se guardan las fechas). */
+export function hoyEnSede(zona: string = ZONA_SEDE): Date {
+  return new Date(`${fechaEnZona(new Date(), zona)}T00:00:00Z`);
+}
