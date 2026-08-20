@@ -1,0 +1,450 @@
+// Esquema de datos · Grupo Provivir (CDC Oriente)
+// Referencia: Arquitectura v1.0 §5 · Lógica de Negocio v2.0 (RN-01 a RN-12)
+// D1: sede vive en el modelo con valor único 'cdc-oriente'; nunca se expone en la UI.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── Enumeraciones ───────────────────────────
+
+/// RN-01, RN-04 · Tipos de cita
+enum TipoCita {
+  general
+  control
+  procedimiento
+  examen
+}
+
+enum Rol {
+  admin
+  asistente
+  prestador
+  pantalla
+}
+
+/// RN-12.4 · Trazabilidad del canal que creó al paciente
+enum OrigenPaciente {
+  carga
+  mostrador
+  whatsapp
+  autoagendamiento
+}
+
+enum OrigenCita {
+  mostrador
+  whatsapp
+  autoagendamiento
+  asistente
+}
+
+/// RN-06.4 · Modos de definición de disponibilidad
+enum ModoAgenda {
+  semanal
+  calendario
+}
+
+enum EstadoCita {
+  pendiente_llegada
+  confirmada
+  llego
+  en_atencion
+  atendida
+  cancelada
+  no_asistio
+}
+
+enum EstadoTurno {
+  en_espera
+  llamado
+  en_atencion
+  atendido
+  ausente
+}
+
+/// D6 · "prioridad", nunca "urgencia". Criterios alta/media/baja pendientes (P4);
+/// mientras tanto la columna operativa dominante es el tiempo de espera (RN-05.3).
+enum Prioridad {
+  alta
+  media
+  baja
+}
+
+enum EstadoConversacion {
+  ia_activa
+  escalada
+  en_gestion
+  resuelta
+}
+
+enum DireccionMensaje {
+  entrante
+  saliente
+}
+
+enum TipoMensaje {
+  texto
+  audio
+  imagen
+  video
+  documento
+  sistema
+}
+
+/// RN-01.2 · Política de costo del control, parametrizable a futuro
+enum PoliticaCosto {
+  sin_costo
+  costo_pleno
+  porcentaje
+}
+
+// ─────────────────────────── Sede (D1) ───────────────────────────
+
+model Sede {
+  id        String   @id
+  nombre    String
+  direccion String
+  waNumero  String   @map("wa_numero")
+  horario   String
+  creadoEn  DateTime @default(now()) @map("creado_en")
+
+  pacientes     Paciente[]
+  prestadores   Prestador[]
+  agendas       Agenda[]
+  citas         Cita[]
+  conversaciones Conversacion[]
+  pantallas     Pantalla[]
+  usuarios      Usuario[]
+
+  @@map("sede")
+}
+
+// ─────────────────────────── Pacientes (RN-12) ───────────────────────────
+
+model Paciente {
+  id           String         @id @default(uuid())
+  tdoc         String         @default("CC")
+  /// RN-12.5 · Identificador principal para deduplicación en recargas
+  documento    String         @unique
+  nombres      String
+  apellidos    String
+  telefono     String?
+  whatsapp     String?
+  correo       String?
+  fechaNac     DateTime?      @map("fecha_nac") @db.Date
+  sexo         String?
+  /// Marcas preferenciales para la cola de atención (RN-05.2, RN-17)
+  condiciones  String[]       @default([])
+  origen       OrigenPaciente @default(carga)
+  activo       Boolean        @default(true)
+  sedeId       String         @map("sede_id")
+  creadoEn     DateTime       @default(now()) @map("creado_en")
+  actualizadoEn DateTime      @updatedAt @map("actualizado_en")
+
+  sede      Sede                @relation(fields: [sedeId], references: [id])
+  historial HistorialServicio[]
+  citas     Cita[]
+  conversaciones Conversacion[]
+
+  @@index([documento])
+  @@index([telefono])
+  @@index([apellidos, nombres])
+  @@map("paciente")
+}
+
+/// RN-12.4 · Historial OPERATIVO de servicios (últimos 10 visibles).
+/// No es historia clínica: sin diagnósticos, resultados ni notas médicas.
+model HistorialServicio {
+  id            String   @id @default(uuid())
+  pacienteId    String   @map("paciente_id")
+  fecha         DateTime @db.Date
+  servicioTexto String   @map("servicio_texto")
+
+  paciente Paciente @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+
+  @@index([pacienteId, fecha(sort: Desc)])
+  @@map("historial_servicio")
+}
+
+// ─────────────────────────── Catálogo de servicios (RN-04) ───────────────────────────
+
+model Servicio {
+  id            String        @id
+  nombre        String
+  categoria     String
+  tipo          TipoCita
+  duracionMin   Int           @map("duracion_min")
+  /// RN-04.4 · Slots que ocupa el servicio (Ecografía Doppler = 2)
+  cupos         Int           @default(1)
+  requiereOrden Boolean       @default(false) @map("requiere_orden")
+  /// RN-01.2 · El control no tiene costo; parametrizable a futuro
+  politicaCosto PoliticaCosto @default(costo_pleno) @map("politica_costo")
+  activo        Boolean       @default(true)
+
+  prestadores PrestadorServicio[]
+  agendas     Agenda[]
+  citas       Cita[]
+
+  @@map("servicio")
+}
+
+// ─────────────────────────── Prestadores (RN-01, RN-02) ───────────────────────────
+
+model Prestador {
+  id           String  @id
+  nombre       String
+  especialidad String
+  /// RN-02.1 · true solo para el grupo de medicina general. Único grupo que balancea.
+  grupoBalanceo Boolean @default(false) @map("grupo_balanceo")
+  vinculacion  String  @default("Interno")
+  consultorio  String?
+  activo       Boolean @default(true)
+  sedeId       String  @map("sede_id")
+
+  sede      Sede               @relation(fields: [sedeId], references: [id])
+  servicios PrestadorServicio[]
+  config    PrestadorConfig?
+  agendas   Agenda[]
+  citas     Cita[]
+  usuario   Usuario?
+
+  @@index([grupoBalanceo, activo])
+  @@map("prestador")
+}
+
+/// RN-01.4 · La duración se configura por prestador Y por tipo de servicio
+model PrestadorServicio {
+  prestadorId String @map("prestador_id")
+  servicioId  String @map("servicio_id")
+  duracionMin Int    @map("duracion_min")
+
+  prestador Prestador @relation(fields: [prestadorId], references: [id], onDelete: Cascade)
+  servicio  Servicio  @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+
+  @@id([prestadorId, servicioId])
+  @@map("prestador_servicio")
+}
+
+model PrestadorConfig {
+  prestadorId        String @id @map("prestador_id")
+  /// RN-01.3 · Días máximos entre la consulta origen y el control. Referencia: 7–10, hasta 30.
+  ventanaControlDias Int    @default(10) @map("ventana_control_dias")
+
+  prestador Prestador @relation(fields: [prestadorId], references: [id], onDelete: Cascade)
+
+  @@map("prestador_config")
+}
+
+// ─────────────────────────── Agendas (RN-06) ───────────────────────────
+
+/// RN-06.1 · Solo administración crea/modifica/bloquea. El prestador la ve en solo lectura.
+model Agenda {
+  id          String     @id @default(uuid())
+  prestadorId String     @map("prestador_id")
+  modo        ModoAgenda
+  /// modo=semanal: días de la semana (1=lunes … 7=domingo)
+  diasSemana  Int[]      @default([]) @map("dias_semana")
+  /// modo=calendario: fecha puntual
+  fecha       DateTime?  @db.Date
+  horaIni     String     @map("hora_ini")
+  horaFin     String     @map("hora_fin")
+  slotMin     Int        @map("slot_min")
+  servicioId  String?    @map("servicio_id")
+  consultorio String?
+  activa      Boolean    @default(true)
+  /// RN-06.3 · Bloqueo con citas asignadas → notificación y reprogramación
+  bloqueada   Boolean    @default(false)
+  motivoBloqueo String?  @map("motivo_bloqueo")
+  sedeId      String     @map("sede_id")
+
+  prestador Prestador @relation(fields: [prestadorId], references: [id], onDelete: Cascade)
+  servicio  Servicio? @relation(fields: [servicioId], references: [id])
+  sede      Sede      @relation(fields: [sedeId], references: [id])
+
+  @@index([prestadorId, activa])
+  @@index([fecha])
+  @@map("agenda")
+}
+
+// ─────────────────────────── Citas · el núcleo (RN-01 a RN-04) ───────────────────────────
+
+model Cita {
+  id          String     @id @default(uuid())
+  /// Código de atención, único por sede y día
+  codigo      String
+  pacienteId  String     @map("paciente_id")
+  prestadorId String     @map("prestador_id")
+  servicioId  String     @map("servicio_id")
+  tipo        TipoCita
+  /// RN-01.3 · Un control exige su consulta origen y debe caer dentro de la ventana del prestador
+  citaOrigenId String?   @map("cita_origen_id")
+  fecha       DateTime   @db.Date
+  /// Hora de inicio en minutos desde medianoche — aritmética de solapamiento sin ambigüedad de zona horaria
+  horaInicio  Int        @map("hora_inicio")
+  duracionMin Int        @map("duracion_min")
+  estado      EstadoCita @default(confirmada)
+  origen      OrigenCita
+  observacion String?
+  sedeId      String     @map("sede_id")
+  creadoEn    DateTime   @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  paciente   Paciente  @relation(fields: [pacienteId], references: [id])
+  prestador  Prestador @relation(fields: [prestadorId], references: [id])
+  servicio   Servicio  @relation(fields: [servicioId], references: [id])
+  sede       Sede      @relation(fields: [sedeId], references: [id])
+  citaOrigen Cita?     @relation("ControlDeConsulta", fields: [citaOrigenId], references: [id])
+  controles  Cita[]    @relation("ControlDeConsulta")
+  turno      Turno?
+
+  /// Invariante: el código no se repite dentro del mismo día en la misma sede
+  @@unique([sedeId, fecha, codigo])
+  /// Índice del motor: la consulta más caliente es "citas de este prestador ese día"
+  @@index([fecha, prestadorId, horaInicio])
+  @@index([codigo])
+  @@map("cita")
+}
+
+// ─────────────────────────── Turnos · cola en sede (RN-05, RN-07) ───────────────────────────
+
+model Turno {
+  id           String      @id @default(uuid())
+  citaId       String      @unique @map("cita_id")
+  llegadaTs    DateTime    @default(now()) @map("llegada_ts")
+  estado       EstadoTurno @default(en_espera)
+  prioridad    Prioridad   @default(baja)
+  /// RN-07.4 · Si el prestador prioriza, la nota del motivo es obligatoria y queda auditada
+  notaPriorizacion String? @map("nota_priorizacion")
+  priorizadoPor    String? @map("priorizado_por")
+  llamadoTs    DateTime?   @map("llamado_ts")
+  consultorio  String?
+
+  cita Cita @relation(fields: [citaId], references: [id], onDelete: Cascade)
+
+  /// Orden de la cola: prioridad primero, luego llegada (RN-07.3)
+  @@index([estado, prioridad, llegadaTs])
+  @@map("turno")
+}
+
+// ─────────────────────────── Conversaciones WhatsApp (RN-08, RN-09) ───────────────────────────
+
+model Conversacion {
+  id         String             @id @default(uuid())
+  pacienteId String?            @map("paciente_id")
+  telefono   String
+  estado     EstadoConversacion @default(ia_activa)
+  intencion  String?
+  confianza  Int?
+  escalada   Boolean            @default(false)
+  /// RN-08.3 · Marca temporal del escalamiento: alimenta la columna "tiempo esperando"
+  escaladaTs DateTime?          @map("escalada_ts")
+  motivo     String?
+  prioridad  Prioridad          @default(baja)
+  tomadaPor  String?            @map("tomada_por")
+  resueltaTs DateTime?          @map("resuelta_ts")
+  sedeId     String             @map("sede_id")
+  creadoEn   DateTime           @default(now()) @map("creado_en")
+
+  paciente Paciente?  @relation(fields: [pacienteId], references: [id])
+  sede     Sede       @relation(fields: [sedeId], references: [id])
+  mensajes Mensaje[]
+
+  /// Consulta de la bandeja: pendientes = escalada && sin resolver
+  @@index([escalada, resueltaTs])
+  @@index([telefono])
+  @@map("conversacion")
+}
+
+model Mensaje {
+  id             String           @id @default(uuid())
+  conversacionId String           @map("conversacion_id")
+  direccion      DireccionMensaje
+  tipo           TipoMensaje      @default(texto)
+  contenido      String?
+  /// Media fuera del webroot; se sirve con URL firmada y expiración
+  mediaPath      String?          @map("media_path")
+  transcripcion  String?
+  /// ID del mensaje en Meta, para conciliar acuses de entrega
+  waMessageId    String?          @unique @map("wa_message_id")
+  ts             DateTime         @default(now())
+
+  conversacion Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+
+  @@index([conversacionId, ts])
+  @@map("mensaje")
+}
+
+// ─────────────────────────── Pantallas de sala (RN-11) ───────────────────────────
+
+model Pantalla {
+  id             String   @id @default(uuid())
+  nombre         String
+  /// RN-11.1 · Configuración por sala/servicio, no por pisos
+  servicios      String[] @default([])
+  turnosVisibles Int      @default(4) @map("turnos_visibles")
+  sonido         Boolean  @default(true)
+  mensaje        String?
+  /// RN-11.2 · Frame multimedia: canal en vivo + videos institucionales rotando
+  media          Boolean  @default(false)
+  canalYoutube   String?  @map("canal_youtube")
+  videosPromo    String[] @default([]) @map("videos_promo")
+  intervaloInstitucionalMin Int @default(10) @map("intervalo_institucional_min")
+  sedeId         String   @map("sede_id")
+
+  sede Sede @relation(fields: [sedeId], references: [id])
+
+  @@map("pantalla")
+}
+
+// ─────────────────────────── Usuarios y auditoría ───────────────────────────
+
+model Usuario {
+  id           String   @id @default(uuid())
+  nombre       String
+  email        String   @unique
+  hashPassword String   @map("hash_password")
+  rol          Rol
+  /// Un usuario con rol=prestador se ata a su ficha de prestador (RN-06.2)
+  prestadorId  String?  @unique @map("prestador_id")
+  activo       Boolean  @default(true)
+  ultimoAcceso DateTime? @map("ultimo_acceso")
+  sedeId       String   @map("sede_id")
+  creadoEn     DateTime @default(now()) @map("creado_en")
+
+  prestador Prestador? @relation(fields: [prestadorId], references: [id])
+  sede      Sede       @relation(fields: [sedeId], references: [id])
+
+  @@map("usuario")
+}
+
+/// Append-only. Nunca se actualiza ni se borra: sin @updatedAt a propósito.
+model Auditoria {
+  id         String   @id @default(uuid())
+  ts         DateTime @default(now())
+  usuario    String
+  accion     String
+  entidad    String
+  detalle    String?
+  estadoPrev String?  @map("estado_prev")
+  estadoNext String?  @map("estado_next")
+
+  @@index([ts(sort: Desc)])
+  @@index([entidad])
+  @@map("auditoria")
+}
+
+/// Parámetros de reglas fuera del código (Arquitectura §9):
+/// hueco_max, ventanas, umbrales de IA, KIOSKO_ACTIVO, intervalo institucional.
+model Configuracion {
+  clave         String   @id
+  valor         String
+  descripcion   String?
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  @@map("configuracion")
+}

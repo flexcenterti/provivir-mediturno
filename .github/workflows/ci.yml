@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  verificar:
+    name: Lint · Test · Build · Migraciones
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: provivir
+          POSTGRES_PASSWORD: provivir
+          POSTGRES_DB: provivir
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U provivir -d provivir"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://provivir:provivir@localhost:5432/provivir?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: secreto-solo-para-ci-no-usar-en-ningun-ambiente-real-000
+      CORS_ORIGINS: http://localhost:5173
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # Checklist §4.8 · sin vulnerabilidades altas ni críticas
+      - name: Auditoría de dependencias
+        run: npm audit --audit-level=high
+
+      # Checklist §4.3 · ningún secreto en el repo ni en el historial
+      - name: Escaneo de secretos
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: npm run lint
+
+      - name: Generar cliente Prisma
+        run: npm run db:generate -w @provivir/api
+
+      # Las migraciones deben aplicar limpias sobre una base vacía
+      - name: Migraciones
+        run: npm run db:deploy -w @provivir/api
+
+      - name: Seed
+        run: npm run db:seed -w @provivir/api
+
+      - name: Pruebas unitarias
+        run: npm test --workspaces --if-present
+
+      - name: Pruebas e2e
+        run: npm run test:e2e -w @provivir/api
+
+      - run: npm run build

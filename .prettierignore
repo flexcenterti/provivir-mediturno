@@ -1,0 +1,6 @@
+dist
+coverage
+node_modules
+.pgdata
+docs
+apps/api/prisma/migrations

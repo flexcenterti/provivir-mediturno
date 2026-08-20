@@ -1,0 +1,1915 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grupo Provivir — Plataforma de agendamiento inteligente · CDC Oriente</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F3F6F7; --card:#FFFFFF; --ink:#13272F; --muted:#5C7078; --line:#E1E8EA;
+  --teal:#0E6E6B; --teal-ink:#0A4E4C; --teal-soft:#E2F1F0;
+  --green:#2F9E62; --green-soft:#E4F4EB;
+  --amber:#C77E1E; --amber-soft:#FBF0DC;
+  --blue:#2E6FD8; --blue-soft:#E7EFFC;
+  --red:#C34A38;  --red-soft:#FAE8E4;
+  --slate:#1D3540;
+  --shadow:0 1px 2px rgba(19,39,47,.06),0 4px 14px rgba(19,39,47,.06);
+  --r:12px;
+  --fd:'Sora',system-ui,sans-serif;
+  --fb:'IBM Plex Sans',system-ui,sans-serif;
+  --fm:'IBM Plex Mono',ui-monospace,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{font-size:15px}
+body{background:var(--bg);color:var(--ink);font-family:var(--fb);-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;font-size:.95rem;color:var(--ink)}
+h1,h2,h3{font-family:var(--fd);letter-spacing:-.01em}
+:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+
+/* ====== Chip de código de atención ====== */
+.code-chip{font-family:var(--fm);font-weight:600;letter-spacing:.12em;background:var(--slate);color:#EAF4F2;
+  padding:.18rem .55rem;border-radius:7px;font-size:.85rem;display:inline-block;white-space:nowrap}
+.code-chip.lg{font-size:1.4rem;padding:.35rem .9rem;border-radius:10px}
+.code-chip.ghost{background:var(--teal-soft);color:var(--teal-ink)}
+
+/* ====== Etiquetas ====== */
+.tag{display:inline-block;padding:.14rem .55rem;border-radius:999px;font-size:.75rem;font-weight:600;white-space:nowrap}
+.t-teal{background:var(--teal-soft);color:var(--teal-ink)}
+.t-green{background:var(--green-soft);color:#1E6B42}
+.t-amber{background:var(--amber-soft);color:#8A5510}
+.t-blue{background:var(--blue-soft);color:#1D4FA3}
+.t-red{background:var(--red-soft);color:#93321F}
+.t-gray{background:#EDF1F2;color:var(--muted)}
+
+/* ====== Login ====== */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(160deg,#0C3B3A 0%,#0E6E6B 55%,#12827E 100%)}
+.login-card{background:var(--card);border-radius:18px;padding:2.4rem 2.2rem;width:min(430px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.28)}
+.brand{display:flex;align-items:center;gap:.7rem;margin-bottom:.4rem}
+.brand-mark{width:42px;height:42px;border-radius:12px;background:var(--teal);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--fm);font-weight:700;font-size:1.05rem;letter-spacing:.05em}
+.brand h1{font-size:1.35rem}
+.login-sub{color:var(--muted);font-size:.86rem;margin-bottom:1.5rem}
+.field{margin-bottom:.9rem}
+.field label{display:block;font-size:.78rem;font-weight:600;color:var(--muted);margin-bottom:.3rem;text-transform:uppercase;letter-spacing:.06em}
+.field input,.field select,.field textarea{width:100%;padding:.6rem .75rem;border:1px solid var(--line);border-radius:9px;background:#FBFCFC}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;padding:.6rem 1.1rem;border-radius:9px;font-weight:600;font-size:.9rem;transition:filter .12s}
+.btn:hover{filter:brightness(1.06)}
+.btn-primary{background:var(--teal);color:#fff}
+.btn-dark{background:var(--slate);color:#fff}
+.btn-ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn-soft{background:var(--teal-soft);color:var(--teal-ink)}
+.btn-danger{background:var(--red-soft);color:#93321F}
+.btn-green{background:var(--green);color:#fff}
+.btn-amber{background:var(--amber-soft);color:#8A5510}
+.btn-block{width:100%}
+.btn-sm{padding:.35rem .7rem;font-size:.8rem;border-radius:7px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.quick-roles{margin-top:1.4rem;border-top:1px solid var(--line);padding-top:1.1rem}
+.quick-roles p{font-size:.78rem;color:var(--muted);margin-bottom:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.quick-roles .grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+
+/* ====== Shell ====== */
+#app{display:none;min-height:100vh}
+.shell{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
+aside{background:var(--slate);color:#C6D6DA;padding:1.1rem .8rem;display:flex;flex-direction:column;gap:.15rem}
+aside .brand{color:#fff;padding:.2rem .5rem .9rem;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:.7rem}
+aside .brand h1{font-size:1.02rem}
+aside .brand .brand-mark{width:34px;height:34px;font-size:.85rem}
+.nav-sec{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:#7E959C;padding:.8rem .55rem .3rem;font-weight:600}
+.nav-item{display:flex;align-items:center;gap:.55rem;width:100%;text-align:left;padding:.5rem .55rem;border-radius:8px;font-size:.88rem;color:#C6D6DA}
+.nav-item:hover{background:rgba(255,255,255,.07)}
+.nav-item.active{background:var(--teal);color:#fff;font-weight:600}
+.nav-item .ic{width:1.15rem;text-align:center;opacity:.9}
+.nav-item .badge{margin-left:auto;background:var(--red);color:#fff;border-radius:99px;font-size:.66rem;min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;padding:0 .32rem;font-weight:700}
+aside .foot{margin-top:auto;padding-top:.8rem;border-top:1px solid rgba(255,255,255,.12)}
+main{padding:1.4rem 1.8rem 3rem;max-width:1340px;width:100%}
+.topbar{display:flex;align-items:center;gap:1rem;margin-bottom:1.4rem;flex-wrap:wrap}
+.topbar h2{font-size:1.35rem}
+.topbar .sub{color:var(--muted);font-size:.85rem;margin-top:.15rem}
+.topbar .spacer{flex:1}
+.user-pill{display:flex;align-items:center;gap:.55rem;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:.32rem .8rem .32rem .4rem;box-shadow:var(--shadow)}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--teal-soft);color:var(--teal-ink);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem}
+.user-pill .nm{font-size:.83rem;font-weight:600}
+.user-pill .rl{font-size:.7rem;color:var(--muted)}
+.fecha-pill{display:flex;align-items:center;gap:.5rem;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.4rem .8rem;box-shadow:var(--shadow);font-size:.85rem;font-weight:600}
+.fecha-pill select{border:none;background:none;font-weight:600;font-size:.85rem}
+
+/* ====== Cards / grid ====== */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.card .hd{display:flex;align-items:center;gap:.7rem;padding:.95rem 1.15rem;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.card .hd h3{font-size:.98rem}
+.card .hd .spacer{flex:1}
+.card .bd{padding:1.05rem 1.15rem}
+.grid{display:grid;gap:1rem}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g23{grid-template-columns:2fr 1fr}
+.g32{grid-template-columns:1fr 2fr}
+@media(max-width:1080px){.g4{grid-template-columns:repeat(2,1fr)}.g3,.g23,.g32{grid-template-columns:1fr}}
+@media(max-width:860px){.shell{grid-template-columns:1fr}aside{flex-direction:row;flex-wrap:wrap;position:sticky;top:0;z-index:30}aside .foot{margin-top:0}main{padding:1rem}}
+
+.kpi{padding:1rem 1.1rem}
+.kpi .lb{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.kpi .vl{font-family:var(--fd);font-size:1.75rem;font-weight:700;margin-top:.25rem}
+.kpi .dt{font-size:.78rem;color:var(--muted);margin-top:.2rem}
+.kpi.accent{border-top:3px solid var(--teal)}
+
+/* ====== Tablas ====== */
+table{width:100%;border-collapse:collapse;font-size:.87rem}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line);font-weight:600}
+td{padding:.6rem .8rem;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr.clickable:hover{background:#F7FAFA;cursor:pointer}
+.right{text-align:right}.center{text-align:center}
+.muted{color:var(--muted)}.small{font-size:.8rem}
+.name-doc b{display:block}.name-doc span{font-size:.76rem;color:var(--muted)}
+.link-name{cursor:pointer;text-decoration:underline dotted var(--muted);text-underline-offset:3px}
+.link-name:hover{color:var(--teal-ink)}
+
+/* ====== Buscadores / tabs ====== */
+.searchbar{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+.searchbar input,.searchbar select{padding:.55rem .8rem;border:1px solid var(--line);border-radius:9px;background:#fff;min-width:200px}
+.tabs{display:inline-flex;gap:.25rem;background:#EDF1F2;border-radius:9px;padding:.22rem}
+.tabs button{padding:.35rem .85rem;border-radius:7px;font-size:.82rem;font-weight:600;color:var(--muted)}
+.tabs button.active{background:#fff;color:var(--ink);box-shadow:var(--shadow)}
+
+/* ====== WhatsApp simulator ====== */
+.wa-wrap{display:grid;grid-template-columns:250px 1fr 280px;gap:1rem;align-items:start}
+@media(max-width:1080px){.wa-wrap{grid-template-columns:1fr}}
+.wa-conv{padding:.7rem .85rem;border-bottom:1px solid var(--line);cursor:pointer}
+.wa-conv:hover{background:#F7FAFA}
+.wa-conv.active{background:var(--teal-soft)}
+.wa-conv .ph{font-family:var(--fm);font-size:.78rem;color:var(--muted)}
+.wa-chat{background:#E8E2D8;border-radius:var(--r);border:1px solid var(--line);display:flex;flex-direction:column;height:560px;overflow:hidden}
+.wa-head{background:var(--teal);color:#fff;padding:.7rem 1rem;display:flex;align-items:center;gap:.6rem}
+.wa-head .ph{font-family:var(--fm);font-size:.78rem;opacity:.85}
+.wa-body{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.5rem}
+.msg{max-width:78%;padding:.55rem .8rem;border-radius:12px;font-size:.88rem;line-height:1.4;box-shadow:0 1px 1px rgba(0,0,0,.08)}
+.msg.p{align-self:flex-end;background:#D3F1DC;border-bottom-right-radius:3px}
+.msg.ia{align-self:flex-start;background:#fff;border-bottom-left-radius:3px}
+.msg.sys{align-self:center;background:#FBF0DC;font-size:.76rem;color:#8A5510;border-radius:8px}
+.msg .who{font-size:.68rem;font-weight:700;color:var(--teal-ink);margin-bottom:.15rem;text-transform:uppercase;letter-spacing:.05em}
+.wa-ticket{font-family:var(--fm);font-size:.78rem;background:#F7FBFA;border:1px dashed #B9C6CA;border-radius:8px;padding:.6rem .7rem;margin-top:.4rem;white-space:pre-line;line-height:1.5}
+.wa-audio{display:flex;align-items:center;gap:.5rem;background:#EAF2EC;border-radius:99px;padding:.4rem .8rem;font-size:.8rem;margin-bottom:.3rem}
+.wa-input{display:flex;gap:.5rem;padding:.7rem;background:#F2EFE9;border-top:1px solid var(--line)}
+.wa-input input{flex:1;padding:.6rem .8rem;border-radius:999px;border:1px solid var(--line)}
+.ia-panel .row{display:flex;justify-content:space-between;gap:.6rem;padding:.4rem 0;border-bottom:1px dashed var(--line);font-size:.84rem}
+.ia-panel .row:last-child{border-bottom:none}
+.conf-bar{height:7px;border-radius:99px;background:#EDF1F2;overflow:hidden;margin-top:.3rem}
+.conf-bar i{display:block;height:100%;background:var(--teal)}
+
+/* ====== Kiosko / Portal público ====== */
+.fullscreen{position:fixed;inset:0;z-index:100;overflow:auto}
+.kiosk{background:linear-gradient(165deg,#0C3B3A,#0E6E6B);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem;color:#fff;text-align:center;position:relative}
+.kiosk .panel{background:#fff;color:var(--ink);border-radius:22px;padding:2.4rem 2.2rem;width:min(600px,94vw);box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.kiosk h1{font-size:1.6rem;margin-bottom:.4rem}
+.kiosk .panel p.sub{color:var(--muted);margin-bottom:1.4rem}
+.kiosk .big-btn{width:100%;padding:1.1rem;font-size:1.15rem;border-radius:14px;font-weight:700}
+.kiosk input.code-in{width:100%;padding:1rem;font-size:1.6rem;text-align:center;font-family:var(--fm);letter-spacing:.25em;border:2px solid var(--line);border-radius:14px;text-transform:uppercase;margin:.4rem 0 1rem}
+.kiosk .exit{position:fixed;top:1rem;right:1rem;background:rgba(255,255,255,.15);color:#fff;border-radius:8px;padding:.4rem .8rem;font-size:.8rem;z-index:5}
+.kiosk .kmsg{border-radius:14px;padding:1.1rem;margin-bottom:1.2rem;font-size:1rem;line-height:1.5}
+.kiosk .kmsg.ok{background:var(--green-soft);color:#1E6B42}
+.kiosk .kmsg.warn{background:var(--amber-soft);color:#8A5510}
+.kiosk .kmsg.err{background:var(--red-soft);color:#93321F}
+.k-grid{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin-top:.4rem}
+.k-grid .btn{min-height:88px;flex-direction:column;gap:.35rem;font-size:1rem;border-radius:14px;font-weight:700}
+.k-grid .btn .kic{font-size:1.6rem}
+.ribbon{position:fixed;top:0;left:0;right:0;background:var(--amber);color:#fff;font-weight:700;font-size:.85rem;text-align:center;padding:.45rem;letter-spacing:.04em;z-index:6;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+.qr-box{width:150px;height:150px;margin:.8rem auto;border-radius:12px;border:2px solid var(--line);display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(7,1fr);gap:2px;padding:8px;background:#fff}
+.qr-box i{background:var(--slate);border-radius:1px}
+.qr-box i.w{background:#fff}
+
+/* ====== Pantalla de sala (TV) ====== */
+.tv{background:#0B1E24;min-height:100vh;color:#fff;display:flex;flex-direction:column;font-family:var(--fd)}
+.tv-head{display:flex;align-items:center;justify-content:space-between;padding:1.1rem 2.4rem;background:#0E2B33;border-bottom:2px solid rgba(255,255,255,.08)}
+.tv-head .t{font-size:1.4rem;font-weight:700}
+.tv-head .clock{font-family:var(--fm);font-size:1.4rem;color:#8FD8D2}
+.tv-main{flex:1;display:grid;grid-template-columns:1.35fr 1fr;grid-template-rows:auto 1fr;gap:1.6rem;padding:1.8rem 2.4rem;align-items:stretch}
+@media(max-width:900px){.tv-main{grid-template-columns:1fr;grid-template-rows:auto}}
+.tv-now{background:linear-gradient(160deg,#0E6E6B,#12827E);border-radius:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2.2rem;text-align:center;position:relative;overflow:hidden}
+.tv-now .lb{font-size:1rem;letter-spacing:.25em;text-transform:uppercase;color:#BFE8E4;font-weight:600}
+.tv-now .code{font-family:var(--fm);font-size:clamp(3.4rem,9vw,6.5rem);font-weight:700;letter-spacing:.1em;line-height:1.05;margin:.5rem 0}
+.tv-now .dest{font-size:clamp(1.3rem,3vw,2.1rem);font-weight:700}
+.tv-now .svc{font-size:1.05rem;color:#CFEDEA;margin-top:.4rem}
+.tv-now.flash{animation:tvflash 1s ease 3}
+@keyframes tvflash{0%,100%{box-shadow:0 0 0 0 rgba(143,216,210,0)}50%{box-shadow:0 0 0 14px rgba(143,216,210,.45)}}
+.tv-bell{position:absolute;top:1.2rem;right:1.4rem;font-size:1.6rem;opacity:0}
+.tv-bell.on{opacity:1;animation:ring .5s ease 4}
+@keyframes ring{0%,100%{transform:rotate(0)}25%{transform:rotate(-18deg)}75%{transform:rotate(18deg)}}
+.tv-list{display:flex;flex-direction:column;gap:.8rem;grid-row:span 2}
+.tv-list h2{font-size:.95rem;letter-spacing:.2em;text-transform:uppercase;color:#7FA6AD;font-weight:600}
+.tv-row{display:flex;align-items:center;justify-content:space-between;background:#10333C;border-radius:14px;padding:.9rem 1.3rem}
+.tv-row .code{font-family:var(--fm);font-size:1.7rem;font-weight:700;letter-spacing:.1em}
+.tv-row .dest{font-size:1.1rem;font-weight:600;text-align:right}
+.tv-row .svc{font-size:.82rem;color:#7FA6AD;text-align:right}
+.tv-media{background:#10333C;border-radius:18px;padding:1rem 1.3rem;display:flex;flex-direction:column;gap:.6rem;min-height:190px}
+.tv-media .mlabel{font-size:.78rem;letter-spacing:.18em;text-transform:uppercase;color:#7FA6AD;font-weight:600;display:flex;justify-content:space-between;align-items:center;font-family:var(--fb)}
+.tv-media .mframe{flex:1;border-radius:12px;background:linear-gradient(135deg,#14424D,#0E2B33);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;font-family:var(--fb);border:1px solid rgba(255,255,255,.08)}
+.tv-media .mframe .mt{font-size:1.15rem;font-weight:700}
+.tv-media .mframe .ms{font-size:.8rem;color:#8FB4BB}
+.tv-ticker{background:#0E2B33;padding:.85rem 2.4rem;font-size:1rem;color:#BFE8E4;border-top:2px solid rgba(255,255,255,.08);font-family:var(--fb)}
+.tv .exit{position:fixed;top:1rem;right:1rem;background:rgba(255,255,255,.12);color:#fff;border-radius:8px;padding:.4rem .8rem;font-size:.8rem;z-index:5;font-family:var(--fb)}
+
+/* ====== Vista prestador ====== */
+.pv-actions{display:flex;gap:.6rem;flex-wrap:wrap}
+.pv-actions .btn{padding:.85rem 1.3rem;font-size:1rem;border-radius:12px}
+.pv-current{display:flex;align-items:center;gap:1.4rem;flex-wrap:wrap}
+.pv-current .code-chip{font-size:2rem;padding:.5rem 1.1rem}
+.q-row.prio1{box-shadow:inset 3px 0 0 var(--amber)}
+.wait{font-family:var(--fm);font-size:.8rem}
+
+@media(max-width:700px){
+  .topbar{margin-bottom:1rem}
+  .topbar h2{font-size:1.12rem}
+  .topbar .sub{font-size:.78rem}
+  .user-pill .rl{display:none}
+  table.t-cards thead{display:none}
+  table.t-cards,table.t-cards tbody,table.t-cards tr,table.t-cards td{display:block;width:100%}
+  table.t-cards tr{border:1px solid var(--line);border-radius:12px;margin:.65rem .8rem;padding:.4rem .15rem;background:#fff;box-shadow:var(--shadow);width:auto}
+  table.t-cards tr.prio1{border-left:4px solid #D98E1B;box-shadow:var(--shadow)}
+  table.t-cards td{border-bottom:none;padding:.34rem .85rem;display:flex;justify-content:space-between;align-items:center;gap:.9rem;font-size:.93rem}
+  table.t-cards td[data-l]::before{content:attr(data-l);font-size:.66rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);flex-shrink:0}
+  table.t-cards td.t-act{justify-content:stretch}
+  table.t-cards td.t-act .btn{width:100%;min-height:48px}
+  table.t-cards .empty{border:none;box-shadow:none}
+  .pv-actions{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+  .pv-actions .btn{min-height:54px;font-size:.98rem;padding:.6rem .5rem}
+  .pv-actions .btn:first-child{grid-column:1/-1;min-height:64px;font-size:1.12rem}
+  .pv-current{justify-content:center;text-align:center;flex-direction:column;gap:.6rem}
+  .pv-current .code-chip{font-size:2.6rem;padding:.55rem 1.2rem}
+  .pv-grid>div:first-child{order:2}
+}
+@media(max-width:860px){
+  body[data-role="prestador"] aside{position:fixed;top:auto;bottom:0;left:0;right:0;flex-direction:row;flex-wrap:nowrap;justify-content:space-around;align-items:stretch;gap:.2rem;padding:.35rem .5rem calc(.35rem + env(safe-area-inset-bottom));box-shadow:0 -6px 20px rgba(15,40,46,.25);z-index:60}
+  body[data-role="prestador"] aside .brand,body[data-role="prestador"] aside .nav-sec{display:none}
+  body[data-role="prestador"] aside .foot{margin:0;padding:0;border:none;display:flex}
+  body[data-role="prestador"] .nav-item{flex-direction:column;gap:.18rem;font-size:.64rem;padding:.45rem .4rem;align-items:center;justify-content:center;flex:1;text-align:center;border-radius:10px}
+  body[data-role="prestador"] .nav-item .ic{font-size:1.3rem;width:auto}
+  body[data-role="prestador"] main{padding:.9rem .9rem 6.8rem}
+}
+
+/* ====== Ticket / modal ====== */
+.modal-mask{position:fixed;inset:0;background:rgba(13,30,36,.55);display:flex;align-items:center;justify-content:center;z-index:200;padding:1rem}
+.modal{background:#fff;border-radius:16px;max-width:660px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.modal .hd{display:flex;align-items:center;padding:1rem 1.2rem;border-bottom:1px solid var(--line)}
+.modal .hd h3{font-size:1.02rem}
+.modal .bd{padding:1.2rem}
+.ticket{width:300px;margin:0 auto;border:1px dashed #B9C6CA;border-radius:6px;padding:1.3rem 1.2rem;font-family:var(--fm);font-size:.82rem;background:#fff;color:#111}
+.ticket .c{text-align:center}
+.ticket .clin{font-weight:700;letter-spacing:.08em;font-size:.9rem}
+.ticket hr{border:none;border-top:1px dashed #B9C6CA;margin:.7rem 0}
+.ticket .code{font-size:2.1rem;font-weight:700;letter-spacing:.14em;text-align:center;margin:.5rem 0}
+.ticket .kv{display:flex;justify-content:space-between;margin:.25rem 0}
+@media print{body *{visibility:hidden}.print-zone,.print-zone *{visibility:visible}.print-zone{position:absolute;left:0;top:0;width:100%}}
+
+/* ====== Agenda consolidada ====== */
+.sched{display:grid;grid-template-columns:70px repeat(var(--cols),1fr);gap:2px;font-size:.8rem}
+.sched .hcell{background:#F0F4F5;padding:.5rem;font-weight:600;text-align:center;border-radius:6px}
+.sched .tcell{color:var(--muted);font-family:var(--fm);font-size:.72rem;padding:.4rem .3rem;text-align:right}
+.slot{border-radius:6px;padding:.35rem .45rem;min-height:42px;background:#F7FAFA;border:1px dashed var(--line)}
+.slot.busy{background:var(--teal-soft);border:1px solid #BCE0DE;cursor:pointer}
+.slot.busy.ctrl{background:var(--amber-soft);border-color:#EAD2A6}
+.slot.busy.proc{background:var(--blue-soft);border-color:#BFD3F3}
+.slot.busy .cd{font-family:var(--fm);font-weight:700;font-size:.72rem}
+.slot.blocked{background:#EDF1F2;border:1px solid var(--line);color:var(--muted);text-align:center}
+.slot.free:hover{border-color:var(--teal);cursor:pointer}
+/* Mes */
+.mes{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.mes .dh{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;text-align:center;padding:.3rem 0}
+.mes .d{border:1px solid var(--line);border-radius:9px;min-height:64px;padding:.35rem .45rem;font-size:.75rem;background:#fff;cursor:pointer;position:relative}
+.mes .d:hover{border-color:var(--teal)}
+.mes .d .dn{font-weight:700;font-family:var(--fm);font-size:.72rem}
+.mes .d .cnt{margin-top:.25rem;font-size:.68rem;color:var(--teal-ink);background:var(--teal-soft);border-radius:6px;padding:.08rem .3rem;display:inline-block}
+.mes .d.off{background:#F5F8F8;color:#B4C2C6;cursor:default}
+.mes .d.sel{border-color:var(--teal);background:var(--teal-soft)}
+
+/* ====== Barras ====== */
+.bar-row{display:grid;grid-template-columns:140px 1fr 46px;gap:.7rem;align-items:center;margin:.45rem 0;font-size:.84rem}
+.bar-track{height:12px;border-radius:99px;background:#EDF1F2;overflow:hidden}
+.bar-track i{display:block;height:100%;background:var(--teal);border-radius:99px}
+.bar-track i.alt{background:var(--blue)}
+.bar-track i.warn{background:var(--amber)}
+.legend{display:flex;gap:1rem;flex-wrap:wrap;font-size:.78rem;color:var(--muted);margin-top:.6rem}
+.legend .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:.3rem}
+
+/* ====== Misc ====== */
+.toast-wrap{position:fixed;bottom:1.2rem;right:1.2rem;display:flex;flex-direction:column;gap:.5rem;z-index:300}
+.toast{background:var(--slate);color:#fff;padding:.7rem 1rem;border-radius:10px;font-size:.86rem;box-shadow:var(--shadow);animation:tin .25s ease;max-width:360px}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.empty{padding:2rem;text-align:center;color:var(--muted);font-size:.88rem}
+.chips{display:flex;gap:.4rem;flex-wrap:wrap}
+.dropzone{border:2px dashed var(--line);border-radius:14px;padding:2.2rem;text-align:center;color:var(--muted);background:#FBFCFC}
+.switch{position:relative;width:38px;height:21px;display:inline-block}
+.switch input{opacity:0;width:0;height:0}
+.switch .sl{position:absolute;inset:0;background:#CBD7DA;border-radius:99px;transition:.15s}
+.switch .sl:before{content:"";position:absolute;width:15px;height:15px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+.switch input:checked + .sl{background:var(--teal)}
+.switch input:checked + .sl:before{transform:translateX(17px)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="login">
+  <div class="login-card">
+    <div class="brand">
+      <div class="brand-mark">GP</div>
+      <div><h1>Grupo Provivir</h1></div>
+    </div>
+    <p class="login-sub">Plataforma de agendamiento inteligente · CDC Oriente · WhatsApp IA, agendas, turnos y operación en sede</p>
+    <div class="field"><label>Usuario</label><input id="lg-user" placeholder="usuario@grupoprovivir.com"></div>
+    <div class="field"><label>Contraseña</label><input id="lg-pass" type="password" placeholder="••••••••"></div>
+    <button class="btn btn-primary btn-block" onclick="login('asistente')">Ingresar</button>
+    <div class="quick-roles">
+      <p>Acceso rápido de demostración</p>
+      <div class="grid">
+        <button class="btn btn-ghost" onclick="login('admin')">👤 Administrador</button>
+        <button class="btn btn-ghost" onclick="login('asistente')">🎧 Asistente general</button>
+        <button class="btn btn-ghost" onclick="login('prestador')">🩺 Prestador</button>
+        <button class="btn btn-ghost" onclick="login('pantalla')">📺 Pantalla de sala</button>
+        <button class="btn btn-ghost" onclick="login('autoagenda')">🌐 Autoagendamiento web</button>
+        <button class="btn btn-ghost" onclick="login('kiosko')">🖥️ Kiosko <span class="tag t-gray">apagado</span></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= APP SHELL ================= -->
+<div id="app">
+  <div class="shell">
+    <aside id="sidebar"></aside>
+    <main>
+      <div class="topbar" id="topbar"></div>
+      <div id="view"></div>
+    </main>
+  </div>
+</div>
+
+<!-- ================= FULLSCREEN (kiosko / pantalla / portal) ================= -->
+<div id="fs" class="fullscreen" style="display:none"></div>
+
+<!-- ================= MODAL / TOASTS ================= -->
+<div id="modal-root"></div>
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+/* =====================================================================
+   Grupo Provivir · CDC Oriente — Prototipo HTML v2.0 (datos simulados)
+   Ajustes de la reunión del 12-ago-2026. Multi-sede se conserva en el
+   modelo de datos (D1) pero queda oculto en la interfaz: sede única.
+   ===================================================================== */
+
+/* ---------------- DATOS MOCK ---------------- */
+const SEDES = [
+  {id:'oriente', nombre:'CDC Oriente', dir:'Grupo Provivir · Cali', wa:'+57 315 000 0001', horario:'7:00–18:00'},
+];
+const SEDE = 'oriente';
+
+const PACIENTES = [
+  {id:1, doc:'12345678', tdoc:'CC', nombres:'Carlos', apellidos:'Mora',   nac:'1986-04-12', sexo:'M', tel:'+57 300 111 1111', wa:'+57 300 111 1111', correo:'', sede:SEDE, cond:[], estado:'Activo', datos:'Completos', origen:'Carga inicial',
+    hist:[{f:'2026-07-30',s:'Medicina general · Consulta'},{f:'2026-06-14',s:'Laboratorio · Hemograma'},{f:'2026-02-02',s:'Medicina general · Consulta'}]},
+  {id:2, doc:'23456789', tdoc:'CC', nombres:'Ana',    apellidos:'Torres', nac:'1949-09-02', sexo:'F', tel:'+57 300 222 2222', wa:'+57 300 222 2222', correo:'', sede:SEDE, cond:['Adulto mayor'], estado:'Activo', datos:'Completos', origen:'Carga inicial',
+    hist:[{f:'2026-08-12',s:'Medicina general · Consulta'},{f:'2026-08-01',s:'Laboratorio · Glicemia'},{f:'2026-05-20',s:'Ecografía'},{f:'2026-03-11',s:'Medicina general · Consulta'},{f:'2025-12-02',s:'Nutrición'}]},
+  {id:3, doc:'34567890', tdoc:'CC', nombres:'Pedro',  apellidos:'Gómez',  nac:'1992-01-27', sexo:'M', tel:'+57 300 333 3333', wa:'+57 300 333 3333', correo:'', sede:SEDE, cond:[], estado:'Activo', datos:'Sin correo', origen:'Carga inicial',
+    hist:[{f:'2026-08-10',s:'Dermatología · Consulta'}]},
+  {id:4, doc:'45678901', tdoc:'CC', nombres:'María',  apellidos:'López',  nac:'1978-06-15', sexo:'F', tel:'+57 300 444 4444', wa:'+57 300 444 4444', correo:'maria.lopez@mail.com', sede:SEDE, cond:['Movilidad reducida'], estado:'Activo', datos:'Completos', origen:'Carga inicial',
+    hist:[{f:'2026-07-22',s:'Ginecología'},{f:'2026-07-22',s:'Laboratorio · Perfil lipídico'},{f:'2026-04-15',s:'Ginecología'}]},
+  {id:5, doc:'56789012', tdoc:'CC', nombres:'Jorge',  apellidos:'Patiño', nac:'2001-11-30', sexo:'M', tel:'+57 301 555 5555', wa:'+57 301 555 5555', correo:'', sede:SEDE, cond:[], estado:'Activo', datos:'Completos', origen:'WhatsApp',
+    hist:[{f:'2026-08-05',s:'Medicina general · Consulta'},{f:'2026-08-11',s:'Medicina general · Control'}]},
+  {id:6, doc:'67890123', tdoc:'CC', nombres:'Lucía',  apellidos:'Mendoza',nac:'1990-03-08', sexo:'F', tel:'+57 302 666 6666', wa:'+57 302 666 6666', correo:'', sede:SEDE, cond:['Embarazo'], estado:'Activo', datos:'Completos', origen:'Autoagendamiento web',
+    hist:[{f:'2026-08-14',s:'Ecografía Doppler'},{f:'2026-07-01',s:'Ginecología'}]},
+  {id:7, doc:'78901234', tdoc:'CC', nombres:'Rosa',   apellidos:'Quintero',nac:'1958-10-21', sexo:'F', tel:'+57 300 777 7777', wa:'+57 300 777 7777', correo:'', sede:SEDE, cond:['Adulto mayor'], estado:'Activo', datos:'Completos', origen:'Carga inicial',
+    hist:[{f:'2026-08-06',s:'Laboratorio · TSH'},{f:'2026-08-06',s:'Laboratorio · Hemograma'},{f:'2026-06-30',s:'Medicina general · Consulta'}]},
+];
+
+/* Tipos de cita: general | control | procedimiento | examen (RN-01, RN-04) */
+const SERVICIOS = [
+  {id:'mg',   nombre:'Medicina general · Consulta', cat:'Medicina general', tipo:'general',       dur:15, cupos:1, orden:false},
+  {id:'ctrl', nombre:'Medicina general · Control',  cat:'Medicina general', tipo:'control',       dur:10, cupos:1, orden:false, costo:'Sin costo'},
+  {id:'gin',  nombre:'Ginecología',                 cat:'Especialista',     tipo:'general',       dur:20, cupos:1, orden:false},
+  {id:'der',  nombre:'Dermatología · Consulta',     cat:'Especialista',     tipo:'general',       dur:20, cupos:1, orden:false},
+  {id:'derp', nombre:'Procedimiento dermatológico', cat:'Procedimiento',    tipo:'procedimiento', dur:120,cupos:1, orden:false},
+  {id:'nut',  nombre:'Nutrición',                   cat:'Especialista',     tipo:'general',       dur:30, cupos:1, orden:false},
+  {id:'vitc', nombre:'Suero de vitamina C',         cat:'Procedimiento',    tipo:'procedimiento', dur:15, cupos:1, orden:false},
+  {id:'eco',  nombre:'Ecografía',                   cat:'Diagnóstico',      tipo:'examen',        dur:20, cupos:1, orden:true},
+  {id:'ecod', nombre:'Ecografía Doppler',           cat:'Diagnóstico',      tipo:'examen',        dur:40, cupos:2, orden:true},
+  {id:'lab',  nombre:'Laboratorio clínico',         cat:'Laboratorio',      tipo:'examen',        dur:10, cupos:1, orden:true},
+];
+
+const EXAMENES = ['Hemograma','Glicemia','Perfil lipídico','Creatinina','Uroanálisis','TSH','Pruebas hepáticas','Prueba de embarazo','Coprológico','PCR'];
+
+/* balanceo:true → grupo de medicina general (RN-02) */
+const PRESTADORES = [
+  {id:'ao', nombre:'Dr. Andrés Osorio', tipo:'Interno', esp:'Medicina General', balanceo:true,  servicios:['mg','ctrl'],      sedes:[SEDE], dur:{mg:15,ctrl:10}, ventanaControl:10, estado:'Activo', consultorio:'Consultorio 1', modo:'Semanal'},
+  {id:'pr', nombre:'Dra. Pamela Ríos',  tipo:'Interno', esp:'Medicina General', balanceo:true,  servicios:['mg','ctrl'],      sedes:[SEDE], dur:{mg:15,ctrl:10}, ventanaControl:8,  estado:'Activo', consultorio:'Consultorio 2', modo:'Semanal'},
+  {id:'jo', nombre:'Dr. Jaime Ortiz',   tipo:'Interno', esp:'Medicina General', balanceo:true,  servicios:['mg','ctrl','vitc'],sedes:[SEDE],dur:{mg:15,ctrl:10,vitc:15}, ventanaControl:30, estado:'Activo', consultorio:'Consultorio 4', modo:'Semanal'},
+  {id:'md', nombre:'Dra. Marcela Duarte',tipo:'Interno',esp:'Ginecología',      balanceo:false, servicios:['gin'],            sedes:[SEDE], dur:{gin:20}, estado:'Activo', consultorio:'Consultorio 5', modo:'Semanal'},
+  {id:'lp', nombre:'Dra. Liliana Peña', tipo:'Externo', esp:'Dermatología',     balanceo:false, servicios:['der','derp'],     sedes:[SEDE], dur:{der:20,derp:120}, estado:'Activo', consultorio:'Consultorio 6', modo:'Calendario'},
+  {id:'is', nombre:'Dr. Iván Salas',    tipo:'Externo', esp:'Nutrición',        balanceo:false, servicios:['nut'],            sedes:[SEDE], dur:{nut:30}, estado:'Activo', consultorio:'Consultorio 7', modo:'Calendario'},
+  {id:'ec', nombre:'Ecografías CDC',    tipo:'Interno', esp:'Imágenes',         balanceo:false, servicios:['eco','ecod'],     sedes:[SEDE], dur:{eco:20,ecod:40}, estado:'Activo', consultorio:'Sala de Ecografía', modo:'Semanal'},
+  {id:'ln', nombre:'Laboratorio CDC',   tipo:'Interno', esp:'Laboratorio',      balanceo:false, servicios:['lab'],            sedes:[SEDE], dur:{lab:10}, estado:'Activo', consultorio:'Toma de Muestras 1', modo:'Semanal'},
+];
+
+/* Citas de hoy — Osorio muestra el intercalado general/control (RN-01). F0147 se crea en vivo desde el simulador. */
+let CITAS = [
+  {id:101, cod:'M0101', pacId:1, presId:'ao', servId:'mg',   tipo:'General',       sede:SEDE, hora:'08:00', dur:15, estado:'Atendida',          origen:'WhatsApp IA', prio:2, obs:''},
+  {id:102, cod:'C0102', pacId:5, presId:'ao', servId:'ctrl', tipo:'Control',       sede:SEDE, hora:'08:15', dur:10, estado:'Atendida',          origen:'WhatsApp IA', prio:2, obs:'Control · consulta del 05-ago (ventana 10 días)'},
+  {id:103, cod:'M0103', pacId:2, presId:'ao', servId:'mg',   tipo:'General',       sede:SEDE, hora:'08:30', dur:15, estado:'Llegó',             origen:'Mostrador',   prio:1, obs:'Adulto mayor'},
+  {id:104, cod:'M0104', pacId:7, presId:'pr', servId:'mg',   tipo:'General',       sede:SEDE, hora:'08:45', dur:15, estado:'En espera',         origen:'WhatsApp IA', prio:1, obs:'Adulto mayor'},
+  {id:105, cod:'G0110', pacId:4, presId:'md', servId:'gin',  tipo:'General',       sede:SEDE, hora:'09:00', dur:20, estado:'Llegó',             origen:'Asistente',   prio:1, obs:'Movilidad reducida'},
+  {id:106, cod:'E0310', pacId:6, presId:'ec', servId:'ecod', tipo:'Examen',        sede:SEDE, hora:'09:30', dur:40, estado:'Pendiente llegada', origen:'Autoagendamiento web', prio:1, obs:'Doppler · ocupa 2 cupos'},
+  {id:107, cod:'L0221', pacId:7, presId:'ln', servId:'lab',  tipo:'Examen',        sede:SEDE, hora:'10:00', dur:10, estado:'Pendiente llegada', origen:'WhatsApp IA', prio:1, obs:'Hemograma'},
+  {id:108, cod:'D0210', pacId:3, presId:'lp', servId:'derp', tipo:'Procedimiento', sede:SEDE, hora:'10:00', dur:120,estado:'Confirmada',        origen:'Asistente',   prio:2, obs:'Procedimiento · 2 horas'},
+  {id:109, cod:'M0109', pacId:5, presId:'jo', servId:'mg',   tipo:'General',       sede:SEDE, hora:'14:00', dur:15, estado:'Confirmada',        origen:'WhatsApp IA', prio:2, obs:''},
+];
+
+/* Turnos (cola en sede) */
+let TURNOS = [
+  {id:1, citaId:103, cod:'M0103', sede:SEDE, llegada:'08:22', estado:'En espera', prio:1, consultorio:'Consultorio 1'},
+  {id:2, citaId:104, cod:'M0104', sede:SEDE, llegada:'08:31', estado:'En espera', prio:1, consultorio:'Consultorio 2'},
+  {id:3, citaId:105, cod:'G0110', sede:SEDE, llegada:'08:47', estado:'En espera', prio:1, consultorio:'Consultorio 5'},
+];
+
+/* prioridad (antes «urgencia») + escTs para el tiempo de espera (RN-08) */
+let CONVERSACIONES = [
+  {id:1, sede:SEDE, pacId:1, tel:'+57 300 111 1111', estado:'IA activa', intencion:'—', conf:0, escalada:false, msgs:[], escenario:'demo'},
+  {id:2, sede:SEDE, pacId:3, tel:'+57 300 333 3333', estado:'Escalada', intencion:'Cita con especialista (orden médica)', conf:0, escalada:true, motivo:'Orden médica en foto (manuscrita) · atención humana inmediata', prioridad:'Media', tomada:false, escTs:Date.now()-38*60000, adj:'📷 orden_medica.jpg',
+    msgs:[{f:'p',t:'Necesito una cita con la dermatóloga, tengo la orden del médico'},{f:'ia',t:'Con gusto. Envíame por favor la foto de tu orden médica.'},{f:'p',t:'📷 [Foto de orden médica manuscrita]',img:true},{f:'ia',t:'Recibí tu orden. Para este tipo de solicitudes te va a atender directamente una de nuestras asistentes con la imagen como soporte. En un momento te contactamos. 🙌'},{f:'sys',t:'Escalamiento inmediato · Orden médica en foto (RN-08) · La IA no interpreta órdenes manuscritas'}]},
+  {id:3, sede:SEDE, pacId:2, tel:'+57 300 222 2222', estado:'Escalada', intencion:'Reprogramar cita', conf:55, escalada:true, motivo:'Paciente solicita hablar con una persona', prioridad:'Baja', tomada:false, escTs:Date.now()-12*60000,
+    msgs:[{f:'p',t:'Necesito cambiar mi cita pero prefiero hablar con alguien'},{f:'ia',t:'Con gusto. Voy a transferir tu conversación a una de nuestras asistentes.'},{f:'sys',t:'Conversación escalada a asistente · Solicitud explícita'}]},
+  {id:4, sede:SEDE, pacId:4, tel:'+57 300 444 4444', estado:'Resuelta', intencion:'Consultar cita', conf:96, escalada:false,
+    msgs:[{f:'p',t:'¿A qué hora es mi cita de ginecología?'},{f:'ia',t:'Tu cita de Ginecología es hoy a las 9:00 a.m. con la Dra. Marcela Duarte. Tu código de atención es G0110.'}]},
+];
+
+let AUDITORIA = [
+  {ts:'07:58', user:'sistema', accion:'Recordatorio 2 enviado', ent:'Cita M0103', sede:SEDE, det:'WhatsApp (texto formateado) a +57 300 222 2222', prev:'Recordatorio 1 enviado', next:'Recordatorio 2 enviado'},
+  {ts:'08:05', user:'IA',      accion:'Cita balanceada por IA', ent:'Cita M0104', sede:SEDE, det:'Medicina general sin preferencia → Dra. Ríos (menor carga)', prev:'Solicitada', next:'Confirmada'},
+  {ts:'08:22', user:'asistente.paula', accion:'Registro de llegada', ent:'Cita M0103', sede:SEDE, det:'Mostrador · pago en recepción · ticket impreso', prev:'Confirmada', next:'Llegó'},
+  {ts:'08:40', user:'IA',      accion:'Escalamiento inmediato', ent:'Conversación Pedro Gómez', sede:SEDE, det:'Orden médica en foto (manuscrita) · sin lectura IA', prev:'IA activa', next:'Escalada'},
+];
+
+let PANTALLAS = [
+  {id:1, nombre:'Pantalla 1 · Sala Medicina General', sede:SEDE, servicios:['mg','ctrl','vitc'], turnos:4, sonido:true,  media:true, canal:'youtube.com/@NoticiasCaracol/live', videos:'Video institucional Grupo Provivir · Servicios 2026', intMin:10, msg:'La atención es únicamente con cita previa. Agenda por WhatsApp o en grupoprovivir.com.'},
+  {id:2, nombre:'Pantalla 2 · Sala Especialistas y Ecografía', sede:SEDE, servicios:['gin','der','derp','nut','eco','ecod'], turnos:4, sonido:true, media:true, canal:'youtube.com/@NoticiasCaracol/live', videos:'Video promocional · Sueros y procedimientos', intMin:10, msg:'Para tu ecografía, recuerda las indicaciones de preparación.'},
+  {id:3, nombre:'Pantalla 3 · Sala Laboratorio', sede:SEDE, servicios:['lab'], turnos:6, sonido:false, media:false, canal:'', videos:'', intMin:10, msg:'Para toma de muestras, recuerda el ayuno indicado en tu orden.'},
+];
+
+let REGLAS = {anticip:15, tolerancia:10, retrasoMax:25, huecoMax:0, prefer:['Adulto mayor','Discapacidad','Movilidad reducida','Embarazo','Marcación manual']};
+
+/* modo: Semanal (patrón recurrente) | Calendario (fechas puntuales) — RN-06 */
+let AGENDAS = [
+  {id:1, presId:'ao', sede:SEDE, modo:'Semanal',    dias:'Lun–Sáb',      ini:'08:00', fin:'12:00', slot:15, serv:'mg',  cons:'Consultorio 1', estado:'Activa'},
+  {id:2, presId:'pr', sede:SEDE, modo:'Semanal',    dias:'Lun–Vie',      ini:'08:00', fin:'12:00', slot:15, serv:'mg',  cons:'Consultorio 2', estado:'Activa'},
+  {id:3, presId:'jo', sede:SEDE, modo:'Semanal',    dias:'Lun–Vie',      ini:'14:00', fin:'18:00', slot:15, serv:'mg',  cons:'Consultorio 4', estado:'Activa'},
+  {id:4, presId:'md', sede:SEDE, modo:'Semanal',    dias:'Lun–Sáb',      ini:'08:00', fin:'16:00', slot:20, serv:'gin', cons:'Consultorio 5', estado:'Activa'},
+  {id:5, presId:'lp', sede:SEDE, modo:'Calendario', dias:'Jue 21 ago',   ini:'10:00', fin:'13:00', slot:20, serv:'der', cons:'Consultorio 6', estado:'Activa'},
+  {id:6, presId:'is', sede:SEDE, modo:'Calendario', dias:'Vie 22 ago',   ini:'08:00', fin:'12:00', slot:30, serv:'nut', cons:'Consultorio 7', estado:'Activa'},
+  {id:7, presId:'ec', sede:SEDE, modo:'Semanal',    dias:'Lun–Sáb',      ini:'07:00', fin:'12:00', slot:20, serv:'eco', cons:'Sala de Ecografía', estado:'Activa'},
+  {id:8, presId:'ln', sede:SEDE, modo:'Semanal',    dias:'Lun–Sáb',      ini:'07:00', fin:'11:00', slot:10, serv:'lab', cons:'Toma de Muestras 1', estado:'Activa'},
+];
+
+const BASE = {convs:1240, iaAuto:986, escaladas:172, kiosko:0, mostrador:813, tarde:64, noShow:38, tEspera:14, tAtencion:22};
+
+/* ---------------- ESTADO ---------------- */
+const S = {
+  role:null, sede:SEDE, view:'dashboard',
+  waConv:1, waStep:0, waScen:null,
+  llamados:[], flash:false,
+  prestadorActual:'ao',
+  kiosk:{step:'welcome', found:null, msg:null},
+  portal:{step:'home', tipo:null, pac:null, serv:null, hora:null, cod:null},
+  live:{ia:0, kiosko:0, mostrador:0, atendidos:2},
+  demoCitaCreada:false,
+  rango:'hoy', dashQ:'', consTab:'dia', consQ:'', consPres:['ao','pr','jo','md'],
+  agTab:'semanal', mesSel:[], mediaVideo:false,
+};
+
+const ROLE_META = {
+  admin:{nombre:'John Mendoza', label:'Administrador'},
+  asistente:{nombre:'Paula Herrera', label:'Asistente general'},
+  prestador:{nombre:'Dr. Andrés Osorio', label:'Prestador · Medicina General'},
+  kiosko:{nombre:'Kiosko', label:'Autoatención (desactivado)'},
+  pantalla:{nombre:'Pantalla 1', label:'Sala de espera'},
+  autoagenda:{nombre:'Portal público', label:'Autoagendamiento web'},
+};
+
+/* ---------------- UTILIDADES ---------------- */
+const $ = s => document.querySelector(s);
+const pac = id => PACIENTES.find(p=>p.id===id);
+const pres = id => PRESTADORES.find(p=>p.id===id);
+const serv = id => SERVICIOS.find(s=>s.id===id);
+const sedeN = id => (SEDES.find(s=>s.id===id)||{}).nombre||id;
+const pacName = id => {const p=pac(id); return p? p.nombres+' '+p.apellidos : '—';};
+const nowHM = () => new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit',hour12:false});
+const hoyLargo = () => new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esperaConv = c => c.escTs ? Math.max(1,Math.round((Date.now()-c.escTs)/60000))+' min' : '—';
+const pendientes = () => CONVERSACIONES.filter(c=>c.escalada && !c.resuelta).length;
+const tipoTag = t => ({'Control':'<span class="tag t-amber">Control</span>','Procedimiento':'<span class="tag t-blue">Procedimiento</span>','Examen':'<span class="tag t-blue">Examen</span>'})[t]||'<span class="tag t-teal">Consulta</span>';
+
+function toast(msg){
+  const t=document.createElement('div'); t.className='toast'; t.innerHTML=msg;
+  $('#toasts').appendChild(t); setTimeout(()=>t.remove(),4200);
+}
+function audit(user,accion,ent,det,prev,next){
+  AUDITORIA.unshift({ts:nowHM(),user,accion,ent,sede:S.sede,det,prev:prev||'—',next:next||'—'});
+}
+function nuevoCodigo(letra){
+  let n=147;
+  while(CITAS.some(c=>c.cod===letra+String(n).padStart(4,'0') && c.sede===S.sede)) n++;
+  return letra+String(n).padStart(4,'0');
+}
+function estadoTag(e){
+  const map={'Confirmada':'t-teal','Llegó':'t-green','En espera':'t-blue','Llamado':'t-amber','En atención':'t-blue','Atendida':'t-green','Atendido':'t-green','Pendiente llegada':'t-gray','No asistió':'t-red','No respondió':'t-red','Requiere revisión':'t-red','Cancelada':'t-red','IA activa':'t-teal','Escalada':'t-amber','Resuelta':'t-green','Activa':'t-green','Bloqueada':'t-gray','Activo':'t-green','Desactivado':'t-gray','Temporalmente no disponible':'t-amber','Generado':'t-gray','Finalizado':'t-green'};
+  return `<span class="tag ${map[e]||'t-gray'}">${e}</span>`;
+}
+function beep(){
+  const p=PANTALLAS.find(x=>x.sede===S.sede && x.sonido);
+  if(!p) return;
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    [[880,0],[660,.28]].forEach(([f,d])=>{
+      const o=ctx.createOscillator(), g=ctx.createGain();
+      o.frequency.value=f; o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(.18,ctx.currentTime+d); g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+d+.25);
+      o.start(ctx.currentTime+d); o.stop(ctx.currentTime+d+.3);
+    });
+  }catch(e){}
+}
+
+/* ---------------- NAVEGACIÓN Y SHELL ---------------- */
+const NAV = {
+  admin:[
+    ['Operación',[['dashboard','📊','Dashboard'],['consolidada','🗓️','Agenda consolidada'],['whatsapp','💬','WhatsApp IA'],['bandeja','📥','Bandeja asistente'],['mostrador','🛎️','Mostrador'],['prestadorView','🩺','Vista prestador']]],
+    ['Gestión',[['pacientes','👥','Pacientes'],['prestadores','🧑‍⚕️','Prestadores'],['servicios','🧾','Servicios y exámenes'],['agendas','⏱️','Gestión de agendas'],['carga','📤','Carga masiva']]],
+    ['Configuración',[['metricas','📈','Métricas'],['pantallasCfg','🖥️','Pantallas de sala'],['prioridad','⚖️','Reglas de prioridad'],['portalCfg','🌐','Autoagendamiento web'],['auditoria','🔍','Auditoría']]],
+  ],
+  asistente:[
+    ['Operación',[['dashboard','📊','Dashboard'],['consolidada','🗓️','Agenda consolidada'],['whatsapp','💬','WhatsApp IA'],['bandeja','📥','Bandeja asistente'],['mostrador','🛎️','Mostrador'],['prestadorView','🩺','Vista prestador']]],
+    ['Gestión',[['pacientes','👥','Pacientes'],['agendas','⏱️','Gestión de agendas'],['carga','📤','Carga masiva']]],
+    ['Reportes',[['metricas','📈','Métricas'],['pantallasCfg','🖥️','Pantallas de sala']]],
+  ],
+  prestador:[
+    ['Mi consulta',[['prestadorView','🩺','Pacientes del día'],['agendas','📄','Información de agenda']]],
+  ],
+};
+const TITLES = {
+  dashboard:['Dashboard operativo','Resumen de la operación · CDC Oriente'],
+  consolidada:['Agenda consolidada','Día · semana · mes · citas inmediatas y futuras'],
+  whatsapp:['Simulador WhatsApp · IA','API oficial de Meta · multimedia entrante · respuestas en texto'],
+  bandeja:['Bandeja de la asistente','Conversaciones escaladas por la IA · prioridad y tiempo de espera'],
+  mostrador:['Atención en mostrador','Canal principal de llegada · pago en recepción · ticket'],
+  prestadorView:['Vista del prestador','Cola de espera, tipo de servicio y llamado de turnos'],
+  pacientes:['Gestión de pacientes','Base de ~200.000 pacientes · historial de servicios (muestra)'],
+  prestadores:['Prestadores','Duraciones por tipo de cita · balanceo de medicina general'],
+  servicios:['Servicios y exámenes','Tipos de cita, procedimientos y servicios de doble cupo'],
+  agendas:['Gestión de agendas','Semanal · por calendario · programación mensual (solo administración)'],
+  carga:['Carga masiva de pacientes','Plantilla del cliente · filtro último año · historial de servicios'],
+  metricas:['Métricas operativas','Indicadores del MVP · tablero definitivo pendiente del cliente'],
+  pantallasCfg:['Pantallas de sala','Turnos + frame de noticias y videos institucionales (YouTube)'],
+  prioridad:['Reglas de prioridad','Parámetros de llegada · criterios de casos pendientes del cliente'],
+  portalCfg:['Autoagendamiento web','Enlace público y QR para grupoprovivir.com y la sede'],
+  auditoria:['Auditoría','Registro simulado de acciones'],
+};
+
+function login(role){
+  S.role=role;
+  document.body.dataset.role=role;
+  $('#login').style.display='none';
+  if(role==='kiosko'){ S.kiosk={step:'welcome',found:null,msg:null}; renderFS(V.kiosko); return; }
+  if(role==='pantalla'){ renderFS(V.pantallaSala); startClock(); startMedia(); return; }
+  if(role==='autoagenda'){ S.portal={step:'home'}; renderFS(V.autoagenda); return; }
+  $('#app').style.display='block'; $('#fs').style.display='none';
+  S.view = role==='prestador' ? 'prestadorView' : 'dashboard';
+  render();
+}
+function logout(){
+  S.role=null; document.body.dataset.role='';
+  clearInterval(clockInt); clearInterval(mediaInt);
+  $('#app').style.display='none'; $('#fs').style.display='none'; $('#login').style.display='flex';
+}
+function nav(v){ S.view=v; render(); }
+
+function render(){
+  if(!S.role||['kiosko','pantalla','autoagenda'].includes(S.role)) return;
+  const meta=ROLE_META[S.role];
+  const nPend=pendientes();
+  let sb=`<div class="brand"><div class="brand-mark">GP</div><div><h1>Grupo Provivir</h1></div></div>`;
+  (NAV[S.role]||[]).forEach(([sec,items])=>{
+    sb+=`<div class="nav-sec">${sec}</div>`;
+    items.forEach(([id,ic,lb])=>{
+      const badge = id==='bandeja' && nPend ? `<span class="badge">${nPend}</span>` : '';
+      sb+=`<button class="nav-item ${S.view===id?'active':''}" onclick="nav('${id}')"><span class="ic">${ic}</span>${lb}${badge}</button>`;
+    });
+  });
+  sb+=`<div class="foot"><button class="nav-item" onclick="logout()"><span class="ic">🚪</span>Cerrar sesión</button></div>`;
+  $('#sidebar').innerHTML=sb;
+  let [t,sub]=TITLES[S.view]||['',''];
+  if(S.role==='prestador' && S.view==='agendas'){ t='Información de agenda'; sub='Vista informativa · solo administración modifica las agendas'; }
+  $('#topbar').innerHTML=`
+    <div><h2>${t}</h2><div class="sub">${sub}</div></div>
+    <div class="spacer"></div>
+    <span class="tag t-teal">📍 CDC Oriente</span>
+    <div class="user-pill"><div class="avatar">${meta.nombre[0]}</div><div><div class="nm">${meta.nombre}</div><div class="rl">${meta.label}</div></div></div>`;
+  $('#view').innerHTML = V[S.view] ? V[S.view]() : '<div class="empty">Vista no disponible</div>';
+}
+function renderFS(fn){ $('#fs').style.display='block'; $('#fs').innerHTML=fn(); }
+
+/* ---------------- VISTAS ---------------- */
+const V={};
+
+/* ===== Dashboard ===== */
+V.dashboard = () => {
+  const q=(S.dashQ||'').toLowerCase();
+  const cs=CITAS.filter(c=>c.sede===S.sede).filter(c=>{
+    if(!q) return true; const p=pac(c.pacId);
+    return c.cod.toLowerCase().includes(q)||p.doc.includes(q)||(p.nombres+' '+p.apellidos).toLowerCase().includes(q);
+  }).sort((a,b)=>a.hora.localeCompare(b.hora));
+  const enEspera=TURNOS.filter(t=>t.sede===S.sede && ['En espera','Llamado'].includes(t.estado)).length;
+  const escal=pendientes();
+  const mgDocs=PRESTADORES.filter(p=>p.balanceo);
+  /* Ocupación = tiempo de citas / jornada reportada (RN-02.5) */
+  const ocupacion=PRESTADORES.filter(p=>p.sedes.includes(S.sede)).map(p=>{
+    const ag=AGENDAS.find(a=>a.presId===p.id);
+    const jornada=ag?(+ag.fin.slice(0,2)*60 + +ag.fin.slice(3)) - (+ag.ini.slice(0,2)*60 + +ag.ini.slice(3)):240;
+    const usado=CITAS.filter(c=>c.presId===p.id && c.sede===S.sede && c.estado!=='Cancelada').reduce((s,c)=>s+c.dur,0);
+    return {p, pct:Math.min(100,Math.round(usado/jornada*100))};
+  });
+  /* Balanceo: solo consultas generales cuentan en la comparación (RN-02.4) */
+  const balanceo=mgDocs.map(p=>({p, n:CITAS.filter(c=>c.presId===p.id && c.tipo!=='Control' && c.estado!=='Cancelada').length}));
+  const maxB=Math.max(1,...balanceo.map(b=>b.n));
+  return `
+  <div class="card" style="margin-bottom:1rem"><div class="bd searchbar">
+    <div class="fecha-pill">📅 ${hoyLargo()}</div>
+    <div class="fecha-pill"><select onchange="S.rango=this.value;toast('📆 Rango aplicado (demo): los datos mostrados corresponden a hoy');render()">
+      <option value="hoy" ${S.rango==='hoy'?'selected':''}>Hoy</option>
+      <option value="ayer" ${S.rango==='ayer'?'selected':''}>Ayer</option>
+      <option value="7d" ${S.rango==='7d'?'selected':''}>Últimos 7 días</option>
+      <option value="mes" ${S.rango==='mes'?'selected':''}>Este mes</option>
+      <option value="rango" ${S.rango==='rango'?'selected':''}>Rango personalizado…</option>
+    </select></div>
+    <input style="flex:1;min-width:240px" placeholder="🔎 Buscar cita por código (M0103), nombre o documento…" value="${esc(S.dashQ||'')}" oninput="S.dashQ=this.value;render()">
+  </div></div>
+  <div class="grid g4">
+    <div class="card kpi accent"><div class="lb">Citas del día</div><div class="vl">${cs.length}</div><div class="dt">CDC Oriente · +400/día en operación real</div></div>
+    <div class="card kpi"><div class="lb">Pacientes en espera</div><div class="vl">${enEspera}</div><div class="dt">cola activa en sede</div></div>
+    <div class="card kpi"><div class="lb">Turnos llamados hoy</div><div class="vl">${S.llamados.length}</div><div class="dt">tiempo prom. espera ${BASE.tEspera} min</div></div>
+    <div class="card kpi"><div class="lb">Casos escalados por IA</div><div class="vl" style="color:${escal?'var(--amber)':'inherit'}">${escal}</div><div class="dt">pendientes en bandeja</div></div>
+  </div>
+  <div class="grid g23" style="margin-top:1rem">
+    <div class="card">
+      <div class="hd"><h3>Citas de hoy</h3><div class="spacer"></div><button class="btn btn-soft btn-sm" onclick="nav('consolidada')">Ver agenda</button></div>
+      <table><thead><tr><th>Código</th><th>Paciente</th><th>Servicio</th><th>Tipo</th><th>Prestador</th><th>Hora</th><th>Estado</th></tr></thead><tbody>
+      ${cs.map(c=>`<tr><td><span class="code-chip">${c.cod}</span></td>
+        <td class="name-doc"><b>${pacName(c.pacId)}</b><span>CC ${pac(c.pacId).doc}</span></td>
+        <td class="small">${serv(c.servId).nombre}</td><td>${tipoTag(c.tipo)}</td><td class="small">${pres(c.presId).nombre}</td>
+        <td class="wait">${c.hora}</td><td>${estadoTag(c.estado)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Sin coincidencias para la búsqueda</td></tr>'}
+      </tbody></table>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      <div class="card"><div class="hd"><h3>Balanceo · Medicina general</h3><span class="tag t-teal">solo consultas</span></div><div class="bd">
+        ${balanceo.map(b=>`<div class="bar-row"><span class="small">${b.p.nombre}</span><div class="bar-track"><i style="width:${b.n/maxB*100}%"></i></div><span class="right small">${b.n}</span></div>`).join('')}
+        <div class="legend"><span>Las citas de control no cuentan en la comparación entre médicos (RN-02)</span></div>
+      </div></div>
+      <div class="card"><div class="hd"><h3>Ocupación de la jornada</h3></div><div class="bd">
+        ${ocupacion.map(o=>`<div class="bar-row"><span class="small">${o.p.nombre}</span><div class="bar-track"><i class="${o.pct>85?'warn':''}" style="width:${o.pct}%"></i></div><span class="right small">${o.pct}%</span></div>`).join('')}
+        <div class="legend"><span>% del tiempo de la jornada de atención reportada que está ocupado</span></div>
+      </div></div>
+      <div class="card"><div class="hd"><h3>Alertas del día</h3></div><div class="bd" style="display:flex;flex-direction:column;gap:.6rem;font-size:.86rem">
+        <div>📥 <b>${escal}</b> conversaciones esperan a la asistente</div>
+        <div>🖊️ 1 orden médica en foto requiere gestión humana</div>
+        <div>🩻 1 ecografía Doppler ocupa doble cupo a las 09:30</div>
+      </div></div>
+      <div class="card"><div class="hd"><h3>Accesos rápidos</h3></div><div class="bd chips">
+        <button class="btn btn-soft btn-sm" onclick="nav('whatsapp')">💬 WhatsApp</button>
+        <button class="btn btn-soft btn-sm" onclick="nav('mostrador')">🛎️ Mostrador</button>
+        <button class="btn btn-soft btn-sm" onclick="nav('bandeja')">📥 Bandeja</button>
+        <button class="btn btn-soft btn-sm" onclick="nav('prestadorView')">🩺 Llamar turnos</button>
+      </div></div>
+    </div>
+  </div>`;
+};
+
+/* ===== Pacientes ===== */
+V.pacientes = () => {
+  const q=(S.pacQ||'').toLowerCase();
+  const list=PACIENTES.filter(p=>!q || (p.nombres+' '+p.apellidos).toLowerCase().includes(q) || p.doc.includes(q) || p.tel.includes(q));
+  const sel = S.pacSel ? pac(S.pacSel) : null;
+  return `
+  <div class="card" style="margin-bottom:1rem"><div class="bd searchbar">
+    <input placeholder="Buscar por documento, nombre o teléfono…" value="${esc(S.pacQ||'')}" oninput="S.pacQ=this.value;render()">
+    <div class="spacer" style="flex:1"></div>
+    <button class="btn btn-primary btn-sm" onclick="toast('➕ Formulario de creación de paciente (conceptual)')">➕ Crear paciente</button>
+    <button class="btn btn-ghost btn-sm" onclick="nav('carga')">📤 Cargar archivo</button>
+  </div></div>
+  <div class="grid ${sel?'g23':''}">
+    <div class="card">
+      <table><thead><tr><th>Documento</th><th>Nombre</th><th>WhatsApp</th><th>Origen</th><th>Condición</th><th class="right">Historial</th></tr></thead><tbody>
+      ${list.map(p=>`<tr class="clickable" onclick="S.pacSel=${p.id};render()">
+        <td class="wait">${p.tdoc} ${p.doc}</td><td><b>${p.nombres} ${p.apellidos}</b></td>
+        <td class="small muted">${p.wa}</td><td class="small">${p.origen}</td>
+        <td>${p.cond.length?p.cond.map(c=>`<span class="tag t-amber">${c}</span>`).join(' '):'<span class="tag t-gray">Normal</span>'}</td>
+        <td class="right"><button class="btn btn-soft btn-sm" onclick="event.stopPropagation();verHistServicios(${p.id})">🕘 Últimos servicios</button></td></tr>`).join('')}
+      </tbody></table>
+      <div class="bd small muted">Mostrando ${list.length} de ~200.000 pacientes (muestra) · Base dimensionada para 400.000 · Carga inicial: pacientes con servicio en el último año</div>
+    </div>
+    ${sel?`<div class="card"><div class="hd"><h3>Ficha del paciente</h3><div class="spacer"></div><button class="btn btn-ghost btn-sm" onclick="S.pacSel=null;render()">✕</button></div>
+      <div class="bd">
+        <div style="display:flex;gap:.8rem;align-items:center;margin-bottom:.9rem"><div class="avatar" style="width:44px;height:44px;font-size:1.05rem">${sel.nombres[0]}</div>
+        <div><b style="font-size:1.05rem">${sel.nombres} ${sel.apellidos}</b><div class="small muted">${sel.tdoc} ${sel.doc} · ${sel.sexo==='M'?'Masculino':'Femenino'} · Nac. ${sel.nac}</div></div></div>
+        <div class="ia-panel">
+          <div class="row"><span class="muted">WhatsApp</span><b>${sel.wa}</b></div>
+          <div class="row"><span class="muted">Teléfono</span><b>${sel.tel}</b></div>
+          <div class="row"><span class="muted">Origen del registro</span><b>${sel.origen}</b></div>
+          <div class="row"><span class="muted">Condiciones</span><b>${sel.cond.join(', ')||'Ninguna'}</b></div>
+        </div>
+        <h3 style="font-size:.85rem;margin:1rem 0 .4rem">Citas próximas</h3>
+        ${CITAS.filter(c=>c.pacId===sel.id).map(c=>`<div style="display:flex;justify-content:space-between;padding:.4rem 0;border-bottom:1px dashed var(--line);font-size:.85rem"><span><span class="code-chip ghost">${c.cod}</span> ${serv(c.servId).nombre}</span><span>${c.hora} ${estadoTag(c.estado)}</span></div>`).join('')||'<div class="small muted">Sin citas activas</div>'}
+        <div class="chips" style="margin-top:1rem">
+          <button class="btn btn-soft btn-sm" onclick="verHistServicios(${sel.id})">🕘 Historial de servicios</button>
+          <button class="btn btn-amber btn-sm" onclick="toast('⭐ Condición preferencial marcada')">Marcar preferencial</button>
+        </div>
+      </div></div>`:''}
+  </div>`;
+};
+function verHistServicios(id){
+  const p=pac(id);
+  openModal('Historial de servicios · '+p.nombres+' '+p.apellidos,`
+    <p class="small muted" style="margin-bottom:.7rem">Últimos 10 servicios tomados, sin importar la fecha. Historial operativo — la plataforma no aloja datos clínicos.</p>
+    <table><thead><tr><th>Fecha</th><th>Servicio</th></tr></thead><tbody>
+    ${(p.hist||[]).slice(0,10).map(h=>`<tr><td class="wait">${h.f}</td><td>${h.s}</td></tr>`).join('')||'<tr><td colspan="2" class="empty">Este paciente no registra servicios (se creó sin historial)</td></tr>'}
+    </tbody></table>`);
+}
+
+/* ===== Prestadores ===== */
+V.prestadores = () => `
+  <div class="card">
+    <div class="hd"><h3>Prestadores registrados</h3><div class="spacer"></div><button class="btn btn-primary btn-sm" onclick="toast('➕ Alta de prestador (conceptual)')">➕ Crear prestador</button></div>
+    <table><thead><tr><th>Nombre</th><th>Especialidad</th><th>Balanceo</th><th>Modo de agenda</th><th>Duraciones por tipo</th><th>Ventana control</th><th>Consultorio</th><th></th></tr></thead><tbody>
+    ${PRESTADORES.map(p=>`<tr>
+      <td><b>${p.nombre}</b></td>
+      <td>${p.esp}</td>
+      <td>${p.balanceo?'<span class="tag t-teal">Medicina general</span>':'<span class="tag t-gray">No aplica</span>'}</td>
+      <td><span class="tag ${p.modo==='Semanal'?'t-blue':'t-amber'}">${p.modo}</span></td>
+      <td class="small">${Object.entries(p.dur).map(([k,v])=>`${serv(k)?serv(k).nombre.split('·').pop().trim():k} ${v} min`).join(' · ')}</td>
+      <td class="small">${p.ventanaControl?p.ventanaControl+' días':'—'}</td>
+      <td class="small">${p.consultorio}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="nav('agendas')">Agenda</button></td></tr>`).join('')}
+    </tbody></table>
+    <div class="bd small muted">El balanceo de carga aplica únicamente al grupo de medicina general (RN-02). La ventana de control es el máximo de días entre la consulta y su cita de control, configurable por prestador (RN-01).</div>
+  </div>`;
+
+/* ===== Servicios ===== */
+V.servicios = () => `
+  <div class="grid g2">
+    <div class="card"><div class="hd"><h3>Servicios, tipos de cita y procedimientos</h3><div class="spacer"></div><button class="btn btn-primary btn-sm" onclick="toast('➕ Alta de servicio (conceptual)')">➕ Crear</button></div>
+      <table><thead><tr><th>Servicio</th><th>Tipo</th><th>Duración</th><th>Cupos</th><th>Costo</th></tr></thead><tbody>
+      ${SERVICIOS.map(s=>`<tr><td><b>${s.nombre}</b></td><td>${tipoTag(s.tipo==='control'?'Control':s.tipo==='procedimiento'?'Procedimiento':s.tipo==='examen'?'Examen':'General')}</td><td>${s.dur} min</td><td>${s.cupos>1?`<span class="tag t-blue">${s.cupos} cupos</span>`:'1'}</td><td class="small">${s.costo||'Tarifa normal'}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="bd small muted">La cita de control no tiene costo y solo se agenda dentro de la ventana de días del prestador. La ecografía Doppler ocupa el espacio de dos citas (RN-04).</div></div>
+    <div class="card"><div class="hd"><h3>Catálogo de exámenes de laboratorio</h3></div>
+      <div class="bd"><p class="small muted" style="margin-bottom:.7rem">Referencia para órdenes de laboratorio legibles. Las órdenes en foto de especialistas escalan directo a la asistente (RN-08).</p>
+      <div class="chips">${EXAMENES.map(e=>`<span class="tag t-teal" style="font-size:.82rem">${e}</span>`).join('')}</div>
+      </div></div>
+  </div>`;
+
+/* ===== Gestión de agendas (RN-06) ===== */
+V.agendas = () => {
+  const own = S.role==='prestador';
+  if(own){
+    const list=AGENDAS.filter(a=>a.presId===S.prestadorActual);
+    const p=pres(S.prestadorActual);
+    return `
+    <div class="card">
+      <div class="hd"><h3>Información de agenda · ${p.nombre}</h3><span class="tag t-gray">Solo lectura</span></div>
+      <table class="t-cards"><thead><tr><th>Modo</th><th>Días</th><th>Horario</th><th>Servicio</th><th>Slot</th><th>Consultorio</th><th>Estado</th></tr></thead><tbody>
+      ${list.map(a=>`<tr>
+        <td data-l="Modo"><span class="tag ${a.modo==='Semanal'?'t-blue':'t-amber'}">${a.modo}</span></td>
+        <td data-l="Días">${a.dias}</td><td data-l="Horario" class="wait">${a.ini} – ${a.fin}</td>
+        <td data-l="Servicio">${serv(a.serv).nombre}</td><td data-l="Slot">${a.slot} min</td>
+        <td data-l="Consultorio">${a.cons}</td><td data-l="Estado">${estadoTag(a.estado)}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="bd small muted">ℹ️ Tu agenda la administra la clínica. Si necesitas un cambio de disponibilidad, comunícalo a la parte administrativa: ellos gestionan la reprogramación y la notificación a tus pacientes.</div>
+    </div>
+    <div class="card" style="margin-top:1rem"><div class="hd"><h3>Mis duraciones por tipo de cita</h3></div>
+      <table class="t-cards"><thead><tr><th>Servicio</th><th class="right">Duración</th></tr></thead><tbody>
+      ${Object.entries(p.dur).map(([sv,min])=>`<tr><td data-l="Servicio">${serv(sv)?serv(sv).nombre:sv}</td><td data-l="Duración" class="right">${min} min</td></tr>`).join('')}
+      </tbody></table>
+      ${p.ventanaControl?`<div class="bd small muted">Ventana de cita de control: hasta <b>${p.ventanaControl} días</b> después de la consulta.</div>`:''}
+    </div>`;
+  }
+  const list=AGENDAS.filter(a=>(S.agTab==='semanal'?a.modo==='Semanal':a.modo==='Calendario'));
+  return `
+  <div class="card" style="margin-bottom:1rem"><div class="bd searchbar">
+    <div class="tabs">
+      <button class="${S.agTab==='semanal'?'active':''}" onclick="S.agTab='semanal';render()">Agenda semanal</button>
+      <button class="${S.agTab==='calendario'?'active':''}" onclick="S.agTab='calendario';render()">Por calendario</button>
+    </div>
+    <div class="spacer" style="flex:1"></div>
+    <button class="btn btn-soft btn-sm" onclick="progMensual()">🗓️ Programación mensual</button>
+    <button class="btn btn-primary btn-sm" onclick="crearDisponibilidad()">➕ Crear disponibilidad</button>
+  </div></div>
+  <div class="card">
+    <div class="hd"><h3>${S.agTab==='semanal'?'Patrones semanales recurrentes':'Fechas puntuales (especialistas)'}</h3></div>
+    <table class="t-cards"><thead><tr><th>Prestador</th><th>Servicio</th><th>${S.agTab==='semanal'?'Días':'Fecha'}</th><th>Horario</th><th>Slot</th><th>Consultorio</th><th>Estado</th><th class="right">Acciones</th></tr></thead><tbody>
+    ${list.map(a=>`<tr>
+      <td data-l="Prestador"><b>${pres(a.presId).nombre}</b></td><td data-l="Servicio">${serv(a.serv).nombre}</td>
+      <td data-l="Días">${a.dias}</td>
+      <td data-l="Horario" class="wait">${a.ini} – ${a.fin}</td><td data-l="Slot">${a.slot} min</td><td data-l="Consultorio">${a.cons}</td>
+      <td data-l="Estado">${estadoTag(a.estado)}</td>
+      <td class="right t-act">
+        ${a.estado==='Activa'
+          ?`<button class="btn btn-amber btn-sm" onclick="bloquearAgenda(${a.id})">Bloquear</button>`
+          :`<button class="btn btn-soft btn-sm" onclick="activarAgenda(${a.id})">Activar</button>`}
+      </td></tr>`).join('')||'<tr><td colspan="8" class="empty">Sin registros en este modo</td></tr>'}
+    </tbody></table>
+    <div class="bd small muted">Solo administración crea o modifica agendas (RN-06). Al bloquear disponibilidad con citas asignadas, el sistema identifica las citas afectadas y notifica por WhatsApp con opciones de reprogramación.</div>
+  </div>`;
+};
+function progMensual(){
+  S.mesSel=[];
+  const dias=[...Array(31)].map((_,i)=>i+1);
+  openModal('Programación mensual · Agosto 2026',`
+    <p class="small muted" style="margin-bottom:.8rem">Selecciona los días del mes y asígnales la franja en un solo paso: «todos estos días atiende a tal hora».</p>
+    <div class="grid g2" style="margin-bottom:.8rem">
+      <div class="field"><label>Prestador</label><select id="pm-pres">${PRESTADORES.map(p=>`<option value="${p.id}">${p.nombre} · ${p.esp}</option>`).join('')}</select></div>
+      <div class="field"><label>Franja horaria</label><div style="display:flex;gap:.4rem"><input id="pm-ini" type="time" value="08:00"><input id="pm-fin" type="time" value="12:00"></div></div>
+    </div>
+    <div class="mes">
+      ${['L','M','X','J','V','S','D'].map(d=>`<div class="dh">${d}</div>`).join('')}
+      ${'<div class="d off"></div><div class="d off"></div><div class="d off"></div><div class="d off"></div><div class="d off"></div>'}
+      ${dias.map(d=>`<div class="d" id="pm-d${d}" onclick="pmToggle(${d})"><span class="dn">${d}</span></div>`).join('')}
+    </div>
+    <button class="btn btn-primary btn-block" style="margin-top:1rem" onclick="pmGuardar()">Programar los días seleccionados</button>`);
+}
+function pmToggle(d){
+  const i=S.mesSel.indexOf(d);
+  i>=0 ? S.mesSel.splice(i,1) : S.mesSel.push(d);
+  const el=$('#pm-d'+d); if(el) el.classList.toggle('sel', i<0);
+}
+function pmGuardar(){
+  if(!S.mesSel.length){ toast('⚠️ Selecciona al menos un día del mes'); return; }
+  const p=pres($('#pm-pres').value), ini=$('#pm-ini').value, fin=$('#pm-fin').value;
+  const dias=S.mesSel.sort((a,b)=>a-b);
+  AGENDAS.push({id:Date.now(), presId:p.id, sede:S.sede, modo:'Calendario', dias:dias.map(d=>d+' ago').join(', '), ini, fin, slot:Object.values(p.dur)[0]||20, serv:p.servicios[0], cons:p.consultorio, estado:'Activa'});
+  audit(ROLE_META[S.role].nombre,'Programación mensual','Agenda '+p.nombre,`${dias.length} días de agosto · ${ini}–${fin}`,'—','Activa');
+  toast(`✅ <b>${dias.length} días</b> programados para ${p.nombre} (${ini}–${fin}). Cupos abiertos para agendamiento.`);
+  closeModal(); S.agTab='calendario'; render();
+}
+function crearDisponibilidad(){
+  const ps=PRESTADORES.filter(p=>p.sedes.includes(S.sede));
+  const p0=ps[0];
+  openModal('Crear disponibilidad',`
+    <div class="field"><label>Prestador</label><select id="cd-pres" onchange="cdSync()">${ps.map(p=>`<option value="${p.id}">${p.nombre} · ${p.esp}</option>`).join('')}</select></div>
+    <div class="grid g2">
+      <div class="field"><label>Modo</label><select id="cd-modo"><option>Semanal</option><option>Calendario</option></select></div>
+      <div class="field"><label>Días / fecha</label><input id="cd-dias" value="Lun–Vie"></div>
+    </div>
+    <div class="field"><label>Servicio</label><select id="cd-serv">${p0.servicios.map(sv=>`<option value="${sv}">${serv(sv).nombre}</option>`).join('')}</select></div>
+    <div class="grid g2">
+      <div class="field"><label>Hora inicio</label><input id="cd-ini" type="time" value="14:00"></div>
+      <div class="field"><label>Hora fin</label><input id="cd-fin" type="time" value="18:00"></div>
+    </div>
+    <div class="grid g2">
+      <div class="field"><label>Duración slot (min)</label><input id="cd-slot" type="number" value="${Object.values(p0.dur)[0]||15}" min="5" step="5"></div>
+      <div class="field"><label>Consultorio</label><input id="cd-cons" value="${p0.consultorio}"></div>
+    </div>
+    <button class="btn btn-primary btn-block" style="min-height:50px" onclick="guardarDisponibilidad()">Publicar disponibilidad</button>
+    <p class="small muted" style="margin-top:.6rem">Los nuevos cupos quedan disponibles de inmediato para WhatsApp y el autoagendamiento web.</p>`);
+}
+function cdSync(){
+  const p=pres($('#cd-pres').value);
+  $('#cd-serv').innerHTML=p.servicios.map(sv=>`<option value="${sv}">${serv(sv).nombre}</option>`).join('');
+  $('#cd-slot').value=Object.values(p.dur)[0]||15;
+  $('#cd-cons').value=p.consultorio;
+}
+function guardarDisponibilidad(){
+  const presId=$('#cd-pres').value;
+  const ini=$('#cd-ini').value, fin=$('#cd-fin').value;
+  if(!ini||!fin||fin<=ini){ toast('⚠️ Revisa el rango horario: la hora fin debe ser posterior al inicio'); return; }
+  const a={id:Date.now(), presId, sede:S.sede, modo:$('#cd-modo').value, dias:$('#cd-dias').value, ini, fin, slot:+$('#cd-slot').value||15, serv:$('#cd-serv').value, cons:$('#cd-cons').value, estado:'Activa'};
+  AGENDAS.push(a);
+  audit(ROLE_META[S.role].nombre,'Creación de disponibilidad','Agenda '+pres(presId).nombre,`${serv(a.serv).nombre} · ${a.dias} · ${ini}–${fin}`,'—','Activa');
+  toast(`✅ Disponibilidad publicada: <b>${a.dias} ${ini}–${fin}</b>`);
+  closeModal(); S.agTab=a.modo==='Semanal'?'semanal':'calendario'; render();
+}
+function bloquearAgenda(id){
+  const a=AGENDAS.find(x=>x.id===id); a.estado='Bloqueada';
+  const afect=CITAS.filter(c=>c.presId===a.presId && !['Atendida','Cancelada'].includes(c.estado)).length;
+  audit(ROLE_META[S.role].nombre,'Bloqueo de agenda','Agenda '+pres(a.presId).nombre,`${afect} citas afectadas · notificación WhatsApp enviada`,'Activa','Bloqueada');
+  toast(`🔒 Disponibilidad bloqueada. ${afect} pacientes notificados por WhatsApp con opciones de reprogramación.`);
+  render();
+}
+function activarAgenda(id){ AGENDAS.find(x=>x.id===id).estado='Activa'; toast('✅ Disponibilidad activada'); render(); }
+
+/* ===== Agenda consolidada (día / semana / mes) ===== */
+V.consolidada = () => {
+  const q=(S.consQ||'').toLowerCase();
+  const psAll=PRESTADORES.filter(p=>p.sedes.includes(S.sede));
+  const ps=psAll.filter(p=>S.consPres.includes(p.id));
+  const head=`
+  <div class="card" style="margin-bottom:1rem"><div class="bd searchbar">
+    <div class="tabs">
+      <button class="${S.consTab==='dia'?'active':''}" onclick="S.consTab='dia';render()">Día</button>
+      <button class="${S.consTab==='semana'?'active':''}" onclick="S.consTab='semana';render()">Semana</button>
+      <button class="${S.consTab==='mes'?'active':''}" onclick="S.consTab='mes';render()">Mes</button>
+    </div>
+    <input style="flex:1;min-width:220px" placeholder="🔎 Código, nombre o documento…" value="${esc(S.consQ||'')}" oninput="S.consQ=this.value;render()">
+    <button class="btn btn-primary btn-sm" onclick="crearCitaManual(null,null,null)">➕ Crear cita</button>
+  </div>
+  <div class="bd searchbar" style="border-top:1px solid var(--line)">
+    <span class="small muted">Prestadores:</span>
+    ${psAll.map(p=>`<button class="btn btn-sm ${S.consPres.includes(p.id)?'btn-primary':'btn-ghost'}" onclick="consTogglePres('${p.id}')">${p.nombre.split(' ').slice(-1)[0]}</button>`).join('')}
+  </div></div>`;
+
+  if(S.consTab==='dia'){
+    const horas=['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00'];
+    const match=c=>{ if(!q) return true; const p=pac(c.pacId); return c.cod.toLowerCase().includes(q)||p.doc.includes(q)||(p.nombres+' '+p.apellidos).toLowerCase().includes(q); };
+    const cell=(p,h)=>{
+      const c=CITAS.find(x=>x.presId===p.id && x.hora>=h && x.hora<addMin(h,30) && match(x));
+      if(c) return `<div class="slot busy ${c.tipo==='Control'?'ctrl':''} ${['Procedimiento','Examen'].includes(c.tipo)?'proc':''}" onclick="verCita(${c.id})"><span class="cd">${c.cod}</span> · ${pacName(c.pacId).split(' ')[0]}<br><span class="small muted">${c.hora} · ${c.tipo}</span></div>`;
+      const a=AGENDAS.find(x=>x.presId===p.id && x.estado!=='Eliminada');
+      if(!a || h<a.ini || h>=a.fin) return `<div class="slot blocked">—</div>`;
+      if(a.estado==='Bloqueada') return `<div class="slot blocked">Bloqueado</div>`;
+      return `<div class="slot free" title="Crear cita" onclick="crearCitaManual('${p.id}','${h}',null)"></div>`;
+    };
+    return head+`
+    <div class="card"><div class="hd"><h3>Hoy · ${hoyLargo()}</h3><div class="spacer"></div>
+      <span class="legend"><span><span class="dot" style="background:var(--teal)"></span>Consulta</span><span><span class="dot" style="background:var(--amber)"></span>Control</span><span><span class="dot" style="background:var(--blue)"></span>Procedimiento/Examen</span><span><span class="dot" style="background:#fff;border:1px dashed var(--line)"></span>Disponible</span></span></div>
+    <div class="bd" style="overflow-x:auto">
+      <div class="sched" style="--cols:${ps.length};min-width:${120+ps.length*160}px">
+        <div></div>${ps.map(p=>`<div class="hcell">${p.nombre}<br><span class="small muted">${p.esp}</span></div>`).join('')}
+        ${horas.map(h=>`<div class="tcell">${h}</div>${ps.map(p=>cell(p,h)).join('')}`).join('')}
+      </div>
+    </div></div>`;
+  }
+  if(S.consTab==='semana'){
+    const dias=['Lun 17','Mar 18','Mié 19','Jue 20','Vie 21','Sáb 22'];
+    const base={ao:[9,11,10,8,12,6], pr:[8,10,9,9,11,5], jo:[7,9,8,10,9,4], md:[12,12,11,12,12,8], lp:[0,0,0,6,0,0], is:[0,0,0,0,8,0], ec:[10,9,11,10,9,7], ln:[18,16,17,15,19,9]};
+    return head+`
+    <div class="card"><div class="hd"><h3>Semana del 17 al 22 de agosto</h3><div class="spacer"></div><span class="small muted">Clic en una celda para crear una cita futura</span></div>
+    <table><thead><tr><th>Prestador</th>${dias.map(d=>`<th class="center">${d}</th>`).join('')}</tr></thead><tbody>
+    ${ps.map(p=>`<tr><td><b>${p.nombre}</b><br><span class="small muted">${p.esp}</span></td>
+      ${dias.map((d,i)=>{const n=(base[p.id]||[0,0,0,0,0,0])[i];return `<td class="center clickable" onclick="crearCitaManual('${p.id}',null,'2026-08-${17+i}')">${n?`<span class="tag ${n>10?'t-amber':'t-teal'}">${n} citas</span>`:'<span class="small muted">—</span>'}</td>`;}).join('')}
+    </tr>`).join('')}
+    </tbody></table></div>`;
+  }
+  /* Mes */
+  const cnt=d=>({19:CITAS.length, 20:14, 21:22, 22:18, 25:11, 26:9, 27:15, 28:17}[d]||(d<19?Math.round(8+(d*7)%9):0));
+  return head+`
+  <div class="card"><div class="hd"><h3>Agosto 2026</h3><div class="spacer"></div><span class="small muted">Clic en un día para crear una cita futura</span></div>
+  <div class="bd"><div class="mes">
+    ${['L','M','X','J','V','S','D'].map(d=>`<div class="dh">${d}</div>`).join('')}
+    ${'<div class="d off"></div><div class="d off"></div><div class="d off"></div><div class="d off"></div><div class="d off"></div>'}
+    ${[...Array(31)].map((_,i)=>{const d=i+1;const n=cnt(d);
+      return `<div class="d ${d===19?'sel':''}" onclick="crearCitaManual(null,null,'2026-08-${String(d).padStart(2,'0')}')"><span class="dn">${d}</span>${n?`<span class="cnt">${n} citas</span>`:''}</div>`;}).join('')}
+  </div></div></div>`;
+};
+function consTogglePres(id){
+  const i=S.consPres.indexOf(id);
+  i>=0 ? S.consPres.splice(i,1) : S.consPres.push(id);
+  if(!S.consPres.length) S.consPres.push(id);
+  render();
+}
+function addMin(hm,m){const [h,mi]=hm.split(':').map(Number);const d=new Date(0,0,0,h,mi+m);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+
+function verCita(id){
+  const c=CITAS.find(x=>x.id===id);
+  openModal(`Cita ${c.cod}`,`
+    <div class="ia-panel">
+      <div class="row"><span class="muted">Código</span><span class="code-chip">${c.cod}</span></div>
+      <div class="row"><span class="muted">Paciente</span><b>${pacName(c.pacId)}</b></div>
+      <div class="row"><span class="muted">Servicio</span><b>${serv(c.servId).nombre}</b></div>
+      <div class="row"><span class="muted">Tipo</span>${tipoTag(c.tipo)}</div>
+      <div class="row"><span class="muted">Prestador</span><b>${pres(c.presId).nombre}</b></div>
+      <div class="row"><span class="muted">Hora</span><b>${c.hora} (${c.dur} min${serv(c.servId).cupos>1?' · '+serv(c.servId).cupos+' cupos':''})</b></div>
+      <div class="row"><span class="muted">Estado</span>${estadoTag(c.estado)}</div>
+      <div class="row"><span class="muted">Origen</span><b>${c.origen}</b></div>
+      ${c.obs?`<div class="row"><span class="muted">Observación</span><b>${c.obs}</b></div>`:''}
+    </div>
+    <div class="chips" style="margin-top:1rem">
+      <button class="btn btn-soft btn-sm" onclick="toast('🔁 Reprogramación: si cambia de día se genera un nuevo código');closeModal()">Reprogramar</button>
+      <button class="btn btn-danger btn-sm" onclick="cancelarCita(${c.id})">Cancelar cita</button>
+    </div>`);
+}
+function cancelarCita(id){
+  const c=CITAS.find(x=>x.id===id); const prev=c.estado; c.estado='Cancelada';
+  audit(ROLE_META[S.role].nombre,'Cancelación de cita','Cita '+c.cod,'Notificación enviada al paciente',prev,'Cancelada');
+  toast('🗑️ Cita '+c.cod+' cancelada'); closeModal(); render();
+}
+function crearCitaManual(presId,hora,fecha){
+  const ps=PRESTADORES.filter(p=>p.sedes.includes(S.sede));
+  openModal('Crear cita',`
+    <div class="field"><label>Paciente</label>
+      <div style="display:flex;gap:.5rem">
+        <select id="cm-pac" style="flex:1">${PACIENTES.map(p=>`<option value="${p.id}">${p.nombres} ${p.apellidos} · ${p.doc}</option>`).join('')}</select>
+        <button class="btn btn-soft btn-sm" onclick="cmTogglePac()">➕ Crear paciente</button>
+      </div>
+    </div>
+    <div id="cm-newpac" style="display:none;background:#F7FBFA;border:1px solid var(--line);border-radius:10px;padding:.8rem;margin-bottom:.9rem">
+      <p class="small muted" style="margin-bottom:.5rem"><b>Nuevo paciente</b> — se crea sin salir del flujo de la cita</p>
+      <div class="grid g2">
+        <div class="field"><label>Nombres</label><input id="np-nom"></div>
+        <div class="field"><label>Apellidos</label><input id="np-ape"></div>
+      </div>
+      <div class="grid g2">
+        <div class="field"><label>Documento</label><input id="np-doc"></div>
+        <div class="field"><label>Teléfono / WhatsApp</label><input id="np-tel" placeholder="+57 3xx xxx xxxx"></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="cmCrearPac()">Guardar y seleccionar</button>
+    </div>
+    <div class="field"><label>Prestador</label><select id="cm-pres" onchange="cmSyncServ()">${ps.map(p=>`<option value="${p.id}" ${p.id===presId?'selected':''}>${p.nombre} · ${p.esp}</option>`).join('')}</select></div>
+    <div class="field"><label>Servicio / tipo de cita</label><select id="cm-serv"></select></div>
+    <div class="grid g2">
+      <div class="field"><label>Fecha</label><input id="cm-fecha" type="date" value="${fecha||'2026-08-19'}"></div>
+      <div class="field"><label>Hora</label><input id="cm-hora" value="${hora||'12:00'}"></div>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="guardarCitaManual()">Confirmar cita</button>
+    <p class="small muted" style="margin-top:.6rem">La plataforma valida el intercalado: no se permiten dos citas de control seguidas (RN-01) y recomienda el cupo contiguo para no dejar espacios muertos (RN-03).</p>`);
+  cmSyncServ();
+}
+function cmTogglePac(){ const el=$('#cm-newpac'); el.style.display = el.style.display==='none'?'block':'none'; }
+function cmCrearPac(){
+  const nom=$('#np-nom').value.trim(), ape=$('#np-ape').value.trim(), doc=$('#np-doc').value.trim(), tel=$('#np-tel').value.trim();
+  if(!nom||!ape||!doc){ toast('⚠️ Nombres, apellidos y documento son obligatorios'); return; }
+  const p={id:Date.now(), doc, tdoc:'CC', nombres:nom, apellidos:ape, nac:'—', sexo:'—', tel:tel||'—', wa:tel||'—', correo:'', sede:S.sede, cond:[], estado:'Activo', datos: tel?'Completos':'Sin teléfono', origen:'Mostrador', hist:[]};
+  PACIENTES.push(p);
+  $('#cm-pac').innerHTML=PACIENTES.map(x=>`<option value="${x.id}" ${x.id===p.id?'selected':''}>${x.nombres} ${x.apellidos} · ${x.doc}</option>`).join('');
+  $('#cm-newpac').style.display='none';
+  audit(ROLE_META[S.role].nombre,'Creación de paciente','Paciente '+nom+' '+ape,'Creado desde el flujo de cita','—','Activo');
+  toast('✅ Paciente <b>'+nom+' '+ape+'</b> creado y seleccionado');
+}
+function cmSyncServ(){
+  const p=pres($('#cm-pres').value);
+  $('#cm-serv').innerHTML=p.servicios.map(sv=>{const s=serv(sv);return `<option value="${sv}">${s.nombre} · ${p.dur[sv]||s.dur} min${s.cupos>1?' · '+s.cupos+' cupos':''}</option>`;}).join('');
+}
+function guardarCitaManual(){
+  const p=pres($('#cm-pres').value), sv=serv($('#cm-serv').value);
+  const hora=$('#cm-hora').value, fecha=$('#cm-fecha').value;
+  /* RN-01: no dos controles consecutivos */
+  if(sv.tipo==='control'){
+    const delDia=CITAS.filter(c=>c.presId===p.id && c.estado!=='Cancelada').sort((a,b)=>a.hora.localeCompare(b.hora));
+    const prevC=[...delDia].reverse().find(c=>c.hora<=hora), nextC=delDia.find(c=>c.hora>hora);
+    if((prevC&&prevC.tipo==='Control')||(nextC&&nextC.tipo==='Control')){
+      toast('⛔ <b>Regla de intercalado (RN-01):</b> no se permiten dos citas de control consecutivas. La plataforma sugiere el siguiente cupo válido entre consultas generales.');
+      return;
+    }
+  }
+  const tipo=sv.tipo==='control'?'Control':sv.tipo==='procedimiento'?'Procedimiento':sv.tipo==='examen'?'Examen':'General';
+  const cod=nuevoCodigo(sv.nombre[0].toUpperCase());
+  CITAS.push({id:Date.now(), cod, pacId:+$('#cm-pac').value, presId:p.id, servId:sv.id, tipo, sede:S.sede, hora, dur:p.dur[sv.id]||sv.dur, estado:'Confirmada', origen:'Asistente', prio:2, obs:fecha!=='2026-08-19'?'Cita futura · '+fecha:''});
+  audit(ROLE_META[S.role].nombre,'Creación de cita','Cita '+cod,`${sv.nombre} · ${fecha} ${hora}`,'—','Confirmada');
+  toast(`✅ Cita creada · código <b>${cod}</b> · confirmación de WhatsApp enviada como texto formateado`); closeModal(); render();
+}
+
+/* ===== Modal genérico ===== */
+function openModal(title,html){
+  $('#modal-root').innerHTML=`<div class="modal-mask" onclick="if(event.target===this)closeModal()">
+    <div class="modal"><div class="hd"><h3>${title}</h3><div class="spacer" style="flex:1"></div><button class="btn btn-ghost btn-sm" onclick="closeModal()">✕</button></div>
+    <div class="bd">${html}</div></div></div>`;
+}
+function closeModal(){ $('#modal-root').innerHTML=''; }
+
+/* =====================================================================
+   SIMULADOR WHATSAPP CON IA (API de Meta · RN-09)
+   ===================================================================== */
+const TICKET_TXT = `━━━━━━━━━━━━━━━━━━
+GRUPO PROVIVIR · CDC ORIENTE
+✅ CITA CONFIRMADA
+━━━━━━━━━━━━━━━━━━
+Paciente: Carlos Mora
+Servicio: Medicina general
+Médico: Dr. Jaime Ortiz
+Fecha: Jueves 20 de agosto
+Hora: 2:00 p.m.
+Código de atención: F0147
+━━━━━━━━━━━━━━━━━━
+Llega 15 min antes y paga en
+recepción. Recibirás recordatorio
+24 h antes y el mismo día.`;
+
+const ESCENARIOS = {
+  demo:{
+    nombre:'Cita medicina general (balanceo + confirmación de texto)',
+    pasos:[
+      {f:'p', t:'Hola, necesito una cita con medicina general.', det:{intencion:'Solicitar cita', conf:88, datos:{Servicio:'Medicina general'}}},
+      {f:'ia',t:'Claro, con gusto te ayudo. Por favor indícame tu número de documento.'},
+      {f:'p', t:'12345678', det:{intencion:'Solicitar cita', conf:92, datos:{Servicio:'Medicina general', Documento:'12345678', Paciente:'Carlos Mora'}}},
+      {f:'ia',t:'Gracias, Carlos. Encontré tu registro. Para confirmar tus datos de contacto: ¿este número de WhatsApp <b>+57 300 111 1111</b> sigue siendo tu número principal?'},
+      {f:'p', t:'Sí, ese mismo.', det:{intencion:'Solicitar cita', conf:94, datos:{Documento:'12345678', 'Número confirmado':'+57 300 111 1111'}}},
+      {f:'ia',t:'Perfecto. ¿Tienes preferencia por algún médico o te asigno el primer cupo disponible?'},
+      {f:'p', t:'Cualquiera está bien, mañana en la tarde si se puede.', det:{intencion:'Solicitar cita', conf:96, datos:{Preferencia:'Sin preferencia → balanceo', Fecha:'Mañana PM'}}},
+      {f:'ia',t:'Para repartir la atención de forma equitativa, te asigno con el <b>Dr. Jaime Ortiz</b> (es quien tiene menor carga mañana) a las <b>2:00 p.m.</b> ¿Confirmo la cita?', det:{intencion:'Confirmar cita', conf:97, datos:{Prestador:'Dr. Jaime Ortiz (balanceo RN-02)', Horario:'Jue 14:00'}}},
+      {f:'p', t:'Confirmada, gracias.'},
+      {f:'ia',t:'Listo ✅ Aquí tienes tu confirmación:<div class="wa-ticket">'+TICKET_TXT+'</div>', accion:'crearF0147'},
+    ]
+  },
+  control:{
+    nombre:'Cita de control (ventana + intercalado)',
+    pasos:[
+      {f:'p', t:'Buenas, el Dr. Osorio me dejó control para revisar los exámenes.', det:{intencion:'Cita de control', conf:90, datos:{Servicio:'Control · Medicina general', Prestador:'Dr. Andrés Osorio'}}},
+      {f:'ia',t:'Con gusto. Indícame tu documento, por favor.'},
+      {f:'p', t:'56789012', det:{intencion:'Cita de control', conf:95, datos:{Documento:'56789012', Paciente:'Jorge Patiño', 'Consulta origen':'05-ago (hace 14 días)'}}},
+      {f:'ia',t:'Gracias, Jorge. Veo tu consulta con el Dr. Osorio del <b>5 de agosto</b>. Estás dentro de la ventana de control del doctor (hasta 10 días hábiles), así que tu control <b>no tiene costo</b>. 😊'},
+      {f:'p', t:'Perfecto, ¿qué horario hay?'},
+      {f:'ia',t:'Te ofrezco <b>mañana 8:15 a.m.</b> — es el cupo de control disponible entre las consultas del doctor. <span class="small">(La agenda intercala controles entre consultas: nunca hay dos controles seguidos.)</span> ¿Confirmo?', det:{intencion:'Confirmar control', conf:97, datos:{Horario:'8:15 (cupo intercalado RN-01)', Costo:'Sin costo'}}},
+      {f:'p', t:'Sí, confirma.'},
+      {f:'ia',t:'Cita de control confirmada ✅ Jueves 8:15 a.m., Dr. Andrés Osorio, Consultorio 1. Tu código de atención es <span class="code-chip">C0148</span>. Sin costo.'},
+    ]
+  },
+  ordenEspecialista:{
+    nombre:'Orden médica en foto (escala de inmediato)',
+    pasos:[
+      {f:'p', t:'Necesito cita con la dermatóloga, tengo la orden del médico.', det:{intencion:'Cita con especialista', conf:87, datos:{Servicio:'Dermatología'}}},
+      {f:'ia',t:'Con gusto. Envíame por favor la foto de tu orden médica.'},
+      {f:'p', t:'📷 Foto de la orden médica (manuscrita)', img:true, det:{intencion:'Cita con especialista', conf:0, datos:{Adjunto:'orden_medica.jpg', Regla:'RN-08 · escalamiento inmediato'}}},
+      {f:'ia',t:'Recibí tu orden 📎. Para este tipo de solicitudes te va a atender directamente una de nuestras asistentes, con tu imagen como soporte. En un momento te contactamos por este mismo chat. 🙌', accion:'escalar'},
+      {f:'sys',t:'Escalamiento inmediato a la bandeja · Orden médica en foto · La IA no interpreta órdenes manuscritas (la imagen queda adjunta para el humano)'},
+    ]
+  },
+  multimedia:{
+    nombre:'Nota de voz (multimedia API) + venta de servicio',
+    pasos:[
+      {f:'p', t:'<div class="wa-audio">🎙️ <span>Nota de voz · 0:12</span> ▶</div>', det:{intencion:'Procesando audio…', conf:0, datos:{Adjunto:'nota_voz.ogg (API multimedia)'}}},
+      {f:'ia',t:'Te escuché 👂: preguntas si manejamos <b>sueros de vitamina C</b> y cuánto valen. ¡Sí los tenemos! 💛 Es un procedimiento de <b>15 minutos</b> que refuerza tus defensas, mejora la energía y la piel. Lo aplica nuestro equipo médico en la sede. ¿Te gustaría agendar uno esta semana?', det:{intencion:'Consulta de servicio → venta', conf:91, datos:{Servicio:'Suero de vitamina C', Fuente:'Audio transcrito e interpretado'}}},
+      {f:'p', t:'¿El viernes en la tarde puede ser?'},
+      {f:'ia',t:'¡Claro! Viernes <b>3:00 p.m.</b> con el Dr. Jaime Ortiz. ¿Lo confirmo a tu nombre?', det:{intencion:'Confirmar procedimiento', conf:95, datos:{Horario:'Vie 15:00'}}},
+      {f:'p', t:'Dale, confirmalo.'},
+      {f:'ia',t:'Confirmado ✅ Suero de vitamina C · viernes 3:00 p.m. Tu código de atención es <span class="code-chip">V0150</span>. Cualquier foto, audio o video que quieras enviarnos, la plataforma lo recibe; nuestras respuestas siempre llegarán en texto. 😉'},
+    ]
+  },
+};
+
+V.whatsapp = () => {
+  const convs=CONVERSACIONES;
+  const cv=CONVERSACIONES.find(c=>c.id===S.waConv)||convs[0];
+  const scen=S.waScen?ESCENARIOS[S.waScen]:null;
+  const next=scen?scen.pasos[S.waStep]:null;
+  const lastDet=(cv.msgs.slice().reverse().find(m=>m.det)||{}).det || {intencion:cv.intencion||'—', conf:cv.conf||0, datos:{}};
+  return `
+  <div class="card" style="margin-bottom:1rem"><div class="bd searchbar">
+    <span class="tag t-green">✔ API oficial de Meta</span>
+    <span class="small muted">Número único de la clínica: <b>${SEDES[0].wa}</b> · multimedia entrante (audio, foto, video) · respuestas siempre en texto · varios agentes con permisos</span>
+  </div></div>
+  <div class="wa-wrap">
+    <div class="card">
+      <div class="hd"><h3>Conversaciones</h3></div>
+      ${convs.map(c=>`<div class="wa-conv ${c.id===cv.id?'active':''}" onclick="S.waConv=${c.id};render()">
+        <b>${pacName(c.pacId)}</b> ${estadoTag(c.estado)}<div class="ph">${c.tel}</div></div>`).join('')}
+      <div class="bd small muted">Los 50.000+ contactos del celular del cliente se migran por CSV antes del cambio a la API.</div>
+    </div>
+    <div class="wa-chat">
+      <div class="wa-head"><div class="avatar" style="background:#fff">${pacName(cv.pacId)[0]}</div>
+        <div><b>${pacName(cv.pacId)}</b><div class="ph">${cv.tel} → ${SEDES[0].wa}</div></div></div>
+      <div class="wa-body" id="wa-body">
+        ${cv.msgs.map(m=>`<div class="msg ${m.f}">${m.f==='ia'?'<div class="who">🤖 Asistente Provivir</div>':''}${m.img?'<div style="width:170px;height:110px;background:linear-gradient(135deg,#DDE7E9,#C4D4D8);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#5C7078;font-size:.75rem;margin-bottom:.3rem">🧾 orden_medica.jpg</div>':''}${m.t}</div>`).join('')||'<div class="msg sys">Selecciona un escenario para iniciar la simulación</div>'}
+      </div>
+      <div class="wa-input">
+        ${next
+          ? (next.f==='p'
+              ? `<input value="Mensaje del paciente listo para enviar…" readonly><button class="btn btn-primary" onclick="waNext()">Enviar ➤</button>`
+              : `<input placeholder="La IA está escribiendo…" readonly><button class="btn btn-dark" onclick="waNext()">Respuesta IA ⚡</button>`)
+          : `<input placeholder="Simulación finalizada o sin escenario activo" readonly><button class="btn btn-ghost" disabled>➤</button>`}
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      <div class="card"><div class="hd"><h3>Escenarios de demo</h3></div><div class="bd" style="display:flex;flex-direction:column;gap:.5rem">
+        ${Object.entries(ESCENARIOS).map(([k,e])=>`<button class="btn ${S.waScen===k?'btn-primary':'btn-ghost'} btn-sm" style="justify-content:flex-start;text-align:left" onclick="waStart('${k}')">${e.nombre}</button>`).join('')}
+        <button class="btn btn-soft btn-sm" onclick="waReset()">↺ Reiniciar conversación</button>
+      </div></div>
+      <div class="card ia-panel"><div class="hd"><h3>Detección de la IA</h3></div><div class="bd">
+        <div class="row"><span class="muted">Intención</span><b>${lastDet.intencion}</b></div>
+        <div class="row"><span class="muted">Confianza</span><b>${lastDet.conf}%</b></div>
+        <div class="conf-bar"><i style="width:${lastDet.conf}%;background:${lastDet.conf<70?'var(--amber)':'var(--teal)'}"></i></div>
+        <div style="margin-top:.8rem;font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Datos capturados</div>
+        ${Object.entries(lastDet.datos||{}).map(([k,v])=>`<div class="row"><span class="muted">${k}</span><b class="small">${v}</b></div>`).join('')||'<div class="small muted" style="padding:.4rem 0">Aún sin datos</div>'}
+        <button class="btn btn-amber btn-sm btn-block" style="margin-top:.9rem" onclick="waEscalarManual()">⤴ Escalar a asistente</button>
+      </div></div>
+    </div>
+  </div>`;
+};
+function waStart(k){
+  const cv=CONVERSACIONES.find(c=>c.id===1);
+  S.waConv=1; S.waScen=k; S.waStep=0; cv.msgs=[]; cv.estado='IA activa'; cv.escalada=false; cv.resuelta=false;
+  render();
+}
+function waReset(){ const cv=CONVERSACIONES.find(c=>c.id===1); cv.msgs=[]; cv.estado='IA activa'; cv.escalada=false; S.waScen=null; S.waStep=0; render(); }
+function waNext(){
+  const cv=CONVERSACIONES.find(c=>c.id===S.waConv);
+  const scen=ESCENARIOS[S.waScen]; if(!scen) return;
+  const paso=scen.pasos[S.waStep]; if(!paso) return;
+  cv.msgs.push(paso); S.waStep++;
+  if(paso.det){ cv.intencion=paso.det.intencion; cv.conf=paso.det.conf; }
+  if(paso.accion==='crearF0147' && !S.demoCitaCreada){
+    S.demoCitaCreada=true; S.live.ia++;
+    CITAS.push({id:900, cod:'F0147', pacId:1, presId:'jo', servId:'mg', tipo:'General', sede:S.sede, hora:'14:00', dur:15, estado:'Confirmada', origen:'WhatsApp IA', prio:2, obs:'Asignada por balanceo · confirmación enviada como texto formateado'});
+    audit('IA','Cita confirmada por IA','Cita F0147','Medicina general · Dr. Jaime Ortiz (balanceo) · 14:00','Solicitada','Confirmada');
+    toast('✅ Cita <b>F0147</b> creada por la IA con balanceo de medicina general. Ya puedes usarla en el mostrador.');
+  }
+  if(paso.accion==='escalar'){
+    cv.escalada=true; cv.estado='Escalada'; cv.motivo='Orden médica en foto (manuscrita) · atención humana inmediata'; cv.prioridad='Media'; cv.tomada=false; cv.escTs=Date.now(); cv.adj='📷 orden_medica.jpg'; S.live.ia++;
+    audit('IA','Escalamiento inmediato','Conversación '+pacName(cv.pacId),'Orden médica en foto · sin lectura IA (RN-08)','IA activa','Escalada');
+    toast('⤴ Conversación escalada de inmediato a la bandeja · la burbuja roja del menú se actualizó');
+  }
+  render();
+  const b=$('#wa-body'); if(b) b.scrollTop=b.scrollHeight;
+}
+function waEscalarManual(){
+  const cv=CONVERSACIONES.find(c=>c.id===S.waConv);
+  cv.escalada=true; cv.estado='Escalada'; cv.motivo='Escalamiento manual desde simulador'; cv.prioridad='Baja'; cv.tomada=false; cv.escTs=Date.now();
+  audit(ROLE_META[S.role].nombre,'Escalamiento manual','Conversación '+pacName(cv.pacId),'Desde simulador','IA activa','Escalada');
+  toast('⤴ Conversación escalada'); render();
+}
+
+/* ===== Bandeja asistente ===== */
+V.bandeja = () => {
+  const list=CONVERSACIONES.filter(c=>c.escalada);
+  return `
+  <div class="card">
+    <div class="hd"><h3>Conversaciones escaladas</h3><div class="spacer"></div><span class="tag t-red">🔴 ${list.filter(c=>!c.resuelta).length} pendientes</span><span class="small muted">sin sonido · solo indicador visual</span></div>
+    ${list.length?`<table><thead><tr><th>Paciente</th><th>Motivo de escalamiento</th><th>Intención</th><th>Adjuntos</th><th>Prioridad</th><th>Tiempo esperando</th><th>Estado</th><th class="right">Acciones</th></tr></thead><tbody>
+    ${list.map(c=>`<tr>
+      <td class="name-doc"><b>${pacName(c.pacId)}</b><span>${c.tel}</span></td>
+      <td class="small">${c.motivo||'—'}</td><td class="small">${c.intencion}</td>
+      <td class="small">${c.adj||'—'}</td>
+      <td><span class="tag ${c.prioridad==='Alta'?'t-red':c.prioridad==='Media'?'t-amber':'t-gray'}">${c.prioridad||'Baja'}</span></td>
+      <td class="wait" style="color:${!c.resuelta?'var(--amber)':'inherit'}">${c.resuelta?'—':esperaConv(c)}</td>
+      <td>${c.resuelta?estadoTag('Resuelta'):(c.tomada?'<span class="tag t-blue">En gestión</span>':estadoTag('Escalada'))}</td>
+      <td class="right">
+        ${c.resuelta?'':(c.tomada
+          ?`<button class="btn btn-green btn-sm" onclick="bandejaConfirmar(${c.id})">✅ Resolver y confirmar</button>`
+          :`<button class="btn btn-primary btn-sm" onclick="bandejaTomar(${c.id})">Tomar conversación</button>`)}
+        <button class="btn btn-ghost btn-sm" onclick="verHistorialConv(${c.id})">Historial</button>
+      </td></tr>`).join('')}
+    </tbody></table>`:'<div class="empty">🎉 No hay conversaciones escaladas pendientes</div>'}
+    <div class="bd small muted">Los criterios de prioridad (alta/media/baja) están pendientes de definición por la clínica; mientras tanto, el indicador operativo principal es el tiempo de espera.</div>
+  </div>`;
+};
+function bandejaTomar(id){
+  const c=CONVERSACIONES.find(x=>x.id===id); c.tomada=true;
+  audit(ROLE_META[S.role].nombre,'Toma de conversación','Conversación '+pacName(c.pacId),'Asistente asume el chat de WhatsApp','Escalada','En gestión');
+  toast('🎧 Conversación tomada. Ahora la asistente responde en el chat.'); render();
+}
+function bandejaConfirmar(id){
+  const c=CONVERSACIONES.find(x=>x.id===id); c.resuelta=true; c.estado='Resuelta';
+  const cod=nuevoCodigo('D');
+  CITAS.push({id:Date.now(), cod, pacId:c.pacId, presId:'lp', servId:'der', tipo:'General', sede:S.sede, hora:'11:00', dur:20, estado:'Confirmada', origen:'Asistente (orden en foto)', prio:pac(c.pacId).cond.length?1:2, obs:'Cita creada por la asistente con la orden médica como soporte'});
+  audit(ROLE_META[S.role].nombre,'Cita confirmada tras gestión humana','Cita '+cod,'Orden médica en foto gestionada por la asistente','Escalada','Confirmada');
+  toast(`✅ Gestión resuelta. Cita <b>${cod}</b> confirmada y notificada por WhatsApp (texto formateado).`); render();
+}
+function verHistorialConv(id){
+  const c=CONVERSACIONES.find(x=>x.id===id);
+  openModal('Historial · '+pacName(c.pacId),`
+    <div class="wa-chat" style="height:380px"><div class="wa-body">
+    ${c.msgs.map(m=>`<div class="msg ${m.f}">${m.f==='ia'?'<div class="who">🤖 Asistente Provivir</div>':''}${m.t}</div>`).join('')||'<div class="msg sys">Sin mensajes registrados</div>'}
+    </div></div>`);
+}
+
+/* =====================================================================
+   LLEGADA: MOSTRADOR Y TICKET (canal principal · RN-07)
+   ===================================================================== */
+function registrarLlegada(citaId, via){
+  const c=CITAS.find(x=>x.id===citaId);
+  if(TURNOS.some(t=>t.citaId===c.id)) { toast('ℹ️ Este paciente ya tiene llegada registrada'); return null; }
+  const p=pac(c.pacId);
+  const prio = p.cond.length ? 1 : c.prio||2;
+  const prev=c.estado; c.estado='Llegó'; c.llegada=nowHM();
+  const t={id:Date.now(), citaId:c.id, cod:c.cod, sede:c.sede, llegada:c.llegada, estado:'En espera', prio, consultorio:pres(c.presId).consultorio};
+  TURNOS.push(t);
+  S.live[via==='kiosko'?'kiosko':'mostrador']++;
+  audit(via==='kiosko'?'kiosko':ROLE_META[S.role]?.nombre||'mostrador','Registro de llegada','Cita '+c.cod, (via==='kiosko'?'Check-in por kiosko (referencia)':'Registro en mostrador · pago en recepción')+(prio===1?' · prioridad preferencial':''), prev, 'Llegó');
+  return t;
+}
+
+/* ===== Mostrador ===== */
+V.mostrador = () => {
+  const q=(S.mosQ||'').toLowerCase();
+  const cs=CITAS.filter(c=>c.sede===S.sede).filter(c=>{
+    if(!q) return true; const p=pac(c.pacId);
+    return c.cod.toLowerCase().includes(q)||p.doc.includes(q)||(p.nombres+' '+p.apellidos).toLowerCase().includes(q)||p.tel.includes(q);
+  }).sort((a,b)=>a.hora.localeCompare(b.hora));
+  return `
+  <div class="card" style="margin-bottom:1rem"><div class="bd searchbar">
+    <input style="min-width:320px" placeholder="🔎 Buscar por código (F0147), documento, nombre o teléfono…" value="${esc(S.mosQ||'')}" oninput="S.mosQ=this.value;render()">
+    <span class="small muted">El paciente llega, <b>paga en recepción</b> y aquí se registra su llegada · el llamado lo hace el prestador desde su consultorio</span>
+  </div></div>
+  <div class="card">
+    <table><thead><tr><th>Código</th><th>Paciente</th><th>Servicio · Prestador</th><th>Tipo</th><th>Hora</th><th>Llegada</th><th>Prioridad</th><th>Estado</th><th class="right">Acciones</th></tr></thead><tbody>
+    ${cs.map(c=>{
+      const p=pac(c.pacId); const t=TURNOS.find(x=>x.citaId===c.id);
+      const prioTag = (p.cond.length||c.prio===1)?`<span class="tag t-amber">P1 · ${p.cond[0]||'Preferencial'}</span>`:(c.prio===3?'<span class="tag t-red">P3 · Tarde</span>':'<span class="tag t-gray">P2 · A tiempo</span>');
+      return `<tr>
+      <td><span class="code-chip">${c.cod}</span></td>
+      <td class="name-doc"><b>${p.nombres} ${p.apellidos}</b><span>CC ${p.doc}</span></td>
+      <td class="small">${serv(c.servId).nombre}<br><span class="muted">${pres(c.presId).nombre}</span></td>
+      <td>${tipoTag(c.tipo)}</td>
+      <td class="wait">${c.hora}</td><td class="wait">${c.llegada||t?.llegada||'—'}</td>
+      <td>${prioTag}</td><td>${estadoTag(c.estado)}</td>
+      <td class="right" style="white-space:nowrap">
+        ${['Confirmada','Pendiente llegada'].includes(c.estado)
+          ? `<button class="btn btn-primary btn-sm" onclick="mosLlegada(${c.id})">Registrar llegada</button>`
+          : (t?`<button class="btn btn-soft btn-sm" onclick="mostrarTicket(${c.id})">🎫 Ticket</button>`:'')}
+        ${!['Atendida','Cancelada'].includes(c.estado)?`<button class="btn btn-amber btn-sm" onclick="mosRevision(${c.id})">Revisión</button>`:''}
+      </td></tr>`;}).join('')||'<tr><td colspan="9" class="empty">Sin coincidencias</td></tr>'}
+    </tbody></table>
+    <div class="bd small muted">La atención es únicamente con cita. Pacientes con condición especial se registran con prioridad preferencial. El ticket puede reimprimirse o enviarse como texto por WhatsApp.</div>
+  </div>`;
+};
+function mosLlegada(id){
+  const t=registrarLlegada(id,'mostrador');
+  if(t){ toast('✅ Llegada registrada · turno en espera'); mostrarTicket(id); }
+  render();
+}
+function mosRevision(id){
+  const c=CITAS.find(x=>x.id===id); const prev=c.estado; c.estado='Requiere revisión';
+  audit(ROLE_META[S.role].nombre,'Envío a revisión','Cita '+c.cod,'Llegada crítica o datos inconsistentes',prev,'Requiere revisión');
+  toast('⚠️ Cita marcada para revisión manual'); render();
+}
+
+/* ===== Ticket ===== */
+function ticketHTML(c){
+  return `<div class="ticket print-zone">
+    <div class="c clin">GRUPO PROVIVIR<br>CDC ORIENTE</div>
+    <div class="c small muted">${SEDES[0].dir}</div>
+    <hr>
+    <div class="c small">CÓDIGO DE ATENCIÓN</div>
+    <div class="code">${c.cod}</div>
+    <hr>
+    <div class="kv"><span>Servicio</span><b>${serv(c.servId).nombre.split('·')[0].trim()}</b></div>
+    <div class="kv"><span>Tipo</span><b>${c.tipo}</b></div>
+    <div class="kv"><span>Prestador</span><b>${pres(c.presId).nombre}</b></div>
+    <div class="kv"><span>Hora de cita</span><b>${c.hora}</b></div>
+    <div class="kv"><span>Hora de llegada</span><b>${c.llegada||nowHM()}</b></div>
+    <hr>
+    <div class="c">Por favor espera el llamado<br>en las pantallas de sala.</div>
+    <div class="c small muted" style="margin-top:.5rem">${new Date().toLocaleDateString('es-CO')} · ${nowHM()}</div>
+  </div>`;
+}
+function mostrarTicket(citaId){
+  const c=CITAS.find(x=>x.id===citaId);
+  openModal('Ticket de turno',`${ticketHTML(c)}
+    <div class="chips" style="justify-content:center;margin-top:1.1rem">
+      <button class="btn btn-primary" onclick="window.print()">🖨️ Imprimir</button>
+      <button class="btn btn-soft" onclick="toast('💬 Ticket enviado por WhatsApp como texto formateado');closeModal()">💬 Enviar por WhatsApp</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+    </div>`);
+}
+
+/* =====================================================================
+   KIOSKO (visible en modo desactivado · D3) — pantalla de referencia
+   ===================================================================== */
+V.kiosko = () => {
+  const k=S.kiosk;
+  let inner='';
+  if(k.step==='welcome'){
+    inner=`<h1>Bienvenido a Grupo Provivir 👋</h1><p class="sub">CDC Oriente · ¿Qué deseas hacer?</p>
+      <div class="k-grid">
+        <button class="btn btn-primary" onclick="S.kiosk.step='input';renderFS(V.kiosko)"><span class="kic">📅</span>Tengo una cita</button>
+        <button class="btn btn-soft" onclick="S.kiosk.step='qrcita';renderFS(V.kiosko)"><span class="kic">🗓️</span>Solicitar cita nueva</button>
+        <button class="btn btn-soft" onclick="S.kiosk.step='qrnuevo';renderFS(V.kiosko)"><span class="kic">🆕</span>Soy paciente nuevo</button>
+        <button class="btn btn-ghost" onclick="S.kiosk.step='ayuda';renderFS(V.kiosko)"><span class="kic">🙋</span>Necesito ayuda</button>
+      </div>
+      <p class="small muted" style="margin-top:1.2rem">Propuesta de menú estilo banco para la activación futura del módulo.<br>La dinámica definitiva la decide la clínica (pendiente P8).</p>`;
+  }
+  if(k.step==='input'){
+    inner=`<h1>Registra tu llegada</h1><p class="sub">Ingresa tu <b>código de atención</b> (ej. F0147) o tu <b>documento de identidad</b></p>
+      ${k.msg?`<div class="kmsg ${k.msgType}">${k.msg}</div>`:''}
+      <input class="code-in" id="k-in" placeholder="F0147" autocomplete="off">
+      <button class="btn btn-primary big-btn" onclick="kioskBuscar()">Validar mi cita ✓</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:.7rem" onclick="S.kiosk={step:'welcome'};renderFS(V.kiosko)">← Volver</button>`;
+  }
+  if(k.step==='qrcita'||k.step==='qrnuevo'){
+    inner=`<h1>${k.step==='qrnuevo'?'Paciente nuevo':'Solicitar cita'}</h1>
+      <p class="sub">Escanea este código con tu celular y autogestiona tu cita desde el navegador, sin hacer fila.</p>
+      <div class="qr-box">${[...Array(49)].map((_,i)=>`<i class="${(i*7+3)%9<4?'':'w'}"></i>`).join('')}</div>
+      <p class="small muted">agenda.grupoprovivir.com${k.step==='qrnuevo'?'/nuevo':''} · el mismo portal insertado en grupoprovivir.com</p>
+      <button class="btn btn-ghost btn-block" style="margin-top:1rem" onclick="S.kiosk={step:'welcome'};renderFS(V.kiosko)">← Volver</button>`;
+  }
+  if(k.step==='ayuda'){
+    inner=`<h1>🙋 Con gusto te ayudamos</h1>
+      <div class="kmsg ok" style="margin-top:1rem"><b>Por favor acércate al mostrador de recepción.</b><br>Nuestro equipo te atiende de inmediato.</div>
+      <button class="btn btn-ghost btn-block" onclick="S.kiosk={step:'welcome'};renderFS(V.kiosko)">← Volver</button>`;
+  }
+  if(k.step==='confirm'){
+    const c=k.found, p=pac(c.pacId);
+    inner=`<h1>Confirma tus datos</h1><p class="sub">Encontramos una cita activa para hoy</p>
+      <div class="ia-panel" style="text-align:left;margin-bottom:1.4rem">
+        <div class="row"><span class="muted">Paciente</span><b>${p.nombres} ${p.apellidos[0]}.</b></div>
+        <div class="row"><span class="muted">Documento</span><b>${p.tdoc} •••${p.doc.slice(-3)}</b></div>
+        <div class="row"><span class="muted">Servicio</span><b>${serv(c.servId).nombre}</b></div>
+        <div class="row"><span class="muted">Hora</span><b>${c.hora}</b></div>
+      </div>
+      <button class="btn btn-green big-btn" onclick="kioskConfirmar()">Sí, soy yo — registrar llegada ✓</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:.7rem" onclick="S.kiosk={step:'input'};renderFS(V.kiosko)">No, corregir datos</button>`;
+  }
+  if(k.step==='done'){
+    const c=k.found;
+    inner=`<div class="kmsg ok"><b>Bienvenido. Tu llegada quedó registrada.</b><br>Dirígete a la recepción para realizar tu pago.</div>
+      <p class="small muted">Tu código de atención es</p>
+      <div class="code-chip lg" style="font-size:3rem;padding:.6rem 1.4rem;margin:.6rem 0 1.2rem">${c.cod}</div>
+      <p style="font-weight:600">Luego espera el llamado en las pantallas 📺</p>
+      <button class="btn btn-primary big-btn" style="margin-top:1rem" onclick="S.kiosk={step:'welcome'};renderFS(V.kiosko)">Finalizar</button>`;
+  }
+  return `<div class="kiosk">
+    <div class="ribbon">⚠️ MÓDULO DESACTIVADO EN ESTA ETAPA — vista de referencia para activación futura (la operación actual es: pago en recepción → sala → llamado)</div>
+    <button class="exit" onclick="logout()">Salir del kiosko ✕</button>
+    <div class="panel" style="margin-top:2.4rem">${inner}</div>
+  </div>`;
+};
+function kioskBuscar(){
+  const v=($('#k-in').value||'').trim().toUpperCase();
+  if(!v){ return; }
+  const c=CITAS.find(x=>x.sede===S.sede && !['Atendida','Cancelada','No asistió'].includes(x.estado) &&
+        (x.cod===v || pac(x.pacId).doc===v));
+  if(!c){
+    S.kiosk.msg='No encontramos una cita activa para hoy con los datos ingresados.<br><b>Por favor acércate al mostrador.</b>'; S.kiosk.msgType='err';
+  } else if(c.estado==='Requiere revisión' || c.prio===4){
+    S.kiosk.msg='Tu cita requiere revisión por el personal de atención.<br><b>Por favor acércate al mostrador.</b>'; S.kiosk.msgType='warn';
+  } else if(TURNOS.some(t=>t.citaId===c.id)){
+    S.kiosk={step:'done', found:c}; renderFS(V.kiosko); return;
+  } else {
+    S.kiosk={step:'confirm', found:c}; renderFS(V.kiosko); return;
+  }
+  renderFS(V.kiosko);
+}
+function kioskConfirmar(){
+  registrarLlegada(S.kiosk.found.id,'kiosko');
+  S.kiosk.step='done'; renderFS(V.kiosko);
+}
+
+/* =====================================================================
+   AUTOAGENDAMIENTO WEB (portal público · RN-10)
+   ===================================================================== */
+V.autoagenda = () => {
+  const p=S.portal;
+  let inner='';
+  if(p.step==='home'){
+    inner=`<h1>Agenda tu cita 🗓️</h1><p class="sub">Grupo Provivir · CDC Oriente · Sin filas, desde tu celular</p>
+      <div class="k-grid" style="grid-template-columns:1fr">
+        <button class="btn btn-primary" onclick="S.portal={step:'nuevo'};renderFS(V.autoagenda)"><span class="kic">🆕</span>Soy paciente nuevo</button>
+        <button class="btn btn-soft" onclick="S.portal={step:'registrado'};renderFS(V.autoagenda)"><span class="kic">👤</span>Ya estoy registrado</button>
+      </div>
+      <p class="small muted" style="margin-top:1.2rem">Este portal se accede por enlace público y por código QR impreso en la sede,<br>y va insertado en <b>grupoprovivir.com</b>. Flujo simple, sin asistente de IA.</p>`;
+  }
+  if(p.step==='nuevo'){
+    inner=`<h1>Tus datos</h1><p class="sub">Solo necesitamos lo básico para crear tu registro</p>
+      <div style="text-align:left">
+        <div class="grid g2">
+          <div class="field"><label>Nombres</label><input id="pa-nom" placeholder="María"></div>
+          <div class="field"><label>Apellidos</label><input id="pa-ape" placeholder="Pérez"></div>
+        </div>
+        <div class="field"><label>Documento de identidad</label><input id="pa-doc" placeholder="1234567890"></div>
+        <div class="field"><label>Teléfono / WhatsApp</label><input id="pa-tel" placeholder="+57 3xx xxx xxxx"></div>
+      </div>
+      <button class="btn btn-primary big-btn" onclick="portalDatos('nuevo')">Continuar →</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:.7rem" onclick="S.portal={step:'home'};renderFS(V.autoagenda)">← Volver</button>`;
+  }
+  if(p.step==='registrado'){
+    inner=`<h1>Identifícate</h1><p class="sub">Ingresa tu documento para encontrar tu registro</p>
+      <input class="code-in" id="pa-doc2" placeholder="12345678" autocomplete="off">
+      ${p.msg?`<div class="kmsg err">${p.msg}</div>`:''}
+      <button class="btn btn-primary big-btn" onclick="portalDatos('registrado')">Continuar →</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:.7rem" onclick="S.portal={step:'home'};renderFS(V.autoagenda)">← Volver</button>`;
+  }
+  if(p.step==='servicio'){
+    const opciones=[['mg','Medicina general'],['gin','Ginecología'],['nut','Nutrición'],['vitc','Suero de vitamina C'],['eco','Ecografía']];
+    inner=`<h1>Hola, ${p.pac.nombres} 👋</h1><p class="sub">¿Qué servicio necesitas y cuándo?</p>
+      <div style="text-align:left">
+        <div class="field"><label>Servicio</label><select id="pa-serv">${opciones.map(([v,n])=>`<option value="${v}">${n}</option>`).join('')}</select></div>
+        <div class="grid g2">
+          <div class="field"><label>Fecha</label><input id="pa-fecha" type="date" value="2026-08-20"></div>
+          <div class="field"><label>Horario disponible</label><select id="pa-hora"><option>08:00</option><option>09:30</option><option>10:15</option><option selected>14:00</option><option>15:30</option></select></div>
+        </div>
+      </div>
+      <button class="btn btn-primary big-btn" onclick="portalConfirmar()">Confirmar mi cita ✓</button>
+      <button class="btn btn-ghost btn-block" style="margin-top:.7rem" onclick="S.portal.step='home';renderFS(V.autoagenda)">Cancelar</button>`;
+  }
+  if(p.step==='listo'){
+    inner=`<div class="kmsg ok"><b>¡Tu cita quedó confirmada!</b></div>
+      <p class="small muted">Tu código de atención es</p>
+      <div class="code-chip lg" style="font-size:2.6rem;padding:.6rem 1.4rem;margin:.6rem 0 1rem">${p.cod}</div>
+      <div class="ia-panel" style="text-align:left;margin-bottom:1.2rem">
+        <div class="row"><span class="muted">Paciente</span><b>${p.pac.nombres} ${p.pac.apellidos}</b></div>
+        <div class="row"><span class="muted">Servicio</span><b>${serv(p.serv).nombre}</b></div>
+        <div class="row"><span class="muted">Fecha y hora</span><b>${p.fecha} · ${p.hora}</b></div>
+      </div>
+      <p class="small muted">📲 También te enviamos la confirmación por WhatsApp como texto, con recordatorios 24 h antes y el mismo día.</p>
+      <button class="btn btn-primary big-btn" style="margin-top:1rem" onclick="S.portal={step:'home'};renderFS(V.autoagenda)">Agendar otra cita</button>`;
+  }
+  return `<div class="kiosk">
+    <button class="exit" onclick="logout()">Salir del portal ✕</button>
+    <div class="panel">${inner}</div>
+  </div>`;
+};
+function portalDatos(tipo){
+  if(tipo==='nuevo'){
+    const nom=$('#pa-nom').value.trim(), ape=$('#pa-ape').value.trim(), doc=$('#pa-doc').value.trim(), tel=$('#pa-tel').value.trim();
+    if(!nom||!ape||!doc){ toast('⚠️ Completa nombres, apellidos y documento'); return; }
+    const pnew={id:Date.now(), doc, tdoc:'CC', nombres:nom, apellidos:ape, nac:'—', sexo:'—', tel:tel||'—', wa:tel||'—', correo:'', sede:S.sede, cond:[], estado:'Activo', datos:tel?'Completos':'Sin teléfono', origen:'Autoagendamiento web', hist:[]};
+    PACIENTES.push(pnew);
+    S.portal={step:'servicio', tipo, pac:pnew};
+  } else {
+    const doc=($('#pa-doc2').value||'').trim();
+    const found=PACIENTES.find(x=>x.doc===doc);
+    if(!found){ S.portal.msg='No encontramos tu documento. Verifica el número o regístrate como paciente nuevo.'; renderFS(V.autoagenda); return; }
+    S.portal={step:'servicio', tipo, pac:found};
+  }
+  renderFS(V.autoagenda);
+}
+function portalConfirmar(){
+  const sv=$('#pa-serv').value, fecha=$('#pa-fecha').value, hora=$('#pa-hora').value;
+  const s=serv(sv);
+  const cod='A'+String(140+Math.floor(Math.random()*40)).padStart(4,'0');
+  S.portal={...S.portal, step:'listo', serv:sv, fecha, hora, cod};
+  CITAS.push({id:Date.now(), cod, pacId:S.portal.pac.id, presId: sv==='mg'?'jo': sv==='gin'?'md': sv==='nut'?'is': sv==='vitc'?'jo':'ec', servId:sv, tipo:s.tipo==='procedimiento'?'Procedimiento':s.tipo==='examen'?'Examen':'General', sede:S.sede, hora, dur:s.dur, estado:'Confirmada', origen:'Autoagendamiento web', prio:2, obs:fecha!=='2026-08-19'?'Cita futura · '+fecha:''});
+  renderFS(V.autoagenda);
+}
+
+/* Vista de configuración del portal (admin) */
+V.portalCfg = () => `
+  <div class="grid g2">
+    <div class="card"><div class="hd"><h3>Portal público de autoagendamiento</h3><span class="tag t-green">Activo</span></div><div class="bd">
+      <div class="ia-panel">
+        <div class="row"><span class="muted">Enlace público</span><b>agenda.grupoprovivir.com</b></div>
+        <div class="row"><span class="muted">Inserción en la web</span><b>grupoprovivir.com (iframe / botón)</b></div>
+        <div class="row"><span class="muted">Flujo</span><b>Selección simple · sin IA</b></div>
+        <div class="row"><span class="muted">Confirmación</span><b>Código de atención + WhatsApp (texto)</b></div>
+        <div class="row"><span class="muted">Pacientes nuevos</span><b>Alta con datos demográficos básicos</b></div>
+      </div>
+      <div class="chips" style="margin-top:1rem">
+        <button class="btn btn-primary btn-sm" onclick="login('autoagenda')">🌐 Abrir vista del portal</button>
+        <button class="btn btn-soft btn-sm" onclick="toast('🖨️ QR listo para impresión (afiches de sede y mostrador)')">⬇️ Descargar QR de sede</button>
+      </div>
+    </div></div>
+    <div class="card"><div class="hd"><h3>QR para la sede</h3></div><div class="bd" style="text-align:center">
+      <div class="qr-box">${[...Array(49)].map((_,i)=>`<i class="${(i*5+2)%8<4?'':'w'}"></i>`).join('')}</div>
+      <p class="small muted">Caso de uso: el paciente en la cola escanea el código,<br>autogestiona su cita desde el celular y se retira.</p>
+    </div></div>
+  </div>`;
+
+/* =====================================================================
+   VISTA DEL PRESTADOR (RN-07)
+   ===================================================================== */
+V.prestadorView = () => {
+  const pid = S.role==='prestador' ? 'ao' : S.prestadorActual;
+  const p=pres(pid);
+  const misCitas=CITAS.filter(c=>c.presId===pid && c.sede===S.sede).sort((a,b)=>a.hora.localeCompare(b.hora));
+  const cola=TURNOS.filter(t=>t.sede===S.sede && misCitas.some(c=>c.id===t.citaId) && ['En espera','Llamado','En atención','Saltado'].includes(t.estado))
+    .sort((a,b)=> a.prio-b.prio || a.llegada.localeCompare(b.llegada));
+  const actual=cola.find(t=>['Llamado','En atención'].includes(t.estado));
+  return `
+  ${S.role!=='prestador'?`<div class="card" style="margin-bottom:1rem"><div class="bd searchbar">
+    <span class="small muted">Viendo como prestador:</span>
+    <select onchange="S.prestadorActual=this.value;render()">${PRESTADORES.map(x=>`<option value="${x.id}" ${x.id===pid?'selected':''}>${x.nombre} · ${x.esp}</option>`).join('')}</select>
+  </div></div>`:''}
+  <div class="grid g23 pv-grid">
+    <div class="card">
+      <div class="hd"><h3>Pacientes del día · ${p.nombre}</h3><div class="spacer"></div><span class="tag t-teal">📍 ${p.consultorio}</span></div>
+      <table class="t-cards"><thead><tr><th>Código</th><th>Paciente</th><th>Servicio</th><th>Cita</th><th>Llegada</th><th>Espera</th><th>Prioridad</th><th>Estado</th></tr></thead><tbody>
+      ${misCitas.map(c=>{
+        const t=TURNOS.find(x=>x.citaId===c.id);
+        const prio=(pac(c.pacId).cond.length||c.prio===1);
+        const sv=serv(c.servId);
+        return `<tr class="q-row ${prio?'prio1':''}">
+          <td data-l="Código"><span class="code-chip">${c.cod}</span></td>
+          <td data-l="Paciente"><b class="link-name" onclick="priorizarPaciente(${c.id})" title="Toca para cambiar la prioridad (requiere nota)">${pacName(c.pacId)}</b></td>
+          <td data-l="Servicio" class="small">${sv.nombre.split('·')[0].trim()} ${tipoTag(c.tipo)}${sv.cupos>1?' <span class="tag t-blue">2 cupos</span>':''}</td>
+          <td data-l="Cita" class="wait">${c.hora}</td><td data-l="Llegada" class="wait">${t?.llegada||c.llegada||'—'}</td>
+          <td data-l="Espera" class="wait">${t&&t.estado==='En espera'?esperaDe(t):'—'}</td>
+          <td data-l="Prioridad">${prio?'<span class="tag t-amber">Preferencial</span>':'<span class="tag t-gray">Normal</span>'}</td>
+          <td data-l="Estado">${estadoTag(t?t.estado:c.estado)}</td></tr>`;}).join('')||'<tr><td colspan="8" class="empty">Sin citas hoy</td></tr>'}
+      </tbody></table>
+      <div class="bd small muted">Toca el <b>nombre del paciente</b> para cambiar su prioridad en la cola (con nota obligatoria del motivo). El llamado siempre trae al siguiente en cola.</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      <div class="card"><div class="hd"><h3>Turno actual</h3></div><div class="bd">
+        ${actual?`<div class="pv-current">
+            <span class="code-chip">${actual.cod}</span>
+            <div><b>${pacName(CITAS.find(c=>c.id===actual.citaId).pacId)}</b>
+            <div class="small muted">${actual.consultorio} · ${estadoTag(actual.estado)}</div></div>
+          </div>`
+          :'<div class="empty" style="padding:1rem">Ningún paciente llamado.<br>Presiona <b>Llamar siguiente</b>.</div>'}
+      </div></div>
+      <div class="card"><div class="hd"><h3>Acciones</h3></div><div class="bd pv-actions">
+        <button class="btn btn-primary" onclick="llamarSiguiente('${pid}')" ${actual&&actual.estado==='En atención'?'disabled':''}>📢 Llamar siguiente</button>
+        <button class="btn btn-soft" onclick="repetirLlamado('${pid}')" ${actual&&actual.estado==='Llamado'?'':'disabled'}>🔁 Repetir llamado</button>
+        <button class="btn btn-green" onclick="iniciarAtencion('${pid}')" ${actual&&actual.estado==='Llamado'?'':'disabled'}>▶ Iniciar atención</button>
+        <button class="btn btn-dark" onclick="finalizarAtencion('${pid}')" ${actual&&actual.estado==='En atención'?'':'disabled'}>■ Finalizar</button>
+        <button class="btn btn-amber" onclick="noRespondio('${pid}')" ${actual&&actual.estado==='Llamado'?'':'disabled'}>🔇 No respondió</button>
+        <button class="btn btn-danger" onclick="noAsistio('${pid}')" ${actual?'':'disabled'}>✕ No asistió</button>
+      </div>
+      <div class="bd small muted" style="border-top:1px solid var(--line)">La cola prioriza atención preferencial (P1) y luego orden de llegada. El llamado aparece en la pantalla de sala.</div></div>
+    </div>
+  </div>`;
+};
+function priorizarPaciente(citaId){
+  const c=CITAS.find(x=>x.id===citaId);
+  openModal('Cambiar prioridad · '+pacName(c.pacId),`
+    <div class="ia-panel" style="margin-bottom:1rem">
+      <div class="row"><span class="muted">Código</span><span class="code-chip">${c.cod}</span></div>
+      <div class="row"><span class="muted">Servicio</span><b>${serv(c.servId).nombre}</b></div>
+      <div class="row"><span class="muted">Prioridad actual</span><b>${c.prio===1?'Preferencial':'Normal'}</b></div>
+    </div>
+    <div class="field"><label>Nueva prioridad</label><select id="pz-prio"><option value="1" ${c.prio===1?'selected':''}>Preferencial (pasa al frente de la cola)</option><option value="2" ${c.prio!==1?'selected':''}>Normal</option></select></div>
+    <div class="field"><label>Nota del motivo (obligatoria)</label><textarea id="pz-nota" rows="3" placeholder="Ej.: paciente con dolor agudo / adulto mayor descompensado / solicitud de la administración…"></textarea></div>
+    <button class="btn btn-primary btn-block" onclick="guardarPriorizacion(${c.id})">Guardar y reordenar la cola</button>
+    <p class="small muted" style="margin-top:.6rem">El cambio queda registrado en auditoría con tu nombre, el motivo y la hora (RN-07.4).</p>`);
+}
+function guardarPriorizacion(citaId){
+  const nota=($('#pz-nota').value||'').trim();
+  if(!nota){ toast('⚠️ La nota del motivo es <b>obligatoria</b> para cambiar la prioridad'); return; }
+  const c=CITAS.find(x=>x.id===citaId);
+  const nueva=+$('#pz-prio').value;
+  const prev=c.prio===1?'Preferencial':'Normal';
+  c.prio=nueva;
+  const t=TURNOS.find(x=>x.citaId===c.id); if(t){ t.prio=nueva; t.notaPriorizacion=nota; }
+  audit(ROLE_META[S.role].nombre,'Priorización manual','Cita '+c.cod,'Nota: '+nota,prev,nueva===1?'Preferencial':'Normal');
+  toast(`✅ Prioridad de <b>${c.cod}</b> actualizada · la cola se reordenó`);
+  closeModal(); render();
+}
+function esperaDe(t){
+  const [h,m]=t.llegada.split(':').map(Number);
+  const mins=Math.max(0,Math.round((Date.now()-new Date().setHours(h,m,0,0))/60000));
+  return mins+' min';
+}
+function turnoActual(pid){
+  const ids=CITAS.filter(c=>c.presId===pid&&c.sede===S.sede).map(c=>c.id);
+  return TURNOS.find(t=>ids.includes(t.citaId)&&['Llamado','En atención'].includes(t.estado));
+}
+function llamarSiguiente(pid){
+  if(turnoActual(pid)){ toast('ℹ️ Finaliza o marca el turno actual antes de llamar otro'); return; }
+  const ids=CITAS.filter(c=>c.presId===pid&&c.sede===S.sede).map(c=>c.id);
+  const cola=TURNOS.filter(t=>ids.includes(t.citaId)&&t.estado==='En espera').sort((a,b)=>a.prio-b.prio||a.llegada.localeCompare(b.llegada));
+  const t=cola[0];
+  if(!t){ toast('ℹ️ No hay pacientes en espera'); return; }
+  t.estado='Llamado'; t.llamadoEn=nowHM();
+  const c=CITAS.find(x=>x.id===t.citaId); c.estado='Llamado';
+  S.llamados.unshift({cod:t.cod, dest:t.consultorio, svc:serv(c.servId).nombre.split('·')[0].trim(), svcId:c.servId, sede:S.sede, ts:nowHM()});
+  S.flash=true; beep();
+  audit(pres(pid).nombre,'Llamado de turno','Turno '+t.cod,`Pantalla de sala: ${t.cod} → ${t.consultorio}`,'En espera','Llamado');
+  toast(`📢 Turno <b>${t.cod}</b> → ${t.consultorio} · visible en pantalla de sala`);
+  render();
+}
+function repetirLlamado(pid){
+  const t=turnoActual(pid); if(!t) return;
+  S.flash=true; beep();
+  audit(pres(pid).nombre,'Llamado repetido','Turno '+t.cod,'Segundo llamado en pantalla','Llamado','Llamado');
+  toast(`🔁 Llamado repetido: <b>${t.cod}</b>`);
+}
+function iniciarAtencion(pid){
+  const t=turnoActual(pid); if(!t||t.estado!=='Llamado') return;
+  t.estado='En atención'; t.iniciadoEn=nowHM();
+  CITAS.find(x=>x.id===t.citaId).estado='En atención';
+  audit(pres(pid).nombre,'Inicio de atención','Turno '+t.cod,'Paciente en consultorio','Llamado','En atención');
+  render();
+}
+function finalizarAtencion(pid){
+  const t=turnoActual(pid); if(!t||t.estado!=='En atención') return;
+  t.estado='Finalizado'; t.finalizadoEn=nowHM(); S.live.atendidos++;
+  CITAS.find(x=>x.id===t.citaId).estado='Atendida';
+  audit(pres(pid).nombre,'Fin de atención','Turno '+t.cod,'Atención completada','En atención','Atendida');
+  toast(`✅ Atención de <b>${t.cod}</b> finalizada · métricas actualizadas`);
+  render();
+}
+function noRespondio(pid){
+  const t=turnoActual(pid); if(!t) return;
+  t.estado='No respondió'; CITAS.find(x=>x.id===t.citaId).estado='No respondió';
+  audit(pres(pid).nombre,'Turno no respondido','Turno '+t.cod,'Paciente no se presentó al llamado','Llamado','No respondió');
+  toast(`🔇 <b>${t.cod}</b> marcado como no respondió`); render();
+}
+function noAsistio(pid){
+  const t=turnoActual(pid); if(!t) return;
+  t.estado='Cancelado'; CITAS.find(x=>x.id===t.citaId).estado='No asistió';
+  audit(pres(pid).nombre,'No asistió','Turno '+t.cod,'Cierre por inasistencia','Llamado','No asistió');
+  toast(`✕ <b>${t.cod}</b> marcado como no asistió`); render();
+}
+
+/* =====================================================================
+   PANTALLA DE SALA (TV + frame multimedia · RN-11)
+   ===================================================================== */
+V.pantallaSala = () => {
+  const cfg=PANTALLAS[0];
+  const filtro=l => !cfg.servicios.length || cfg.servicios.includes(l.svcId);
+  const lls=S.llamados.filter(filtro);
+  const now=lls[0];
+  const flash=S.flash; S.flash=false;
+  return `<div class="tv">
+    <button class="exit" onclick="logout()">Salir ✕</button>
+    <div class="tv-head">
+      <div class="t">Grupo Provivir · CDC Oriente</div>
+      <div class="clock" id="tv-clock">${nowHM()}</div>
+    </div>
+    <div class="tv-main">
+      <div class="tv-now ${flash?'flash':''}">
+        <div class="tv-bell ${flash?'on':''}">🔔</div>
+        ${now?`
+          <div class="lb">Turno llamado</div>
+          <div class="code">${now.cod}</div>
+          <div class="dest">➜ ${now.dest}</div>
+          <div class="svc">${now.svc}</div>`
+        :`<div class="lb">Sala de espera</div>
+          <div class="code" style="font-size:3rem">— — —</div>
+          <div class="svc">Esperando el próximo llamado</div>`}
+      </div>
+      <div class="tv-list">
+        <h2>Últimos llamados</h2>
+        ${lls.slice(1,1+cfg.turnos).map(l=>`<div class="tv-row">
+          <span class="code">${l.cod}</span>
+          <div><div class="dest">${l.dest}</div><div class="svc">${l.svc} · ${l.ts}</div></div>
+        </div>`).join('')||'<div class="tv-row"><span class="svc">Aún no hay llamados anteriores</span></div>'}
+      </div>
+      ${cfg.media?`<div class="tv-media">
+        <div class="mlabel"><span>${S.mediaVideo?'🎬 Video institucional':'📺 En vivo · YouTube'}</span><span style="letter-spacing:0;text-transform:none">rotación cada ${cfg.intMin} min</span></div>
+        <div class="mframe" id="tv-media-frame">
+          ${S.mediaVideo
+            ?`<div class="mt">🎬 Video institucional Grupo Provivir</div><div class="ms">Se reproduce completo · al terminar regresa al canal en vivo</div>`
+            :`<div class="mt">📺 Canal de noticias en vivo</div><div class="ms">${cfg.canal}</div>`}
+        </div>
+      </div>`:''}
+    </div>
+    <div class="tv-ticker">📣 ${cfg.msg} ${cfg.sonido?'· 🔊 Sonido de llamado activado':''} · ${cfg.nombre}</div>
+  </div>`;
+};
+let clockInt=null, mediaInt=null;
+function startClock(){
+  clearInterval(clockInt);
+  clockInt=setInterval(()=>{
+    if(S.role==='pantalla'){ const el=$('#tv-clock'); if(el) el.textContent=nowHM(); }
+  },1000);
+}
+function startMedia(){
+  clearInterval(mediaInt);
+  /* Demostración: la rotación de 10 min se simula cada 12 segundos */
+  mediaInt=setInterval(()=>{
+    if(S.role!=='pantalla') return;
+    S.mediaVideo=!S.mediaVideo;
+    renderFS(V.pantallaSala);
+  },12000);
+}
+
+/* =====================================================================
+   CONFIGURACIÓN DE PANTALLAS (por sala/servicio · RN-11)
+   ===================================================================== */
+V.pantallasCfg = () => `
+  <div class="grid" style="gap:1rem">
+  ${PANTALLAS.map(p=>`
+    <div class="card"><div class="hd"><h3>${p.nombre}</h3><div class="spacer"></div>${p.media?'<span class="tag t-green">🎬 Frame multimedia activo</span>':'<span class="tag t-gray">Solo turnos</span>'}</div>
+    <div class="bd grid g3" style="align-items:end">
+      <div class="field"><label>Turnos visibles</label>
+        <select onchange="P_SET(${p.id},'turnos',+this.value)">${[3,4,5,6].map(n=>`<option ${n===p.turnos?'selected':''}>${n}</option>`).join('')}</select></div>
+      <div class="field"><label>Sonido de llamado</label>
+        <label class="switch"><input type="checkbox" ${p.sonido?'checked':''} onchange="P_SET(${p.id},'sonido',this.checked)"><span class="sl"></span></label></div>
+      <div class="field"><label>Frame multimedia (YouTube)</label>
+        <label class="switch"><input type="checkbox" ${p.media?'checked':''} onchange="P_SET(${p.id},'media',this.checked)"><span class="sl"></span></label></div>
+      <div class="field" style="grid-column:1/-1"><label>Servicios visibles en esta sala (vacío = todos)</label>
+        <div class="chips">${SERVICIOS.map(s=>`<button class="btn btn-sm ${p.servicios.includes(s.id)?'btn-primary':'btn-ghost'}" onclick="P_TOGGLE(${p.id},'${s.id}')">${s.nombre.split('·')[0].trim()}</button>`).join('')}</div></div>
+      <div class="field"><label>Canal de noticias en vivo (YouTube)</label><input value="${esc(p.canal)}" onchange="P_SET(${p.id},'canal',this.value)" placeholder="youtube.com/@canal/live"></div>
+      <div class="field"><label>Videos promocionales (YouTube)</label><input value="${esc(p.videos)}" onchange="P_SET(${p.id},'videos',this.value)" placeholder="Lista o enlaces de videos"></div>
+      <div class="field"><label>Video institucional cada (min)</label><input type="number" value="${p.intMin}" min="5" step="5" onchange="P_SET(${p.id},'intMin',+this.value)"></div>
+      <div class="field" style="grid-column:1/-1"><label>Mensaje institucional</label>
+        <input value="${esc(p.msg)}" onchange="P_SET(${p.id},'msg',this.value)"></div>
+    </div></div>`).join('')}
+  </div>
+  <div class="card" style="margin-top:1rem"><div class="bd small muted">💡 El frame reproduce el canal de noticias en vivo y aproximadamente cada ${PANTALLAS[0].intMin} minutos presenta el video institucional completo antes de volver al canal (los enlaces definitivos son el pendiente P10 del cliente). Requiere TV con navegador o stick HDMI (Fire TV / Chromecast) con Wi-Fi. Funcionalidad nueva: sujeta a validación técnica. Entra con el rol <b>Pantalla de sala</b> para ver el resultado.</div></div>`;
+function P_SET(id,k,v){ const p=PANTALLAS.find(x=>x.id===id); p[k]=v; toast('✅ Configuración de pantalla actualizada'); render(); }
+function P_TOGGLE(id,s){ const p=PANTALLAS.find(x=>x.id===id); const i=p.servicios.indexOf(s); i>=0?p.servicios.splice(i,1):p.servicios.push(s); render(); }
+
+/* =====================================================================
+   REGLAS DE PRIORIDAD (RN-05 · terminología «prioridad»)
+   ===================================================================== */
+V.prioridad = () => `
+  <div class="grid g2">
+    <div class="card"><div class="hd"><h3>Parámetros de llegada y agenda</h3></div><div class="bd">
+      <div class="field"><label>Minutos recomendados de llegada anticipada</label><input type="number" value="${REGLAS.anticip}" onchange="REGLAS.anticip=+this.value;toast('✅ Regla actualizada')"></div>
+      <div class="field"><label>Margen de tolerancia para llegada a tiempo (min)</label><input type="number" value="${REGLAS.tolerancia}" onchange="REGLAS.tolerancia=+this.value;toast('✅ Regla actualizada')"></div>
+      <div class="field"><label>Retraso máximo antes de revisión manual (min)</label><input type="number" value="${REGLAS.retrasoMax}" onchange="REGLAS.retrasoMax=+this.value;toast('✅ Regla actualizada')"></div>
+      <div class="field"><label>Hueco máximo tolerado entre citas del mismo prestador (min · RN-03)</label><input type="number" value="${REGLAS.huecoMax}" onchange="REGLAS.huecoMax=+this.value;toast('✅ Regla actualizada')"></div>
+    </div></div>
+    <div class="card"><div class="hd"><h3>Niveles de prioridad en cola</h3></div><div class="bd">
+      <table><tbody>
+        <tr><td><span class="tag t-amber">P1</span></td><td><b>Atención preferencial</b><br><span class="small muted">${REGLAS.prefer.join(' · ')} · priorización del prestador con nota</span></td></tr>
+        <tr><td><span class="tag t-gray">P2</span></td><td><b>Llegó antes o a tiempo</b><br><span class="small muted">Dentro del margen de ${REGLAS.tolerancia} min</span></td></tr>
+        <tr><td><span class="tag t-red">P3</span></td><td><b>Llegó tarde</b><br><span class="small muted">Después del margen, prioridad reducida</span></td></tr>
+        <tr><td><span class="tag t-red">P4</span></td><td><b>Llegada crítica</b><br><span class="small muted">Más de ${REGLAS.retrasoMax} min: requiere decisión de la asistente</span></td></tr>
+      </tbody></table>
+    </div></div>
+    <div class="card" style="grid-column:1/-1"><div class="hd"><h3>Prioridad de casos y conversaciones</h3><span class="tag t-amber">Pendiente del cliente (P4)</span></div><div class="bd small">
+      Los criterios para clasificar los casos escalados en <b>alta / media / baja</b> (ej.: dolor, menor de edad, condición particular del paciente) están pendientes de definición por Grupo Provivir. Mientras se definen, el indicador operativo principal de la bandeja es el <b>tiempo de espera</b> de cada conversación. En toda la plataforma se usa el término <b>«prioridad»</b> — nunca «urgencia», que corresponde a un servicio habilitado que la clínica no presta.
+    </div></div>
+  </div>`;
+
+/* =====================================================================
+   MÉTRICAS (kiosko apagado · tablero pendiente P5)
+   ===================================================================== */
+V.metricas = () => {
+  const totalMost=BASE.mostrador+S.live.mostrador;
+  const totalConv=BASE.convs+S.live.ia, auto=BASE.iaAuto+(S.demoCitaCreada?1:0);
+  const pctIA=Math.round(auto/totalConv*100);
+  const mgDocs=PRESTADORES.filter(p=>p.balanceo);
+  const porPres=mgDocs.map(p=>[p.nombre, CITAS.filter(c=>c.presId===p.id && c.tipo!=='Control').length*9+8]);
+  const maxP=Math.max(...porPres.map(x=>x[1]));
+  return `
+  <div class="card" style="margin-bottom:1rem"><div class="bd small muted">📌 El tablero definitivo («todo en un pantallazo») se construirá con las métricas que defina Grupo Provivir (pendiente P5). Esta es la propuesta base compartida en la reunión.</div></div>
+  <div class="grid g4">
+    <div class="card kpi accent"><div class="lb">Resolución automática IA</div><div class="vl">${pctIA}%</div><div class="dt">${auto} de ${totalConv} conversaciones · meta 70–90%</div></div>
+    <div class="card kpi"><div class="lb">Tiempo prom. de espera</div><div class="vl">${BASE.tEspera} min</div><div class="dt">meta: ≤ 15 min</div></div>
+    <div class="card kpi"><div class="lb">Registros en mostrador</div><div class="vl">${totalMost}</div><div class="dt">canal principal de llegada</div></div>
+    <div class="card kpi"><div class="lb">Check-in por kiosko</div><div class="vl">—</div><div class="dt"><span class="tag t-gray">Módulo apagado</span> se conserva para el futuro</div></div>
+  </div>
+  <div class="grid g2" style="margin-top:1rem">
+    <div class="card"><div class="hd"><h3>Balanceo · Medicina general (mes)</h3><span class="tag t-teal">solo consultas</span></div><div class="bd">
+      ${porPres.map(([n,v])=>`<div class="bar-row"><span class="small">${n}</span><div class="bar-track"><i class="alt" style="width:${v/maxP*100}%"></i></div><span class="right">${v}</span></div>`).join('')}
+      <div class="legend"><span>Distribución objetivo: ±10% entre los médicos generales · los controles no cuentan (RN-02)</span></div>
+    </div></div>
+    <div class="card"><div class="hd"><h3>Uso de la IA (mes)</h3></div><div class="bd">
+      <div class="bar-row"><span>Confirmadas por IA</span><div class="bar-track"><i style="width:${pctIA}%"></i></div><span class="right">${auto}</span></div>
+      <div class="bar-row"><span>Escaladas a asistente</span><div class="bar-track"><i class="warn" style="width:${100-pctIA}%"></i></div><span class="right">${BASE.escaladas}</span></div>
+      <div class="bar-row"><span>Órdenes en foto → humano</span><div class="bar-track"><i class="warn" style="width:35%"></i></div><span class="right">62</span></div>
+      <div class="bar-row"><span>Autoagendamiento web</span><div class="bar-track"><i style="width:28%"></i></div><span class="right">96</span></div>
+    </div></div>
+    <div class="card"><div class="hd"><h3>Operación en sede (mes)</h3></div><div class="bd">
+      <div class="bar-row"><span>Registro en mostrador</span><div class="bar-track"><i class="alt" style="width:96%"></i></div><span class="right">${totalMost}</span></div>
+      <div class="bar-row"><span>Llegadas tarde</span><div class="bar-track"><i class="warn" style="width:22%"></i></div><span class="right">${BASE.tarde}</span></div>
+      <div class="bar-row"><span>No presentados</span><div class="bar-track"><i class="warn" style="width:14%"></i></div><span class="right">${BASE.noShow}</span></div>
+      <div class="bar-row"><span>Tiempo prom. atención</span><div class="bar-track"><i style="width:60%"></i></div><span class="right">${BASE.tAtencion}m</span></div>
+      <div class="bar-row"><span>Atendidos hoy (en vivo)</span><div class="bar-track"><i style="width:${Math.min(100,S.live.atendidos*20)}%"></i></div><span class="right">${S.live.atendidos}</span></div>
+    </div></div>
+    <div class="card"><div class="hd"><h3>Citas por tipo (mes)</h3></div><div class="bd">
+      <div class="bar-row"><span>Consultas generales</span><div class="bar-track"><i style="width:88%"></i></div><span class="right">642</span></div>
+      <div class="bar-row"><span>Citas de control</span><div class="bar-track"><i class="warn" style="width:34%"></i></div><span class="right">248</span></div>
+      <div class="bar-row"><span>Especialistas</span><div class="bar-track"><i class="alt" style="width:52%"></i></div><span class="right">381</span></div>
+      <div class="bar-row"><span>Procedimientos y exámenes</span><div class="bar-track"><i class="alt" style="width:61%"></i></div><span class="right">447</span></div>
+    </div></div>
+  </div>`;
+};
+
+/* =====================================================================
+   AUDITORÍA
+   ===================================================================== */
+V.auditoria = () => `
+  <div class="card">
+    <div class="hd"><h3>Registro de acciones (simulado)</h3><div class="spacer"></div><span class="small muted">Los eventos de esta sesión se agregan en tiempo real</span></div>
+    <table><thead><tr><th>Hora</th><th>Usuario / sistema</th><th>Acción</th><th>Entidad</th><th>Detalle</th><th>Estado anterior → nuevo</th></tr></thead><tbody>
+    ${AUDITORIA.map(a=>`<tr>
+      <td class="wait">${a.ts}</td><td><b>${a.user}</b></td><td>${a.accion}</td>
+      <td class="small">${a.ent}</td><td class="small muted">${a.det}</td>
+      <td class="small">${a.prev} → <b>${a.next}</b></td></tr>`).join('')}
+    </tbody></table>
+  </div>`;
+
+/* =====================================================================
+   CARGA MASIVA (RN-12)
+   ===================================================================== */
+V.carga = () => {
+  const done=S.cargaDone;
+  return `
+  <div class="grid g2">
+    <div class="card"><div class="hd"><h3>Importar pacientes</h3></div><div class="bd">
+      <div class="dropzone">📤<br><b>Arrastra aquí el archivo exportado de tu plataforma actual</b><br><span class="small">La plantilla se construye a partir de tu export — no necesitas reacomodar columnas</span></div>
+      <div class="ia-panel" style="margin-top:1rem">
+        <div class="row"><span class="muted">Campos de la carga</span><b>Nombres · Apellidos · Documento · Teléfono</b></div>
+        <div class="row"><span class="muted">Incluye</span><b>Servicios tomados (para el historial)</b></div>
+        <div class="row"><span class="muted">Filtro acordado</span><b>Pacientes con servicio en el último año</b></div>
+        <div class="row"><span class="muted">Dimensionamiento</span><b>~200.000 iniciales · hasta 400.000</b></div>
+      </div>
+      <div class="chips" style="margin-top:1rem">
+        <button class="btn btn-primary" onclick="simularCarga()">▶ Simular carga del archivo del cliente</button>
+        <button class="btn btn-ghost btn-sm" onclick="toast('📄 Plantilla generada a partir del export del cliente (pendiente P1)')">Ver plantilla</button>
+      </div>
+    </div></div>
+    <div class="card"><div class="hd"><h3>Resultado de la carga</h3></div><div class="bd">
+      ${done?`
+      <div class="ia-panel">
+        <div class="row"><span class="muted">Registros leídos del archivo</span><b>312.400</b></div>
+        <div class="row"><span class="muted">Con servicio en el último año (cargados)</span><b style="color:var(--green)">198.650</b></div>
+        <div class="row"><span class="muted">Fuera del filtro (se crean al llegar)</span><b>113.750</b></div>
+        <div class="row"><span class="muted">Historial de servicios poblado</span><b>187.320 pacientes</b></div>
+        <div class="row"><span class="muted">Duplicados rechazados</span><b style="color:var(--amber)">1.240</b></div>
+        <div class="row"><span class="muted">Registros con error</span><b style="color:var(--red)">890</b></div>
+        <div class="row"><span class="muted">Pacientes sin teléfono</span><b>7.420</b></div>
+      </div>
+      <button class="btn btn-soft btn-sm" style="margin-top:1rem" onclick="toast('📄 Reporte de errores exportado (conceptual)')">Exportar reporte de errores</button>`
+      :'<div class="empty">Aún no se ha ejecutado ninguna carga en esta sesión</div>'}
+    </div></div>
+  </div>`;
+};
+function simularCarga(){
+  toast('⏳ Validando estructura, aplicando filtro de último año y procesando…');
+  setTimeout(()=>{
+    S.cargaDone=true;
+    audit(ROLE_META[S.role].nombre,'Carga masiva','export_provivir.xlsx','312.400 leídos · 198.650 cargados (filtro último año) · 1.240 duplicados','—','Completada');
+    toast('✅ Carga completada: 198.650 pacientes con su historial de servicios');
+    render();
+  },1200);
+}
+
+/* ---------------- INIT ---------------- */
+// Vista inicial: pantalla de login
+</script>
+</body>
+</html>

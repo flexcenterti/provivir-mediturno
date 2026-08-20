@@ -1,0 +1,39 @@
+{
+  "name": "provivir",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Plataforma de agendamiento inteligente · Grupo Provivir (CDC Oriente)",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,backoffice -c cyan,magenta \"npm:dev:api\" \"npm:dev:backoffice\"",
+    "dev:api": "npm run dev -w @provivir/api",
+    "dev:backoffice": "npm run dev -w @provivir/backoffice",
+    "dev:portal": "npm run dev -w @provivir/portal",
+    "dev:tv": "npm run dev -w @provivir/tv",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "db:up": "docker compose up -d postgres redis",
+    "db:migrate": "npm run db:migrate -w @provivir/api",
+    "db:seed": "npm run db:seed -w @provivir/api",
+    "db:reset": "npm run db:reset -w @provivir/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "concurrently": "^9.1.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.4.1",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.16.0"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.1"
+  }
+}

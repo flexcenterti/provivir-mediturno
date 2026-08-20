@@ -1,0 +1,25 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+.DS_Store
+
+# Secretos — nunca al repo
+.env
+.env.*
+!.env.example
+
+# Prisma
+apps/api/prisma/*.db
+apps/api/prisma/migrations/dev.db*
+
+# Datos de carga masiva (PII de pacientes)
+uploads/
+tmp/
+*.csv
+!docs/**/*.csv
+
+# Runtime local
+.pgdata/
+.redisdata/

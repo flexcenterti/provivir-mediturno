@@ -1,0 +1,17 @@
+{
+  "name": "@provivir/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "jest --config jest.config.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "files": [
+    "dist"
+  ]
+}
