@@ -438,6 +438,21 @@ model Auditoria {
   @@map("auditoria")
 }
 
+/// RN-09.5 · Agenda de contactos del celular del cliente (50.000+), cargada antes de
+/// migrar el número a la API. NO son pacientes: es solo el directorio que permite
+/// saludar por su nombre a quien escribe sin estar registrado.
+model Contacto {
+  id       String   @id @default(uuid())
+  /// Normalizado a E.164 para poder cruzarlo con el número que entrega WhatsApp.
+  telefono String   @unique
+  nombre   String
+  origen   String   @default("agenda-celular")
+  creadoEn DateTime @default(now()) @map("creado_en")
+
+  @@index([nombre])
+  @@map("contacto")
+}
+
 /// Parámetros de reglas fuera del código (Arquitectura §9):
 /// hueco_max, ventanas, umbrales de IA, KIOSKO_ACTIVO, intervalo institucional.
 model Configuracion {

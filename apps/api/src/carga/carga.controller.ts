@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import type { Response } from 'express';
 import { CargaCola } from './carga.cola';
+import { ContactosProcesador } from './contactos.procesador';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from '../auth/auth.types';
@@ -20,7 +21,37 @@ export const DIR_SUBIDAS = process.env.DIR_SUBIDAS ?? 'uploads';
 @Controller('carga')
 @Roles('admin')
 export class CargaController {
-  constructor(private readonly cola: CargaCola) {}
+  constructor(
+    private readonly cola: CargaCola,
+    private readonly contactos: ContactosProcesador,
+  ) {}
+
+  /**
+   * RN-09.5 · CSV de contactos del celular del cliente (P9), cargado antes de
+   * migrar el número. No crea pacientes: es el directorio para saludar por su
+   * nombre a quien escribe sin estar registrado.
+   */
+  @Post('contactos')
+  @UseInterceptors(
+    FileInterceptor('archivo', {
+      storage: diskStorage({
+        destination: DIR_SUBIDAS,
+        filename: (_req, file, cb) => cb(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`),
+      }),
+      limits: { fileSize: MAX_BYTES, files: 1 },
+      fileFilter: (_req, file, cb) => {
+        const ext = extname(file.originalname).toLowerCase();
+        if (!EXTENSIONES.includes(ext)) {
+          return cb(new BadRequestException(`Extensión no permitida. Use: ${EXTENSIONES.join(', ')}`), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async subirContactos(@UploadedFile() archivo: Express.Multer.File | undefined) {
+    if (!archivo) throw new BadRequestException('No se recibió el archivo');
+    return this.contactos.procesar(archivo.path, archivo.originalname);
+  }
 
   @Post()
   @UseInterceptors(

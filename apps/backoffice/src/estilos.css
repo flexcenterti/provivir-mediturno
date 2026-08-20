@@ -123,3 +123,20 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
   .contenido { padding: 1rem; }
   .grid-2 { grid-template-columns: 1fr; }
 }
+
+/* ══════════ Bandeja ══════════ */
+/* RN-08.3 · burbuja roja con el conteo. Sin sonido, por decisión del cliente. */
+.burbuja-conteo { float: right; background: var(--red); color: #fff; font-size: .7rem;
+  font-weight: 700; min-width: 20px; height: 20px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0 .35rem; }
+.espera-larga { color: var(--red); font-weight: 700; }
+.chat { max-height: 45vh; overflow-y: auto; display: flex; flex-direction: column;
+  gap: .5rem; padding: .8rem; background: #F3F6F7; border-radius: 11px; margin: .6rem 0; }
+.burbuja { max-width: 78%; padding: .55rem .75rem; border-radius: 12px; font-size: .87rem;
+  display: flex; flex-direction: column; gap: .2rem; }
+.burbuja.de-paciente { align-self: flex-start; background: #fff; border: 1px solid var(--line); }
+.burbuja.de-clinica { align-self: flex-end; background: var(--teal-soft); color: var(--teal-ink); }
+.burbuja time { font-size: .68rem; opacity: .6; align-self: flex-end; }
+.adjunto { font-size: .75rem; font-weight: 600; color: var(--amber); }
+.modal textarea { width: 100%; padding: .6rem .75rem; border: 1px solid var(--line);
+  border-radius: 9px; background: #FBFCFC; resize: vertical; }

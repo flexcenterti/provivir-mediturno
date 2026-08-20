@@ -22,6 +22,11 @@ import { PantallasModule } from './pantallas/pantallas.module';
 import { MetricasModule } from './metricas/metricas.module';
 import { PortalModule } from './portal/portal.module';
 import { KioskoModule } from './kiosko/kiosko.module';
+import { MetaModule } from './whatsapp/meta.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { IaModule } from './ia/ia.module';
+import { BandejaModule } from './bandeja/bandeja.module';
+import { RecordatoriosModule } from './recordatorios/recordatorios.module';
 
 @Module({
   imports: [
@@ -57,6 +62,12 @@ import { KioskoModule } from './kiosko/kiosko.module';
     // Fase 5 · portal público y kiosko (apagado por bandera, D3)
     PortalModule,
     KioskoModule,
+    // Fase 4 · WhatsApp + IA + bandeja
+    MetaModule,
+    IaModule,
+    WhatsappModule,
+    BandejaModule,
+    RecordatoriosModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

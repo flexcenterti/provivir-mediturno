@@ -4,13 +4,15 @@ import { Dashboard } from './vistas/Dashboard';
 import { Consolidada } from './vistas/Consolidada';
 import { Mostrador } from './vistas/Mostrador';
 import { VistaPrestador } from './vistas/Prestador';
+import { Bandeja } from './vistas/Bandeja';
 
-type Vista = 'dashboard' | 'consolidada' | 'mostrador' | 'prestador';
+type Vista = 'dashboard' | 'consolidada' | 'bandeja' | 'mostrador' | 'prestador';
 
 /** D1 · sin selector de sede: la capacidad multi-sede vive en el modelo, no en la UI. */
 const MENU: Array<{ id: Vista; etiqueta: string; roles: UsuarioSesion['rol'][] }> = [
   { id: 'dashboard', etiqueta: 'Dashboard', roles: ['admin', 'asistente'] },
   { id: 'consolidada', etiqueta: 'Agenda consolidada', roles: ['admin', 'asistente'] },
+  { id: 'bandeja', etiqueta: 'Bandeja asistente', roles: ['admin', 'asistente'] },
   { id: 'mostrador', etiqueta: 'Mostrador', roles: ['admin', 'asistente'] },
   { id: 'prestador', etiqueta: 'Mi consulta', roles: ['prestador', 'admin'] },
 ];
@@ -35,6 +37,19 @@ export function App() {
 function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => void }) {
   const disponibles = MENU.filter((m) => m.roles.includes(usuario.rol));
   const [vista, setVista] = useState<Vista>(disponibles[0]?.id ?? 'dashboard');
+  const [pendientes, setPendientes] = useState(0);
+
+  /**
+   * RN-08.3 - burbuja roja con el conteo de pendientes junto a "Bandeja asistente".
+   * SIN sonido: decision explicita del cliente ("el sonido cansa").
+   */
+  useEffect(() => {
+    if (!['admin', 'asistente'].includes(usuario.rol)) return;
+    const consultar = () => api.bandejaConteo().then((r) => setPendientes(r.pendientes)).catch(() => undefined);
+    consultar();
+    const id = setInterval(consultar, 15_000);
+    return () => clearInterval(id);
+  }, [usuario.rol]);
 
   return (
     <div className="consola">
@@ -51,6 +66,7 @@ function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => 
           {disponibles.map((m) => (
             <button key={m.id} className={`nav-item ${vista === m.id ? 'activo' : ''}`} onClick={() => setVista(m.id)}>
               {m.etiqueta}
+              {m.id === 'bandeja' && pendientes > 0 && <span className="burbuja-conteo">{pendientes}</span>}
             </button>
           ))}
         </nav>
@@ -65,6 +81,7 @@ function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => 
       <main className="contenido">
         {vista === 'dashboard' && <Dashboard />}
         {vista === 'consolidada' && <Consolidada />}
+        {vista === 'bandeja' && <Bandeja />}
         {vista === 'mostrador' && <Mostrador />}
         {vista === 'prestador' && (
           usuario.prestadorId

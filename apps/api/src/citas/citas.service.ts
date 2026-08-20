@@ -10,6 +10,7 @@ import {
   ordenarPorCompactacion, violaIntercaladoEnAgenda,
   type CitaExistente, type Cupo,
 } from './citas.reglas';
+import { RecordatoriosService } from '../recordatorios/recordatorios.service';
 import type { CancelarCitaDto, ConsultarCuposDto, CrearCitaDto, ReprogramarCitaDto } from './dto/cita.dto';
 
 type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
@@ -47,6 +48,7 @@ export class CitasService {
     private readonly agendas: AgendasService,
     private readonly auditoria: AuditoriaService,
     private readonly configuracion: ConfiguracionService,
+    private readonly recordatorios: RecordatoriosService,
   ) {}
 
   // ─────────────────────── Consulta de cupos ───────────────────────
@@ -200,6 +202,9 @@ export class CitasService {
       });
     }, OPCIONES_TX);
 
+    // Recordatorios 24 h antes y el mismo día (Guía, FASE 4).
+    await this.recordatorios.programar(cita.id, cita.fecha, cita.horaInicio);
+
     await this.auditoria.registrar({
       usuario: usuarioId,
       accion: 'Cita creada',
@@ -272,6 +277,10 @@ export class CitasService {
       });
     }, OPCIONES_TX);
 
+    // Los recordatorios de la hora anterior ya no aplican.
+    await this.recordatorios.cancelar(id);
+    await this.recordatorios.programar(id, actualizada.fecha, actualizada.horaInicio);
+
     await this.auditoria.registrar({
       usuario: usuarioId,
       accion: 'Cita reprogramada',
@@ -296,6 +305,8 @@ export class CitasService {
       data: { estado: 'cancelada', observacion: dto.motivo },
       include: { paciente: true, prestador: true, servicio: true },
     });
+
+    await this.recordatorios.cancelar(id);
 
     await this.auditoria.registrar({
       usuario: usuarioId,

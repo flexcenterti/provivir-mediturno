@@ -85,8 +85,8 @@ Borrar migraciones · cambiar el esquema de auditoría · tocar la verificación
 | 2 · Motor de agendamiento | **Completa** — `docs/changelog-fase2.md` |
 | 3 · Operación en sede | **Completa** (backend; frontend parcial) — `docs/changelog-fase3.md` |
 | 5 · Autoagendamiento web + kiosko apagado | **Completa** — `docs/changelog-fase5.md` |
-| 4 · WhatsApp + IA + bandeja | Siguiente (incluye RN-09.8) |
-| 6 · Métricas, endurecimiento y piloto | Ver la Guía §2 |
+| 4 · WhatsApp + IA + bandeja | **Completa** (incluye RN-09.8) — `docs/changelog-fase4.md` |
+| 6 · Métricas, endurecimiento y piloto | Siguiente |
 
 **La Fase 5 se adelantó a la Fase 4** por decisión del cliente: el bot debe ofrecer el enlace
 del portal (RN-09.8) y no puede apuntar a algo inexistente.

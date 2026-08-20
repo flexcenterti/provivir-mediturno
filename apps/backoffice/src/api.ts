@@ -63,6 +63,14 @@ export const api = {
   crearPaciente: (cuerpo: unknown) => pedir<Paciente>('/pacientes', { method: 'POST', body: JSON.stringify(cuerpo) }),
   historial: (id: string) => pedir<HistorialItem[]>(`/pacientes/${id}/historial`),
 
+  bandeja: () => pedir<Conversacion[]>('/bandeja'),
+  bandejaConteo: () => pedir<{ pendientes: number; sonido: boolean }>('/bandeja/pendientes/conteo'),
+  conversacion: (id: string) => pedir<ConversacionDetalle>(`/bandeja/${id}`),
+  tomarBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/tomar`, { method: 'PATCH' }),
+  responderBandeja: (id: string, texto: string) =>
+    pedir<{ enviado: boolean }>(`/bandeja/${id}/responder`, { method: 'POST', body: JSON.stringify({ texto }) }),
+  resolverBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/resolver`, { method: 'PATCH' }),
+
   cola: (prestadorId?: string) => pedir<Turno[]>(`/turnos${prestadorId ? `?prestadorId=${prestadorId}` : ''}`),
   registrarLlegada: (cuerpo: unknown) => pedir<Turno>('/turnos/llegada', { method: 'POST', body: JSON.stringify(cuerpo) }),
   llamarSiguiente: (prestadorId: string) =>
@@ -87,6 +95,34 @@ export interface Turno {
   id: string; estado: string; prioridad: string; llegadaTs: string; consultorio: string | null;
   notaPriorizacion: string | null; minutosEsperando?: number; cita: Cita;
 }
+export interface Conversacion {
+  id: string;
+  telefono: string;
+  paciente: { id: string; nombres: string; apellidos: string; documento: string } | null;
+  motivo: string | null;
+  prioridad: string;
+  intencion: string | null;
+  tomadaPor: string | null;
+  estado: string;
+  /** RN-08.3 - para que la espera no se vuelva paisaje. */
+  minutosEsperando: number;
+  ultimoMensaje: string | null;
+}
+
+export interface MensajeConversacion {
+  id: string;
+  direccion: 'entrante' | 'saliente';
+  tipo: string;
+  contenido: string | null;
+  transcripcion: string | null;
+  mediaPath: string | null;
+  ts: string;
+}
+
+export interface ConversacionDetalle extends Omit<Conversacion, 'ultimoMensaje'> {
+  mensajes: MensajeConversacion[];
+}
+
 export interface CargaMedico {
   prestadorId: string; nombre: string; consultasGenerales: number; controles: number;
   ocupacionPorcentaje: number; minutosJornada: number; minutosOcupados: number;

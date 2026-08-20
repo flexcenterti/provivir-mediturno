@@ -31,6 +31,24 @@ const esquema = z.object({
   // RN-10 · portal público. La URL se usa en el QR y en el enlace que ofrece el bot.
   PORTAL_URL: z.string().url().default('http://localhost:5174'),
   TURNSTILE_SECRET: z.string().optional(),
+
+  // RN-09 · canal WhatsApp. Sin credenciales el canal opera en simulación.
+  META_APP_SECRET: z.string().optional(),
+  META_ACCESS_TOKEN: z.string().optional(),
+  META_PHONE_NUMBER_ID: z.string().optional(),
+  META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
+
+  // ADR A5 · IA conversacional
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default('claude-opus-5'),
+
+  // RN-09.2 · transcripción de notas de voz
+  STT_URL: z.string().optional(),
+  STT_API_KEY: z.string().optional(),
+  STT_MODELO: z.string().default('whisper-1'),
+
+  // Checklist §4.10 · media fuera del webroot
+  DIR_MEDIA: z.string().default('media'),
 });
 
 export type Env = z.infer<typeof esquema>;
