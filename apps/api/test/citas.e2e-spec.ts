@@ -97,6 +97,27 @@ describe('Motor de citas (integración)', () => {
       expect(cupos).toEqual([]);
     });
 
+    it('la oferta intercala prestadores: no esconde la mañana libre de uno tras la carga de otro', async () => {
+      // Osorio y Ríos atienden 08:00–12:00; Ortiz 14:00–18:00. Con una cita en Osorio,
+      // el balanceo lo manda al final — pero sus cupos de la mañana deben seguir visibles.
+      await crear({ hora: '08:00', prestadorId: 'ao' });
+
+      const cupos = await citas.cupos({ servicioId: 'mg', fecha: LUNES, limite: 9 } as never);
+      const prestadores = new Set(cupos.map((c) => c.prestadorId));
+
+      expect(prestadores.size).toBeGreaterThan(1);
+      expect(cupos.some((c) => c.hora < '12:00')).toBe(true);
+      expect(cupos.some((c) => c.hora >= '14:00')).toBe(true);
+    });
+
+    it('RN-02: el primer cupo ofrecido es del prestador con menor carga', async () => {
+      await crear({ hora: '08:00', prestadorId: 'ao' });
+      await crear({ hora: '08:15', prestadorId: 'ao', pacienteId: paciente2Id });
+
+      const cupos = await citas.cupos({ servicioId: 'mg', fecha: LUNES, limite: 5 } as never);
+      expect(cupos[0]!.prestadorId).not.toBe('ao');
+    });
+
     it('sin agenda ese día, no hay cupos (Ortiz no atiende sábado)', async () => {
       const sabado = '2026-09-12';
       const cupos = await citas.cupos({ servicioId: 'mg', fecha: sabado, prestadorId: 'jo' } as never);

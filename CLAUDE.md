@@ -84,12 +84,17 @@ Borrar migraciones · cambiar el esquema de auditoría · tocar la verificación
 | 1 · Núcleo de datos + carga masiva | **Completa** — `docs/changelog-fase1.md` |
 | 2 · Motor de agendamiento | **Completa** — `docs/changelog-fase2.md` |
 | 3 · Operación en sede | **Completa** (backend; frontend parcial) — `docs/changelog-fase3.md` |
-| 4 · WhatsApp + IA + bandeja | Siguiente |
-| 5 · Autoagendamiento web | Ver la Guía §2 |
+| 5 · Autoagendamiento web + kiosko apagado | **Completa** — `docs/changelog-fase5.md` |
+| 4 · WhatsApp + IA + bandeja | Siguiente (incluye RN-09.8) |
 | 6 · Métricas, endurecimiento y piloto | Ver la Guía §2 |
 
-**Pendiente de confirmar con el cliente:** la interpretación de RN-01.5 sobre qué cuenta como
-"control consecutivo" (ver `docs/changelog-fase2.md`).
+**La Fase 5 se adelantó a la Fase 4** por decisión del cliente: el bot debe ofrecer el enlace
+del portal (RN-09.8) y no puede apuntar a algo inexistente.
+
+**Pendientes de confirmar con el cliente:**
+1. RN-01.5 · qué cuenta como "control consecutivo" (`docs/changelog-fase2.md`).
+2. RN-10.2 · el portal exige documento + últimos 4 del teléfono, no solo documento (`docs/changelog-fase5.md`).
+3. RN-09.2 · usar botones interactivos de WhatsApp en vez de solo texto (`docs/rn-09-8-oferta-web.md`).
 
 ## Definición de hecho (DoD) por tarea
 

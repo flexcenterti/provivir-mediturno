@@ -75,12 +75,14 @@ export class CitasService {
     const ordenados = await this.ordenarCandidatos(candidatos, fecha, Boolean(dto.prestadorId));
     const huecoMax = this.configuracion.numero(CONFIG.HUECO_MAX_MIN, 0);
 
-    const ofrecidos: CupoOfrecido[] = [];
+    // Lista por prestador, cada una ya ordenada por compactación (RN-03).
+    const porPrestador: CupoOfrecido[][] = [];
 
     for (const prestador of ordenados) {
       const duracionMin = await this.duracionEfectiva(prestador.id, servicio);
       const agendasDelDia = await this.agendas.vigentesEnFecha(prestador.id, fecha);
       const citasDelDia = await this.citasDelDia(this.prisma, prestador.id, fecha);
+      const suyos: CupoOfrecido[] = [];
 
       for (const agenda of agendasDelDia) {
         const brutos = generarCupos(
@@ -93,7 +95,7 @@ export class CitasService {
         );
 
         for (const cupo of ordenarPorCompactacion(validos, citasDelDia, huecoMax)) {
-          ofrecidos.push({
+          suyos.push({
             prestadorId: prestador.id,
             prestadorNombre: prestador.nombre,
             fecha: dto.fecha,
@@ -101,12 +103,38 @@ export class CitasService {
             duracionMin: cupo.duracionMin,
             consultorio: agenda.consultorio,
           });
-          if (ofrecidos.length >= limite) return ofrecidos;
         }
+      }
+
+      if (suyos.length > 0) porPrestador.push(suyos);
+    }
+
+    return this.intercalarPorPrestador(porPrestador, limite);
+  }
+
+  /**
+   * Combina las listas de cada prestador en ronda: primero el mejor cupo del prestador
+   * con menor carga, luego el del siguiente, y así.
+   *
+   * Sin esto, la lista se llenaba con todos los cupos del primer prestador y el paciente
+   * no veía los demás: tras ocuparse las 08:00 de Osorio, el portal ofrecía únicamente
+   * las tardes de Ortiz y escondía la mañana libre. Así se conservan las dos reglas
+   * —RN-02 decide a quién se propone primero, RN-03 qué hora dentro de cada agenda—
+   * y el paciente sigue viendo un abanico real de horarios.
+   */
+  private intercalarPorPrestador(listas: CupoOfrecido[][], limite: number): CupoOfrecido[] {
+    const salida: CupoOfrecido[] = [];
+    const maximo = Math.max(0, ...listas.map((l) => l.length));
+
+    for (let i = 0; i < maximo && salida.length < limite; i++) {
+      for (const lista of listas) {
+        const cupo = lista[i];
+        if (cupo) salida.push(cupo);
+        if (salida.length >= limite) break;
       }
     }
 
-    return ofrecidos;
+    return salida;
   }
 
   // ─────────────────────── Creación transaccional ───────────────────────

@@ -27,6 +27,10 @@ const esquema = z.object({
   SEDE_ID: z.string().default('cdc-oriente'),
   // D3 · el kiosko se construye pero queda apagado
   KIOSKO_ACTIVO: z.coerce.boolean().default(false),
+
+  // RN-10 · portal público. La URL se usa en el QR y en el enlace que ofrece el bot.
+  PORTAL_URL: z.string().url().default('http://localhost:5174'),
+  TURNSTILE_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof esquema>;

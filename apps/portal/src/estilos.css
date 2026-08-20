@@ -42,3 +42,73 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
   padding: 1.4rem; margin-top: 1rem; }
 .chip { font-family: var(--fm); background: var(--teal-soft); color: var(--teal-ink);
   padding: .18rem .55rem; border-radius: 7px; font-size: .85rem; }
+
+/* ══════════ Portal público de autoagendamiento ══════════ */
+/* Pensado para el celular primero: el caso de uso es el paciente en la cola. */
+.portal { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+.p-cab { display: flex; align-items: center; gap: .7rem; padding: 1rem 1.2rem;
+  background: var(--teal); color: #fff; }
+.p-cab strong { display: block; font-family: var(--fd); font-size: 1rem; }
+.p-cab span { font-size: .78rem; opacity: .85; }
+.p-cab .brand-mark { background: rgba(255,255,255,.18); }
+.p-main { flex: 1; width: min(560px, 100%); margin: 0 auto; padding: 1.5rem 1.2rem; }
+
+.p-inicio h1 { font-size: 1.7rem; margin-bottom: .3rem; }
+.p-sub { color: var(--muted); font-size: .9rem; margin-bottom: 1.2rem; }
+.p-grande { display: block; width: 100%; text-align: left; background: var(--card);
+  border: 1px solid var(--line); border-radius: 14px; padding: 1.2rem; margin-bottom: .9rem;
+  box-shadow: var(--shadow); }
+.p-grande:hover { border-color: var(--teal); }
+.p-grande strong { display: block; font-family: var(--fd); font-size: 1.15rem; margin-bottom: .2rem; }
+.p-grande span { color: var(--muted); font-size: .87rem; }
+
+.p-paso { background: var(--card); border-radius: 14px; padding: 1.4rem;
+  box-shadow: var(--shadow); display: flex; flex-direction: column; gap: .3rem; }
+.p-paso h2 { font-size: 1.25rem; margin-bottom: .2rem; }
+.p-paso .btn { margin-top: .6rem; }
+.p-ayuda { display: block; color: var(--muted); font-size: .78rem; margin-top: .25rem; }
+.p-check { display: flex; gap: .6rem; align-items: flex-start; font-size: .84rem;
+  color: var(--muted); line-height: 1.5; margin: .6rem 0; }
+.p-check input { margin-top: .2rem; flex-shrink: 0; }
+
+.p-servicios { display: flex; flex-direction: column; gap: .5rem; margin: .6rem 0; }
+.p-servicio { text-align: left; border: 1px solid var(--line); border-radius: 11px;
+  padding: .8rem 1rem; background: #FBFCFC; }
+.p-servicio.sel { border-color: var(--teal); background: var(--teal-soft); }
+.p-servicio strong { display: block; font-size: .95rem; }
+.p-servicio span { color: var(--muted); font-size: .8rem; }
+.p-aviso { display: block; color: var(--amber); font-weight: 600; }
+
+.p-fecha { display: flex; flex-direction: column; gap: .3rem; font-size: .78rem;
+  font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.p-fecha input { padding: .6rem .75rem; border: 1px solid var(--line); border-radius: 9px;
+  background: #FBFCFC; font-size: 1rem; }
+.p-cupos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: .6rem; margin: .8rem 0; }
+.p-cupo { display: flex; flex-direction: column; gap: .15rem; padding: .8rem;
+  border: 1px solid var(--line); border-radius: 11px; background: #FBFCFC; }
+.p-cupo:hover:not(:disabled) { border-color: var(--teal); background: var(--teal-soft); }
+.p-cupo:disabled { opacity: .5; }
+.p-cupo strong { font-family: var(--fm); font-size: 1.3rem; }
+.p-cupo span { color: var(--muted); font-size: .78rem; }
+
+.p-confirmada { align-items: center; text-align: center; }
+.p-ok { width: 56px; height: 56px; border-radius: 50%; background: var(--green, #2F9E62);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-size: 1.8rem; margin-bottom: .4rem; }
+.p-codigo { font-family: var(--fm); font-weight: 700; font-size: 2.4rem; letter-spacing: .12em;
+  background: var(--slate, #1D3540); color: #EAF4F2; padding: .5rem 1.2rem;
+  border-radius: 12px; margin: .5rem 0 .2rem; }
+.p-detalle { display: grid; grid-template-columns: auto 1fr; gap: .4rem 1rem;
+  text-align: left; width: 100%; margin: 1rem 0; font-size: .9rem; }
+.p-detalle dt { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+.p-detalle dd { font-weight: 600; }
+.p-indicaciones { background: var(--teal-soft); color: var(--teal-ink); border-radius: 10px;
+  padding: .7rem .9rem; font-size: .87rem; }
+
+.p-pie { padding: 1.2rem; text-align: center; }
+.p-pie button { color: var(--muted); font-size: .82rem; text-decoration: underline; }
+.p-aviso-texto { width: min(560px, 100%); margin: .8rem auto 0; text-align: left;
+  background: var(--card); border-radius: 12px; padding: 1rem; font-size: .82rem;
+  line-height: 1.6; box-shadow: var(--shadow); }
+.p-aviso-texto p { margin-bottom: .5rem; }

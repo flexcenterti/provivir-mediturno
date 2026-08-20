@@ -20,6 +20,8 @@ import { CitasModule } from './citas/citas.module';
 import { TurnosModule } from './turnos/turnos.module';
 import { PantallasModule } from './pantallas/pantallas.module';
 import { MetricasModule } from './metricas/metricas.module';
+import { PortalModule } from './portal/portal.module';
+import { KioskoModule } from './kiosko/kiosko.module';
 
 @Module({
   imports: [
@@ -52,6 +54,9 @@ import { MetricasModule } from './metricas/metricas.module';
     TurnosModule,
     PantallasModule,
     MetricasModule,
+    // Fase 5 · portal público y kiosko (apagado por bandera, D3)
+    PortalModule,
+    KioskoModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
