@@ -5,8 +5,14 @@ import { Consolidada } from './vistas/Consolidada';
 import { Mostrador } from './vistas/Mostrador';
 import { VistaPrestador } from './vistas/Prestador';
 import { Bandeja } from './vistas/Bandeja';
+import { Pacientes } from './vistas/Pacientes';
+import { Catalogo } from './vistas/Catalogo';
+import { Agendas } from './vistas/Agendas';
+import { Administracion } from './vistas/Administracion';
 
-type Vista = 'dashboard' | 'consolidada' | 'bandeja' | 'mostrador' | 'prestador';
+type Vista =
+  | 'dashboard' | 'consolidada' | 'bandeja' | 'mostrador' | 'prestador'
+  | 'pacientes' | 'catalogo' | 'agendas' | 'administracion';
 
 /** D1 · sin selector de sede: la capacidad multi-sede vive en el modelo, no en la UI. */
 const MENU: Array<{ id: Vista; etiqueta: string; roles: UsuarioSesion['rol'][] }> = [
@@ -15,6 +21,10 @@ const MENU: Array<{ id: Vista; etiqueta: string; roles: UsuarioSesion['rol'][] }
   { id: 'bandeja', etiqueta: 'Bandeja asistente', roles: ['admin', 'asistente'] },
   { id: 'mostrador', etiqueta: 'Mostrador', roles: ['admin', 'asistente'] },
   { id: 'prestador', etiqueta: 'Mi consulta', roles: ['prestador', 'admin'] },
+  { id: 'pacientes', etiqueta: 'Pacientes', roles: ['admin', 'asistente'] },
+  { id: 'agendas', etiqueta: 'Agendas', roles: ['admin', 'asistente'] },
+  { id: 'catalogo', etiqueta: 'Catálogo', roles: ['admin'] },
+  { id: 'administracion', etiqueta: 'Administración', roles: ['admin'] },
 ];
 
 export function App() {
@@ -83,6 +93,10 @@ function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => 
         {vista === 'consolidada' && <Consolidada />}
         {vista === 'bandeja' && <Bandeja />}
         {vista === 'mostrador' && <Mostrador />}
+        {vista === 'pacientes' && <Pacientes />}
+        {vista === 'agendas' && <Agendas />}
+        {vista === 'catalogo' && <Catalogo />}
+        {vista === 'administracion' && <Administracion />}
         {vista === 'prestador' && (
           usuario.prestadorId
             ? <VistaPrestador prestadorId={usuario.prestadorId} />

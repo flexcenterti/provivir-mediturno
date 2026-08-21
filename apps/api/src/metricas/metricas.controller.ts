@@ -15,6 +15,13 @@ export class MetricasController {
     return this.metricas.resumen(desde ?? hoy, hasta ?? desde ?? hoy);
   }
 
+  /** Reporte operativo ampliado: por servicio, por prestador y desempeño de la IA. */
+  @Get('reporte')
+  reporte(@Query('desde') desde?: string, @Query('hasta') hasta?: string) {
+    const hoy = fechaEnZona();
+    return this.metricas.reporte(desde ?? hoy, hasta ?? desde ?? hoy);
+  }
+
   /** RN-02 · panel de balanceo: a quién le corresponde la siguiente cita. */
   @Get('balanceo')
   balanceo(@Query('fecha') fecha?: string) {

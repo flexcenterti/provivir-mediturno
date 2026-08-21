@@ -86,7 +86,10 @@ Borrar migraciones · cambiar el esquema de auditoría · tocar la verificación
 | 3 · Operación en sede | **Completa** (backend; frontend parcial) — `docs/changelog-fase3.md` |
 | 5 · Autoagendamiento web + kiosko apagado | **Completa** — `docs/changelog-fase5.md` |
 | 4 · WhatsApp + IA + bandeja | **Completa** (incluye RN-09.8) — `docs/changelog-fase4.md` |
-| 6 · Métricas, endurecimiento y piloto | Siguiente |
+| 6 · Métricas, endurecimiento y piloto | **Completa** — `docs/changelog-fase6.md` |
+
+**Las seis fases están completas.** Lo que falta para producción son credenciales e insumos
+del cliente, no código: ver `docs/checklist-piloto.md` y `despliegue/GUIA-DESPLIEGUE.md`.
 
 **La Fase 5 se adelantó a la Fase 4** por decisión del cliente: el bot debe ofrecer el enlace
 del portal (RN-09.8) y no puede apuntar a algo inexistente.

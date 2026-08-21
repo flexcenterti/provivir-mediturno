@@ -15,7 +15,9 @@
     "db:reset": "prisma migrate reset --force",
     "db:generate": "prisma generate",
     "db:local": "tsx scripts/postgres-local.ts",
-    "redis:local": "bash scripts/redis-local.sh"
+    "redis:local": "bash scripts/redis-local.sh",
+    "carga:k6": "k6 run carga/k6-agendamiento.js",
+    "carga:limpiar": "tsx scripts/limpiar-carga.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -77,6 +77,57 @@ export class MetricasService {
     );
   }
 
+  /**
+   * Reporte operativo del rango: lo que el cliente comparte por pantallazo.
+   * Incluye el desempeño del canal de WhatsApp para medir la promesa de RN-08.4
+   * (resolución automática 30-40 % al arranque, 70-90 % con el tiempo).
+   */
+  async reporte(desde: string, hasta: string) {
+    const rango = { gte: new Date(`${desde}T00:00:00Z`), lte: new Date(`${hasta}T00:00:00Z`) };
+
+    const [resumen, porServicio, porPrestador, conversaciones, escaladas, resueltasPorIa] =
+      await Promise.all([
+        this.resumen(desde, hasta),
+        this.prisma.cita.groupBy({
+          by: ['servicioId'],
+          where: { fecha: rango, estado: { not: 'cancelada' } },
+          _count: { _all: true },
+        }),
+        this.prisma.cita.groupBy({
+          by: ['prestadorId'],
+          where: { fecha: rango, estado: { not: 'cancelada' } },
+          _count: { _all: true },
+        }),
+        this.prisma.conversacion.count({ where: { creadoEn: rango } }),
+        this.prisma.conversacion.count({ where: { creadoEn: rango, escalada: true } }),
+        this.prisma.conversacion.count({ where: { creadoEn: rango, escalada: false, estado: 'resuelta' } }),
+      ]);
+
+    const servicios = await this.prisma.servicio.findMany({ select: { id: true, nombre: true } });
+    const prestadores = await this.prisma.prestador.findMany({ select: { id: true, nombre: true } });
+    const nombreServicio = new Map(servicios.map((s) => [s.id, s.nombre]));
+    const nombrePrestador = new Map(prestadores.map((p) => [p.id, p.nombre]));
+
+    return {
+      ...resumen,
+      porServicio: porServicio
+        .map((f) => ({ servicio: nombreServicio.get(f.servicioId) ?? f.servicioId, citas: f._count._all }))
+        .sort((a, b) => b.citas - a.citas),
+      porPrestador: porPrestador
+        .map((f) => ({ prestador: nombrePrestador.get(f.prestadorId) ?? f.prestadorId, citas: f._count._all }))
+        .sort((a, b) => b.citas - a.citas),
+      whatsapp: {
+        conversaciones,
+        escaladas,
+        resueltasPorIa,
+        // La métrica que el cliente va a mirar: qué porcentaje resolvió la IA sola.
+        porcentajeResolucionIa: conversaciones > 0
+          ? Math.round(((conversaciones - escaladas) / conversaciones) * 100)
+          : 0,
+      },
+    };
+  }
+
   /** KPIs del dashboard para un rango de fechas (Especificación §2.7). */
   async resumen(desde: string, hasta: string) {
     const desdeD = new Date(`${desde}T00:00:00Z`);

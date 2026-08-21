@@ -1,0 +1,90 @@
+# Caddy · TLS automático (Let's Encrypt) y cabeceras de seguridad.
+# Reemplaza los dominios por los reales antes de desplegar.
+
+(seguridad) {
+	header {
+		# HSTS: un año, subdominios incluidos.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		# Caddy ya lo anuncia; no hace falta regalar la versión del servidor.
+		-Server
+	}
+}
+
+# ── Backoffice (privado, tras login) ──
+agenda.grupoprovivir.com {
+	import seguridad
+	header {
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' wss://agenda.grupoprovivir.com; frame-ancestors 'none'"
+	}
+
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+	handle /tiempo-real/* {
+		reverse_proxy api:3000
+	}
+	handle {
+		root * /srv/backoffice
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# ── Portal público de autoagendamiento ──
+citas.grupoprovivir.com {
+	import seguridad
+	header {
+		# El portal embebe el widget de Turnstile.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self'"
+		# Se embebe por iframe en grupoprovivir.com: esa es la única excepción.
+		X-Frame-Options "ALLOW-FROM https://grupoprovivir.com"
+	}
+
+	handle /api/portal/* {
+		reverse_proxy api:3000
+	}
+	handle {
+		root * /srv/portal
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# ── Webhook de Meta ──
+# Subdominio propio para poder limitarlo por separado del resto de la API.
+wa.grupoprovivir.com {
+	import seguridad
+	handle /api/webhooks/whatsapp* {
+		reverse_proxy api:3000
+	}
+	handle {
+		respond 404
+	}
+}
+
+# ── Pantallas de sala ──
+# Solo se sirven a la red interna de la sede.
+tv.grupoprovivir.com {
+	import seguridad
+	@interna remote_ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12
+	handle @interna {
+		handle /api/* {
+			reverse_proxy api:3000
+		}
+		handle /tiempo-real/* {
+			reverse_proxy api:3000
+		}
+		handle {
+			root * /srv/tv
+			try_files {path} /index.html
+			file_server
+		}
+	}
+	handle {
+		respond "Acceso restringido a la red de la sede" 403
+	}
+}

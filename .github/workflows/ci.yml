@@ -77,3 +77,50 @@ jobs:
         run: npm run test:e2e -w @provivir/api
 
       - run: npm run build
+
+  # Guía FASE 6 · endurecimiento. Corre aparte para no alargar el ciclo de cada PR.
+  seguridad:
+    name: Endurecimiento
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Auditoría de dependencias (alta y crítica)
+        run: npm audit --audit-level=high
+
+      - name: Escaneo de secretos en todo el historial
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Falla si alguien reintroduce la palabra prohibida de cara al usuario (D6).
+      - name: Terminología · "urgencia" prohibida
+        run: |
+          # Se excluyen las pruebas, que verifican precisamente la ausencia del término,
+          # y las líneas marcadas D6-permitido (derivar al paciente FUERA de la clínica).
+          if grep -rniE '\burgencia' apps/*/src packages/*/src \
+               --include='*.ts' --include='*.tsx' --exclude='*.spec.ts' \
+               | grep -viE '(D6-permitido|no presta|prohibid|nunca|jamás|D6|RN-05)'; then
+            echo "Se encontró la palabra 'urgencia' fuera de un comentario explicativo (D6)."
+            exit 1
+          fi
+          echo "Terminología correcta."
+
+      # El motor es el único que decide reglas de agendamiento (ADR A3).
+      - name: Reglas de negocio solo en el módulo citas
+        run: |
+          if grep -rn 'violaIntercalado\|elegirPorMenorCarga\|controlDentroDeVentana' \
+               apps/api/src --include='*.ts' \
+               | grep -v 'src/citas/' | grep -v '\.spec\.ts'; then
+            echo "Hay lógica de agendamiento fuera del módulo citas (ADR A3)."
+            exit 1
+          fi
+          echo "Reglas contenidas en el motor."

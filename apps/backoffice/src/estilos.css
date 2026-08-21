@@ -140,3 +140,38 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
 .adjunto { font-size: .75rem; font-weight: 600; color: var(--amber); }
 .modal textarea { width: 100%; padding: .6rem .75rem; border: 1px solid var(--line);
   border-radius: 9px; background: #FBFCFC; resize: vertical; }
+
+/* ══════════ Administración ══════════ */
+.exito { background: var(--green-soft, #E4F4EB); color: #1E6B42; padding: .55rem .75rem;
+  border-radius: 9px; font-size: .85rem; margin-bottom: .9rem; }
+.acciones-fila { display: flex; gap: .35rem; }
+.chips-seleccion { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .3rem; }
+.chip-sel { padding: .35rem .7rem; border: 1px solid var(--line); border-radius: 999px;
+  font-size: .8rem; background: #FBFCFC; }
+.chip-sel.activo { background: var(--teal); color: #fff; border-color: var(--teal); }
+.dur { font-size: .8rem; color: var(--muted); }
+.duraciones { display: flex; flex-direction: column; gap: .35rem; margin-top: .4rem;
+  max-height: 240px; overflow-y: auto; }
+.dur-fila { display: flex; align-items: center; justify-content: space-between; gap: .8rem;
+  font-size: .85rem; padding: .3rem .5rem; border-radius: 8px; background: #FBFCFC; }
+.dur-fila input { width: 90px; padding: .3rem .5rem; border: 1px solid var(--line); border-radius: 7px; }
+
+/* Calendario de programación mensual */
+.cal-cab { display: flex; align-items: center; justify-content: space-between; margin: .8rem 0 .4rem; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: .25rem; margin-bottom: .8rem; }
+.cal-dow { font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase;
+  padding: .3rem 0; border-radius: 6px; }
+.cal-dow:hover { background: var(--teal-soft); color: var(--teal-ink); }
+.cal-dia { aspect-ratio: 1; border: 1px solid var(--line); border-radius: 8px; background: #FBFCFC;
+  font-size: .85rem; display: flex; align-items: center; justify-content: center; }
+.cal-dia:hover { border-color: var(--teal); }
+.cal-dia.sel { background: var(--teal); color: #fff; border-color: var(--teal); font-weight: 700; }
+
+/* Kiosko desactivado */
+.kiosko-marca { display: inline-block; background: var(--amber-soft, #FBF0DC); color: #8A5510;
+  font-weight: 700; font-size: .78rem; padding: .3rem .8rem; border-radius: 999px; margin-bottom: .6rem; }
+.kiosko-preview { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: .6rem; margin: 1rem 0; opacity: .55; pointer-events: none; }
+.kiosko-opcion { padding: 1.4rem 1rem; border: 2px dashed var(--line); border-radius: 12px;
+  text-align: center; font-weight: 600; background: #FBFCFC; }
+code { font-family: var(--fm); font-size: .82rem; background: #EDF1F2; padding: .1rem .35rem; border-radius: 5px; }

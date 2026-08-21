@@ -48,6 +48,7 @@ export const api = {
   yo: () => pedir<UsuarioSesion>('/auth/yo'),
 
   resumen: (desde: string, hasta: string) => pedir<Resumen>(`/metricas/resumen?desde=${desde}&hasta=${hasta}`),
+  reporte: (desde: string, hasta: string) => pedir<Reporte>(`/metricas/reporte?desde=${desde}&hasta=${hasta}`),
   balanceo: (fecha: string) => pedir<CargaMedico[]>(`/metricas/balanceo?fecha=${fecha}`),
 
   consolidada: (desde: string, hasta: string, prestadorId?: string) =>
@@ -70,6 +71,45 @@ export const api = {
   responderBandeja: (id: string, texto: string) =>
     pedir<{ enviado: boolean }>(`/bandeja/${id}/responder`, { method: 'POST', body: JSON.stringify({ texto }) }),
   resolverBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/resolver`, { method: 'PATCH' }),
+
+  // ── Administración ──
+  paciente: (id: string) => pedir<Paciente>(`/pacientes/${id}`),
+  actualizarPaciente: (id: string, cuerpo: object) =>
+    pedir<Paciente>(`/pacientes/${id}`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
+
+  prestador: (id: string) => pedir<PrestadorDetalle>(`/prestadores/${id}`),
+  crearPrestador: (cuerpo: object) => pedir<PrestadorDetalle>('/prestadores', { method: 'POST', body: JSON.stringify(cuerpo) }),
+  actualizarPrestador: (id: string, cuerpo: object) =>
+    pedir<PrestadorDetalle>(`/prestadores/${id}`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
+
+  crearServicio: (cuerpo: object) => pedir<Servicio>('/servicios', { method: 'POST', body: JSON.stringify(cuerpo) }),
+  actualizarServicio: (id: string, cuerpo: object) =>
+    pedir<Servicio>(`/servicios/${id}`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
+
+  agendas: (prestadorId?: string) => pedir<Agenda[]>(`/agendas${prestadorId ? `?prestadorId=${prestadorId}` : ''}`),
+  crearAgenda: (cuerpo: object) => pedir<Agenda>('/agendas', { method: 'POST', body: JSON.stringify(cuerpo) }),
+  programacionMensual: (cuerpo: object) =>
+    pedir<{ programadas: number }>('/agendas/programacion-mensual', { method: 'POST', body: JSON.stringify(cuerpo) }),
+  bloquearAgenda: (id: string, motivo: string, confirmar: boolean) =>
+    pedir<ResultadoBloqueo>(`/agendas/${id}/bloquear`, { method: 'POST', body: JSON.stringify({ motivo, confirmar }) }),
+  desbloquearAgenda: (id: string) => pedir<Agenda>(`/agendas/${id}/desbloquear`, { method: 'POST' }),
+
+  cargas: () => pedir<TrabajoCarga[]>('/carga'),
+  carga: (jobId: string) => pedir<TrabajoCarga>(`/carga/${jobId}`),
+
+  auditoria: (pagina: number, entidad?: string) =>
+    pedir<{ datos: RegistroAuditoria[]; total: number; paginas: number }>(
+      `/auditoria?pagina=${pagina}${entidad ? `&entidad=${encodeURIComponent(entidad)}` : ''}`),
+
+  configuracion: () => pedir<Record<string, string>>('/configuracion'),
+  fijarConfiguracion: (clave: string, valor: string) =>
+    pedir<{ clave: string; valor: string }>(`/configuracion/${clave}`, { method: 'PUT', body: JSON.stringify({ valor }) }),
+
+  pantallas: () => pedir<Pantalla[]>('/pantallas'),
+  actualizarPantalla: (id: string, cuerpo: object) =>
+    pedir<Pantalla>(`/pantallas/${id}`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
+
+  kiosko: () => pedir<EstadoKiosko>('/kiosko/estado'),
 
   cola: (prestadorId?: string) => pedir<Turno[]>(`/turnos${prestadorId ? `?prestadorId=${prestadorId}` : ''}`),
   registrarLlegada: (cuerpo: unknown) => pedir<Turno>('/turnos/llegada', { method: 'POST', body: JSON.stringify(cuerpo) }),
@@ -95,6 +135,15 @@ export interface Turno {
   id: string; estado: string; prioridad: string; llegadaTs: string; consultorio: string | null;
   notaPriorizacion: string | null; minutosEsperando?: number; cita: Cita;
 }
+export interface Reporte extends Resumen {
+  porServicio: Array<{ servicio: string; citas: number }>;
+  porPrestador: Array<{ prestador: string; citas: number }>;
+  whatsapp: {
+    conversaciones: number; escaladas: number;
+    resueltasPorIa: number; porcentajeResolucionIa: number;
+  };
+}
+
 export interface Conversacion {
   id: string;
   telefono: string;
@@ -121,6 +170,68 @@ export interface MensajeConversacion {
 
 export interface ConversacionDetalle extends Omit<Conversacion, 'ultimoMensaje'> {
   mensajes: MensajeConversacion[];
+}
+
+export interface PrestadorDetalle extends Prestador {
+  vinculacion: string;
+  activo: boolean;
+  servicios: Array<{ servicioId: string; duracionMin: number; servicio: Servicio }>;
+  config: { ventanaControlDias: number } | null;
+}
+
+export interface Agenda {
+  id: string;
+  prestadorId: string;
+  modo: 'semanal' | 'calendario';
+  diasSemana: number[];
+  fecha: string | null;
+  horaIni: string;
+  horaFin: string;
+  slotMin: number;
+  servicioId: string | null;
+  consultorio: string | null;
+  activa: boolean;
+  bloqueada: boolean;
+  motivoBloqueo: string | null;
+  prestador?: Prestador;
+  servicio?: Servicio | null;
+}
+
+export interface ResultadoBloqueo {
+  simulacion: boolean;
+  citasAfectadas: number;
+  citas: Cita[];
+  mensaje: string;
+}
+
+export interface TrabajoCarga {
+  id: string;
+  archivo: string;
+  estado: string;
+  progreso: number | { procesadas: number };
+  resumen: {
+    totalFilas: number; creados: number; actualizados: number;
+    duplicadosRechazados: number; fueraDeFiltro: number; erroneos: number;
+    historialesCreados: number;
+  } | null;
+}
+
+export interface RegistroAuditoria {
+  id: string; ts: string; usuario: string; accion: string;
+  entidad: string; detalle: string | null;
+  estadoPrev: string | null; estadoNext: string | null;
+}
+
+export interface Pantalla {
+  id: string; nombre: string; servicios: string[]; turnosVisibles: number;
+  sonido: boolean; mensaje: string | null; media: boolean;
+  canalYoutube: string | null; videosPromo: string[]; intervaloInstitucionalMin: number;
+}
+
+export interface EstadoKiosko {
+  activo: boolean;
+  mensaje: string | null;
+  opciones: Array<{ id: string; etiqueta: string }>;
 }
 
 export interface CargaMedico {

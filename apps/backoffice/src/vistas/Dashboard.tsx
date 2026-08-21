@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, hoyIso, type CargaMedico, type Cita, type Resumen } from '../api';
+import { api, hoyIso, type CargaMedico, type Cita, type Reporte } from '../api';
 
 /**
  * Especificación §2.7 · Dashboard.
@@ -8,14 +8,14 @@ import { api, hoyIso, type CargaMedico, type Cita, type Resumen } from '../api';
 export function Dashboard() {
   const [desde, setDesde] = useState(hoyIso());
   const [hasta, setHasta] = useState(hoyIso());
-  const [resumen, setResumen] = useState<Resumen | null>(null);
+  const [resumen, setResumen] = useState<Reporte | null>(null);
   const [balanceo, setBalanceo] = useState<CargaMedico[]>([]);
   const [q, setQ] = useState('');
   const [encontradas, setEncontradas] = useState<Cita[] | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([api.resumen(desde, hasta), api.balanceo(desde)])
+    Promise.all([api.reporte(desde, hasta), api.balanceo(desde)])
       .then(([r, b]) => { setResumen(r); setBalanceo(b); })
       .catch((e) => setError(e.message));
   }, [desde, hasta]);
@@ -108,6 +108,35 @@ export function Dashboard() {
           </tbody>
         </table>
       </div>
+
+      {resumen && (
+        <div className="card">
+          <h3>Canal WhatsApp</h3>
+          <div className="kpis">
+            <Kpi titulo="Conversaciones" valor={resumen.whatsapp.conversaciones} />
+            <Kpi titulo="Resueltas por la IA" valor={`${resumen.whatsapp.porcentajeResolucionIa}%`} />
+            <Kpi titulo="Escaladas" valor={resumen.whatsapp.escaladas} />
+          </div>
+          <p className="nota">
+            La expectativa comunicada al cliente es 30–40 % de resolución automática al arranque,
+            con mejora progresiva hacia 70–90 % al incorporar las dinámicas de la clínica.
+          </p>
+        </div>
+      )}
+
+      {resumen && resumen.porServicio.length > 0 && (
+        <div className="card">
+          <h3>Citas por servicio</h3>
+          <table className="tabla">
+            <thead><tr><th>Servicio</th><th>Citas</th></tr></thead>
+            <tbody>
+              {resumen.porServicio.map((s) => (
+                <tr key={s.servicio}><td>{s.servicio}</td><td><strong>{s.citas}</strong></td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {resumen && (
         <div className="card">

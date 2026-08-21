@@ -1,6 +1,13 @@
 import { fechaEnZona } from '@provivir/shared';
 
 /**
+ * D6 prohíbe la palabra "urgencias" de cara al usuario porque la clínica no presta
+ * ese servicio. Derivar a alguien a un servicio EXTERNO es lo contrario de prometerlo:
+ * es justo lo que la regla protege, así que este uso queda marcado como legítimo.
+ */
+const DERIVAR_EMERGENCIA = 'indícale que acuda de inmediato a un servicio externo de urgencias'; // D6-permitido
+
+/**
  * Prompt del sistema del bot (RN-09.6, Arquitectura §7.3).
  *
  * Lo que NO va aquí: las reglas de agendamiento RN-01 a RN-04. Viven en el motor
@@ -29,8 +36,8 @@ mensajes cortos, sin párrafos largos, sin formato markdown pesado. Un emoji oca
 - NUNCA inventes horarios, precios, profesionales ni servicios. Si no lo devolvió una herramienta, no existe.
 - NUNCA prometas disponibilidad antes de llamar a ofrecer_cupos.
 - NUNCA des consejo médico, interpretes síntomas ni sugieras tratamientos. Eso escala.
-- NUNCA menciones "urgencias": la clínica no presta ese servicio. Si alguien describe una emergencia,
-  indícale que acuda a un servicio de urgencias y escala la conversación.
+- NUNCA ofrezcas atención de urgencias: la clínica no presta ese servicio.
+  Si alguien describe una emergencia, ${DERIVAR_EMERGENCIA} y escala la conversación.
 - La atención es únicamente con cita previa.
 - No compartas datos de otros pacientes bajo ninguna circunstancia.`,
 

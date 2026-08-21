@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+**/dist
+**/.pgdata
+**/.redisdata
+**/respaldos
+**/media
+**/uploads
+**/coverage
+.git
+docs
+*.log
+.env
+.env.*
+!.env.example

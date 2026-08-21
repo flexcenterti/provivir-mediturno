@@ -20,6 +20,12 @@ export default tseslint.config(
     rules: { 'no-console': 'off' },
   },
   {
+    // El script de carga corre dentro de k6, no en Node: tiene sus propias globales.
+    files: ['apps/api/carga/**/*.js'],
+    languageOptions: { globals: { __ENV: 'readonly', __VU: 'readonly', __ITER: 'readonly' } },
+    rules: { '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_|^datos$' }] },
+  },
+  {
     files: ['**/*.spec.ts', '**/*.e2e-spec.ts'],
     languageOptions: { globals: { describe: 'readonly', it: 'readonly', expect: 'readonly', beforeAll: 'readonly', afterAll: 'readonly', beforeEach: 'readonly', afterEach: 'readonly', jest: 'readonly' } },
   },

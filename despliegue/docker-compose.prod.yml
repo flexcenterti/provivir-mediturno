@@ -1,0 +1,79 @@
+# Stack de producción · Grupo Provivir (CDC Oriente)
+#
+# Arranque:  docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env up -d
+# Los secretos viven en /etc/provivir/.env, fuera del repo y con permisos 600.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-provivir}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-provivir}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./respaldos:/respaldos
+    # Sin puertos publicados: solo la red interna llega a la base.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-provivir}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: { memory: 2G }
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?falta REDIS_PASSWORD}"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: despliegue/Dockerfile.api
+    restart: always
+    env_file: [/etc/provivir/.env]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-provivir}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-provivir}?schema=public&connection_limit=25
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    volumes:
+      # Checklist §4.10 · la media de WhatsApp vive fuera del webroot.
+      - media:/app/media
+      - uploads:/app/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  redisdata:
+  media:
+  uploads:
+  caddy_data:
+  caddy_config:

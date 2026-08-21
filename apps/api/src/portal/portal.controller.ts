@@ -27,7 +27,7 @@ export class PortalController {
 
   /** Aviso de privacidad Ley 1581/2012, visible antes de capturar datos. */
   @Get('aviso-privacidad')
-  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
   aviso() {
     return {
       responsable: 'Grupo Provivir · CDC Oriente',
@@ -42,8 +42,13 @@ export class PortalController {
     };
   }
 
+  /**
+   * Límite holgado a propósito: es una lista estática y toda la sala de espera
+   * puede compartir la IP pública del wifi de la sede. Apretarlo aquí solo
+   * bloquearía pacientes legítimos sin proteger nada.
+   */
   @Get('servicios')
-  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
   servicios() {
     return this.portal.servicios();
   }
@@ -64,7 +69,7 @@ export class PortalController {
   }
 
   @Post('cupos')
-  @Throttle({ default: { limit: 40, ttl: 60_000 } })
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   cupos(@Body() dto: CuposPortalDto) {
     return this.portal.cupos(dto);
   }

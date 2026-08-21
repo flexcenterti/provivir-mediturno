@@ -168,7 +168,11 @@ describe('Portal público (e2e)', () => {
       expect(r.body.confirmacion.codigo).toMatch(/^[A-Z]\d{4}$/);
       expect(r.body.confirmacion.indicaciones).toBeTruthy();
 
-      const cita = await prisma.cita.findFirst({ where: { codigo: r.body.confirmacion.codigo } });
+      // El código es único por sede y DÍA: buscarlo sin acotar la fecha puede traer
+      // la cita de otro día con el mismo código.
+      const cita = await prisma.cita.findFirst({
+        where: { codigo: r.body.confirmacion.codigo, fecha: new Date(`${LUNES}T00:00:00Z`) },
+      });
       expect(cita?.origen).toBe('autoagendamiento');
     });
 
