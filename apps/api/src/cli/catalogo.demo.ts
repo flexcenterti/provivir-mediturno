@@ -164,6 +164,9 @@ en venas y arterias. No necesita ayuno.
 orden médica. Si tu orden incluye glicemia, perfil lipídico o pruebas hepáticas, ven con
 8 a 12 horas de ayuno; puedes tomar agua.
 
+**Horarios** — Atendemos de lunes a viernes de 7:00 a 18:00, y sábados de 7:00 a 13:00.
+El laboratorio toma muestras de 7:00 a 11:00.
+
 **Importante** — La atención es únicamente con cita previa. La clínica no presta servicio
 de urgencias.
 `.trim();

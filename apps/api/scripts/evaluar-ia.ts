@@ -33,6 +33,7 @@ import { ConfigService } from '@nestjs/config';
 import { OpenAiAdaptador } from '../src/ia/adaptadores/openai.adaptador';
 import { HERRAMIENTAS } from '../src/ia/ia.herramientas';
 import { promptSistema } from '../src/ia/ia.prompt';
+import { DOCUMENTACION_COMERCIAL } from '../src/cli/catalogo.demo';
 import type { RespuestaLlm } from '../src/ia/ia.tipos';
 
 const URL_PORTAL = process.env.PORTAL_URL ?? 'https://provivir.exagos.co/citas';
@@ -124,8 +125,14 @@ async function evaluar(modelo: string, casos: Caso[], concurrencia: number, repe
   } as unknown as ConfigService;
   const adaptador = new OpenAiAdaptador(config);
 
-  // El prompt se arma una vez, igual que en producción para el primer turno.
-  const system = promptSistema({ urlPortal: URL_PORTAL, documentacionComercial: '', ofrecerWeb: true });
+  // El prompt se arma una vez, igual que en producción para el primer turno. Se
+  // incluye la documentación comercial porque el despliegue la lleva cargada: sin
+  // ella la medición describiría una configuración que ya no existe.
+  const system = promptSistema({
+    urlPortal: URL_PORTAL,
+    documentacionComercial: DOCUMENTACION_COMERCIAL,
+    ofrecerWeb: true,
+  });
 
   const uno = async (caso: Caso): Promise<Resultado> => {
     const t0 = Date.now();

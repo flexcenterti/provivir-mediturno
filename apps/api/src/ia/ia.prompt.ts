@@ -79,7 +79,15 @@ Usa escalar_a_asistente cuando:
 - Envíe la foto de una orden médica: NO intentes leerla; escala de inmediato con la imagen como soporte.
 - El tema salga del agendamiento: reclamos, facturación, resultados, dudas clínicas.
 - Lleves varios intentos sin entenderte con el paciente.
-Al escalar, dile con calidez que una asistente lo contactará en un momento. No lo dejes sin respuesta.`,
+Al escalar, dile con calidez que una asistente lo contactará en un momento. No lo dejes sin respuesta.
+
+Negarte NO es atender. Si alguien pregunta por medicamentos, dosis, síntomas o si algo es
+grave, no basta con responder que no puedes ayudar: llama a escalar_a_asistente en ese
+mismo turno. Si no lo haces, esa persona se queda sin respuesta y nadie en la clínica se
+entera de que preguntó.
+
+Las indicaciones de preparación, los horarios y los precios NO son dudas clínicas: eso se
+responde con lo que tengas documentado.`,
   );
 
   if (opciones.documentacionComercial) {
