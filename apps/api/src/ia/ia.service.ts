@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type Anthropic from '@anthropic-ai/sdk';
 import { aHHMM, CONFIG, fechaEnZona } from '@provivir/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CitasService } from '../citas/citas.service';
@@ -8,8 +7,9 @@ import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { enmascararDocumento, enmascararTelefono } from '../comun/pii';
 import { HERRAMIENTAS } from './ia.herramientas';
 import { promptSistema } from './ia.prompt';
-import { AnthropicCliente } from './anthropic.cliente';
-import type { ContextoConversacion, ResultadoIA } from './ia.tipos';
+import type {
+  ClienteLlm, ContextoConversacion, LlamadaHerramienta, MensajeLlm, ResultadoIA,
+} from './ia.tipos';
 
 /** Tope de vueltas del loop: un bucle de herramientas no debe gastar sin fin (checklist §4). */
 const MAX_TURNOS = 8;
@@ -31,7 +31,7 @@ export class IaService {
     private readonly citas: CitasService,
     private readonly configuracion: ConfiguracionService,
     private readonly config: ConfigService,
-    @Optional() @Inject(CLIENTE_LLM) private readonly llm: AnthropicCliente,
+    @Optional() @Inject(CLIENTE_LLM) private readonly llm: ClienteLlm,
   ) {}
 
   get disponible(): boolean {
@@ -59,9 +59,9 @@ export class IaService {
       ofrecerWeb: !ctx.yaOfrecioWeb,
     });
 
-    const messages: Anthropic.MessageParam[] = [
+    const mensajes: MensajeLlm[] = [
       ...ctx.historial,
-      { role: 'user', content: mensaje },
+      { rol: 'usuario', contenido: mensaje },
     ];
 
     const resultado: ResultadoIA = {
@@ -71,9 +71,9 @@ export class IaService {
     for (let turno = 0; turno < MAX_TURNOS; turno++) {
       resultado.turnos = turno + 1;
 
-      let respuesta: Anthropic.Message;
+      let respuesta: Awaited<ReturnType<ClienteLlm['responder']>>;
       try {
-        respuesta = await this.llm.crearMensaje({ system, messages, tools: HERRAMIENTAS });
+        respuesta = await this.llm.responder({ system, mensajes, herramientas: HERRAMIENTAS });
       } catch (e) {
         this.log.error(`Fallo del modelo en la conversacion ${ctx.conversacionId}: ${(e as Error).message}`);
         return {
@@ -84,7 +84,7 @@ export class IaService {
       }
 
       // Un clasificador de seguridad declino el turno: no hay contenido que leer.
-      if (respuesta.stop_reason === 'refusal') {
+      if (respuesta.motivo === 'rechazo') {
         return {
           ...resultado,
           respuesta: 'Prefiero que este caso lo vea una persona. Te contactamos en un momento.',
@@ -92,13 +92,9 @@ export class IaService {
         };
       }
 
-      const texto = respuesta.content
-        .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-        .map((b) => b.text)
-        .join('\n')
-        .trim();
+      const texto = respuesta.texto;
 
-      if (respuesta.stop_reason !== 'tool_use') {
+      if (respuesta.motivo !== 'herramientas') {
         resultado.respuesta = texto;
         // RN-09.8 - si menciono el portal, no se vuelve a ofrecer en esta conversacion.
         const portal = this.config.get<string>('PORTAL_URL');
@@ -106,17 +102,14 @@ export class IaService {
         return resultado;
       }
 
-      const llamadas = respuesta.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
-      );
+      const llamadas: LlamadaHerramienta[] = respuesta.llamadas;
 
-      messages.push({ role: 'assistant', content: respuesta.content });
+      mensajes.push({ rol: 'asistente', contenido: texto, llamadas });
 
-      const resultados: Anthropic.ToolResultBlockParam[] = [];
       for (const llamada of llamadas) {
         // Escalar corta el loop: la asistente toma la conversacion desde aqui.
-        if (llamada.name === 'escalar_a_asistente') {
-          const entrada = llamada.input as { motivo: string; prioridad: 'alta' | 'media' | 'baja' };
+        if (llamada.nombre === 'escalar_a_asistente') {
+          const entrada = llamada.argumentos as unknown as { motivo: string; prioridad: 'alta' | 'media' | 'baja' };
           return {
             ...resultado,
             respuesta: texto || 'Te comunico con una de nuestras asistentes, en un momento te contactan.',
@@ -124,17 +117,17 @@ export class IaService {
           };
         }
 
-        const salida = await this.ejecutar(llamada.name, llamada.input, ctx, resultado);
+        const salida = await this.ejecutar(llamada.nombre, llamada.argumentos, ctx, resultado);
         const esError = Boolean(salida && typeof salida === 'object' && 'error' in salida);
-        resultados.push({
-          type: 'tool_result',
-          tool_use_id: llamada.id,
-          content: JSON.stringify(salida),
-          ...(esError ? { is_error: true } : {}),
+
+        mensajes.push({
+          rol: 'herramienta',
+          llamadaId: llamada.id,
+          nombre: llamada.nombre,
+          contenido: JSON.stringify(salida),
+          ...(esError ? { esError: true } : {}),
         });
       }
-
-      messages.push({ role: 'user', content: resultados });
     }
 
     // Se agotaron los turnos sin cerrar: mejor una persona que seguir gastando.

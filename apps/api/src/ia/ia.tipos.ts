@@ -1,11 +1,60 @@
-import type Anthropic from '@anthropic-ai/sdk';
+/**
+ * Tipos neutros de proveedor para la capa de IA.
+ *
+ * El orquestador (`ia.service.ts`) trabaja SOLO con estos tipos; ningún SDK de
+ * proveedor aparece fuera de `ia/adaptadores/`. Así cambiar de modelo o de
+ * proveedor no toca la lógica de negocio, y el conmutador se prueba con un doble.
+ */
+
+/** Definición de herramienta en JSON Schema, común a ambos proveedores. */
+export interface HerramientaLlm {
+  nombre: string;
+  descripcion: string;
+  /** JSON Schema del objeto de entrada. */
+  parametros: Record<string, unknown>;
+}
+
+export interface LlamadaHerramienta {
+  /** Identificador que el proveedor asigna y que hay que devolverle con el resultado. */
+  id: string;
+  nombre: string;
+  argumentos: Record<string, string>;
+}
+
+export type MensajeLlm =
+  | { rol: 'usuario'; contenido: string }
+  | { rol: 'asistente'; contenido: string; llamadas?: LlamadaHerramienta[] }
+  | { rol: 'herramienta'; llamadaId: string; nombre: string; contenido: string; esError?: boolean };
+
+export interface RespuestaLlm {
+  texto: string;
+  llamadas: LlamadaHerramienta[];
+  /**
+   * `fin` — el modelo terminó su turno.
+   * `herramientas` — pide ejecutar herramientas y volver.
+   * `rechazo` — un clasificador de seguridad declinó responder; hay que escalar.
+   */
+  motivo: 'fin' | 'herramientas' | 'rechazo';
+}
+
+/** Puerto del modelo. Cada proveedor lo implementa en `ia/adaptadores/`. */
+export interface ClienteLlm {
+  /** Nombre legible del proveedor, para logs y auditoría. */
+  readonly proveedor: string;
+  readonly disponible: boolean;
+
+  responder(params: {
+    system: string;
+    mensajes: MensajeLlm[];
+    herramientas: HerramientaLlm[];
+  }): Promise<RespuestaLlm>;
+}
 
 export interface ContextoConversacion {
   conversacionId: string;
   telefono: string;
   pacienteId?: string;
-  /** Historial ya en formato del SDK. */
-  historial: Anthropic.MessageParam[];
+  historial: MensajeLlm[];
   /** RN-09.8 · el enlace del portal se menciona una sola vez por conversación. */
   yaOfrecioWeb: boolean;
 }
@@ -20,13 +69,4 @@ export interface ResultadoIA {
   citaCreada?: { codigo: string };
   /** Turnos del loop consumidos; alimenta el límite de gasto por conversación. */
   turnos: number;
-}
-
-/** Puerto del LLM: permite probar el orquestador sin llamar a la API real. */
-export interface ClienteLlm {
-  crearMensaje(params: {
-    system: string;
-    messages: Anthropic.MessageParam[];
-    tools: Anthropic.Tool[];
-  }): Promise<Anthropic.Message>;
 }

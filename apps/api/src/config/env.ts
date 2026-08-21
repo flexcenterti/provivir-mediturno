@@ -38,7 +38,11 @@ const esquema = z.object({
   META_PHONE_NUMBER_ID: z.string().optional(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
 
-  // ADR A5 · IA conversacional
+  // ADR A5 · IA conversacional. El proveedor se elige por configuración;
+  // los dos adaptadores viven en ia/adaptadores/.
+  IA_PROVEEDOR: z.enum(['openai', 'anthropic']).default('openai'),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default('gpt-5.6-terra'),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default('claude-opus-5'),
 

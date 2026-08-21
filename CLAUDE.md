@@ -99,6 +99,10 @@ del portal (RN-09.8) y no puede apuntar a algo inexistente.
 2. RN-10.2 · el portal exige documento + últimos 4 del teléfono, no solo documento (`docs/changelog-fase5.md`).
 3. RN-09.2 · usar botones interactivos de WhatsApp en vez de solo texto (`docs/rn-09-8-oferta-web.md`).
 
+**Proveedor de IA:** se elige con `IA_PROVEEDOR` (openai | anthropic). Los dos adaptadores
+viven en `apps/api/src/ia/adaptadores/`; el orquestador no conoce ningún SDK.
+Ver `docs/adr-a5-proveedor-ia.md`.
+
 ## Definición de hecho (DoD) por tarea
 
 Código + test (con ID de RN si aplica) + migración si cambia el esquema + entrada en `docs/changelog-faseN.md`.

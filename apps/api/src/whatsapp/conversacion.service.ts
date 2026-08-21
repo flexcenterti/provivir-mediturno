@@ -1,11 +1,11 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type Anthropic from '@anthropic-ai/sdk';
 import { SEDE_ID } from '@provivir/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { TurnosGateway } from '../turnos/turnos.gateway';
 import { IaService } from '../ia/ia.service';
+import type { MensajeLlm } from '../ia/ia.tipos';
 import { MetaCliente } from './meta.cliente';
 import { TranscripcionService } from './transcripcion.service';
 import { variantesDeTelefono } from './whatsapp.normalizador';
@@ -305,7 +305,7 @@ export class ConversacionService {
   }
 
   /** Reconstruye el historial en el formato del SDK, del más antiguo al más reciente. */
-  private async historial(conversacionId: string): Promise<Anthropic.MessageParam[]> {
+  private async historial(conversacionId: string): Promise<MensajeLlm[]> {
     const mensajes = await this.prisma.mensaje.findMany({
       where: { conversacionId, tipo: { in: ['texto', 'audio'] } },
       orderBy: { ts: 'desc' },
@@ -314,11 +314,11 @@ export class ConversacionService {
 
     return mensajes
       .reverse()
-      .map((m) => ({
-        role: m.direccion === 'entrante' ? ('user' as const) : ('assistant' as const),
-        content: m.transcripcion ?? m.contenido ?? '',
+      .map((m): MensajeLlm => ({
+        rol: m.direccion === 'entrante' ? 'usuario' : 'asistente',
+        contenido: m.transcripcion ?? m.contenido ?? '',
       }))
-      .filter((m) => m.content.length > 0);
+      .filter((m) => m.contenido.length > 0);
   }
 
   /**

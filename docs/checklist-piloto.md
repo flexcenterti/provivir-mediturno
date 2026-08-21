@@ -22,10 +22,10 @@ son credenciales, insumos del cliente o decisiones suyas.
 
 | # | Qué | Quién | Bloquea |
 |---|---|---|---|
-| ⬜ C1 | `ANTHROPIC_API_KEY` | Equipo técnico | Respuestas de la IA. Sin ella **todo escala a la asistente** — la plataforma sigue funcionando. |
+| ⬜ C1 | `OPENAI_API_KEY` | Equipo técnico | Respuestas de la IA **y transcripción de notas de voz**. Sin ella todo escala a la asistente; la plataforma sigue funcionando. `ANTHROPIC_API_KEY` es opcional: queda como proveedor alterno. |
 | ⬜ C2 | Meta: `APP_SECRET`, `ACCESS_TOKEN`, `PHONE_NUMBER_ID`, `WEBHOOK_VERIFY_TOKEN` | Cliente + Meta | Todo el canal WhatsApp. **Camino crítico más largo**: exige verificación de negocio con documentos legales del cliente. Empezar ya. |
 | ⬜ C3 | `TURNSTILE_SECRET` | Equipo técnico | CAPTCHA del portal. Sin él el portal opera con rate limiting pero sin CAPTCHA. |
-| ⬜ C4 | Proveedor de STT (`STT_URL`, `STT_API_KEY`) | Cliente decide | Transcripción de notas de voz. Sin él **escalan con el audio adjunto**, que es el comportamiento correcto. |
+| ⬜ C4 | STT · resuelto con OpenAI Whisper | Equipo técnico | Solo configuración, cero código: `STT_URL=https://api.openai.com/v1/audio/transcriptions` y la misma clave de C1. |
 | ⬜ C5 | Dominios y DNS | Cliente | `PORTAL_URL`, CORS, certificados. |
 
 ## Insumos del cliente (P1–P10)
@@ -42,6 +42,14 @@ son credenciales, insumos del cliente o decisiones suyas.
 | ⬜ P8 | Dinámica definitiva del kiosko | Activación futura | Módulo apagado por bandera |
 | ⬜ P9 | CSV de contactos del celular (50.000+) | Migración del número | Importador listo y probado |
 | ⬜ P10 | Enlaces de YouTube (canal + videos) | Frame de pantallas | Configurable desde Administración |
+
+## Antes de conectar las claves de IA
+
+- ⬜ Acuerdo de tratamiento de datos (DPA) con OpenAI y verificación de su retención de API.
+- ⬜ Actualizar el aviso de privacidad del portal para declarar el procesamiento por terceros.
+- ⬜ Probar `gpt-5.6-luna` contra `gpt-5.6-terra` con el set de 30 mensajes anotados: es 10× más barato.
+
+Detalle en `docs/adr-a5-proveedor-ia.md`.
 
 ## Decisiones pendientes del cliente
 

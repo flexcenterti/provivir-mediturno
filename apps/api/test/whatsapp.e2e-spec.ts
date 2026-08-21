@@ -2,7 +2,6 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createHmac } from 'node:crypto';
 import request from 'supertest';
-import type Anthropic from '@anthropic-ai/sdk';
 import { json } from 'express';
 import type { IncomingMessage } from 'node:http';
 import { AppModule } from '../src/app.module';
@@ -10,7 +9,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { ConversacionService } from '../src/whatsapp/conversacion.service';
 import { CLIENTE_LLM } from '../src/ia/ia.service';
 import { MetaCliente } from '../src/whatsapp/meta.cliente';
-import type { ClienteLlm } from '../src/ia/ia.tipos';
+import type { ClienteLlm, HerramientaLlm, MensajeLlm, RespuestaLlm } from '../src/ia/ia.tipos';
 
 /**
  * Canal WhatsApp de punta a punta (Guía, FASE 4).
@@ -21,50 +20,39 @@ import type { ClienteLlm } from '../src/ia/ia.tipos';
  * mide con el set anotado antes del piloto.
  */
 
-/** Doble del LLM: se le encola la secuencia de respuestas que debe devolver. */
+/**
+ * Doble del modelo: se le encola la secuencia de respuestas que debe devolver.
+ * Al trabajar sobre los tipos neutros, sirve igual para probar el orquestador
+ * sea cual sea el proveedor configurado.
+ */
 class LlmFalso implements ClienteLlm {
-  private guion: Anthropic.Message[] = [];
-  public llamadas: Array<{ system: string; messages: Anthropic.MessageParam[] }> = [];
+  readonly proveedor = 'doble';
+  private guion: RespuestaLlm[] = [];
+  public llamadas: Array<{ system: string; mensajes: MensajeLlm[] }> = [];
   public disponible = true;
 
-  programar(...mensajes: Anthropic.Message[]): void {
-    this.guion = [...mensajes];
+  programar(...respuestas: RespuestaLlm[]): void {
+    this.guion = [...respuestas];
     this.llamadas = [];
   }
 
-  crearMensaje(params: { system: string; messages: Anthropic.MessageParam[]; tools: Anthropic.Tool[] }) {
-    this.llamadas.push({ system: params.system, messages: params.messages });
+  responder(params: { system: string; mensajes: MensajeLlm[]; herramientas: HerramientaLlm[] }) {
+    this.llamadas.push({ system: params.system, mensajes: params.mensajes });
     const siguiente = this.guion.shift();
-    if (!siguiente) throw new Error('El doble del LLM se quedó sin respuestas programadas');
+    if (!siguiente) throw new Error('El doble del modelo se quedó sin respuestas programadas');
     return Promise.resolve(siguiente);
   }
 }
 
-const texto = (t: string): Anthropic.Message =>
-  ({
-    id: 'msg', type: 'message', role: 'assistant', model: 'falso',
-    stop_reason: 'end_turn', stop_sequence: null,
-    content: [{ type: 'text', text: t, citations: null }],
-    usage: { input_tokens: 0, output_tokens: 0 },
-  }) as unknown as Anthropic.Message;
+const texto = (t: string): RespuestaLlm => ({ texto: t, llamadas: [], motivo: 'fin' });
 
-const usaHerramienta = (nombre: string, input: unknown, textoPrevio = ''): Anthropic.Message =>
-  ({
-    id: 'msg', type: 'message', role: 'assistant', model: 'falso',
-    stop_reason: 'tool_use', stop_sequence: null,
-    content: [
-      ...(textoPrevio ? [{ type: 'text', text: textoPrevio, citations: null }] : []),
-      { type: 'tool_use', id: `tu-${nombre}`, name: nombre, input },
-    ],
-    usage: { input_tokens: 0, output_tokens: 0 },
-  }) as unknown as Anthropic.Message;
+const usaHerramienta = (nombre: string, argumentos: unknown, textoPrevio = ''): RespuestaLlm => ({
+  texto: textoPrevio,
+  llamadas: [{ id: `tu-${nombre}`, nombre, argumentos: argumentos as Record<string, string> }],
+  motivo: 'herramientas',
+});
 
-const rechazo = (): Anthropic.Message =>
-  ({
-    id: 'msg', type: 'message', role: 'assistant', model: 'falso',
-    stop_reason: 'refusal', stop_sequence: null, content: [],
-    usage: { input_tokens: 0, output_tokens: 0 },
-  }) as unknown as Anthropic.Message;
+const rechazo = (): RespuestaLlm => ({ texto: '', llamadas: [], motivo: 'rechazo' });
 
 describe('Canal WhatsApp (e2e)', () => {
   let app: INestApplication;
@@ -315,8 +303,9 @@ describe('Canal WhatsApp (e2e)', () => {
 
       // El segundo turno del modelo recibió el resultado de error de la herramienta.
       const ultimoTurno = llm.llamadas.at(-1)!;
-      const resultados = JSON.stringify(ultimoTurno.messages.at(-1));
-      expect(resultados).toMatch(/error/i);
+      const ultimoMensaje = ultimoTurno.mensajes.at(-1)!;
+      expect(ultimoMensaje.rol).toBe('herramienta');
+      expect(JSON.stringify(ultimoMensaje)).toMatch(/error/i);
       expect(enviados.at(-1)!.texto).toMatch(/consulta previa/i);
     });
 
