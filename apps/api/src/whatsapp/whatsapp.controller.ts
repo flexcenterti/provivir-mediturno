@@ -71,7 +71,11 @@ export class WhatsappController {
       throw new UnauthorizedException('Firma inválida');
     }
 
-    const mensajes = normalizarWebhook(cuerpo);
+    // Lo descartado se registra con su tipo: es la única pista de qué mandó el
+    // paciente cuando algo no encaja, y llega sin datos personales.
+    const mensajes = normalizarWebhook(cuerpo, (o) =>
+      this.log.warn(`Mensaje descartado (tipo ${o.tipo}): ${o.motivo}`),
+    );
 
     // Deja constancia de TODA entrega, incluidas las que no traen mensajes (acuses
     // de entrega y lectura). Es lo único que distingue «Meta no llamó» de «llamó y

@@ -96,3 +96,55 @@ describe('RN-09.4 · normalización del número de contacto', () => {
     expect(v).toContain('573001112222');
   });
 });
+
+/**
+ * Meta entrega varios mensajes en un mismo lote y reintenta ante un 5xx. Un
+ * mensaje que no se puede interpretar tumbaba la petición entera: se perdían los
+ * buenos que venían al lado y el mismo lote volvía indefinidamente, porque
+ * reintentar un cuerpo ilegible no lo arregla nunca. Esto ocurrió en producción.
+ */
+describe('un mensaje raro no puede tumbar la entrega', () => {
+  it('descarta el que no trae remitente y conserva los demás', () => {
+    const omitidos: Array<{ tipo: string; motivo: string }> = [];
+    const mensajes = normalizarWebhook(
+      envoltorio([
+        { id: 'w1', type: 'text', timestamp: '1', text: { body: 'sin from' } },
+        { id: 'w2', from: '573001112222', type: 'text', timestamp: '1', text: { body: 'este sí' } },
+      ]),
+      (o) => omitidos.push(o),
+    );
+
+    expect(mensajes).toHaveLength(1);
+    expect(mensajes[0]!.texto).toBe('este sí');
+    expect(omitidos).toEqual([{ tipo: 'text', motivo: 'el mensaje no trae remitente (from)', id: 'w1' }]);
+  });
+
+  it('avisa del tipo no soportado sin descartar el lote', () => {
+    const omitidos: Array<{ tipo: string }> = [];
+    const mensajes = normalizarWebhook(
+      envoltorio([
+        { id: 'w1', from: '573001112222', type: 'reaction', timestamp: '1' },
+        { id: 'w2', from: '573001112222', type: 'text', timestamp: '1', text: { body: 'hola' } },
+      ]),
+      (o) => omitidos.push(o),
+    );
+
+    expect(mensajes).toHaveLength(1);
+    expect(omitidos[0]).toMatchObject({ tipo: 'reaction', motivo: 'tipo de mensaje no soportado' });
+  });
+
+  it('no lanza ante un cuerpo deforme', () => {
+    for (const basura of [{}, { entry: null }, { entry: [null] }, { entry: [{ changes: [null] }] }]) {
+      expect(() => normalizarWebhook(basura as never)).not.toThrow();
+    }
+    expect(() => normalizarWebhook(envoltorio([null, undefined, 42, 'texto']))).not.toThrow();
+  });
+
+  it('un timestamp ilegible no cuesta el mensaje', () => {
+    const [m] = normalizarWebhook(
+      envoltorio([{ id: 'w1', from: '573001112222', type: 'text', timestamp: 'ayer', text: { body: 'hola' } }]),
+    );
+    expect(m!.texto).toBe('hola');
+    expect(Number.isNaN(m!.ts.getTime())).toBe(false);
+  });
+});

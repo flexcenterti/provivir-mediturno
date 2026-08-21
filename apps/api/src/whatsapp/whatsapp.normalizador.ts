@@ -1,21 +1,50 @@
 import type { MensajeEntrante, MensajeMeta, ValorCambio, WebhookMeta } from './whatsapp.tipos';
 
+/** Lo que se descartó y por qué. Para la traza, no para el flujo. */
+export interface Omitido {
+  tipo: string;
+  motivo: string;
+  id?: string;
+}
+
 /**
  * RN-09.2 · multimedia entrante completo: notas de voz, fotos, videos y documentos.
  * Aquí se traduce el formato de Meta al interno; ningún otro módulo lo conoce.
+ *
+ * NUNCA lanza. Meta entrega varios mensajes en un mismo lote y reintenta ante un
+ * 5xx: si uno raro tumbaba la petición, se perdían también los buenos que venían
+ * al lado y el mismo lote volvía una y otra vez, porque reintentar un cuerpo que
+ * no se puede interpretar no lo arregla nunca.
+ *
+ * `alOmitir` recibe lo descartado para que quien llame lo registre.
  */
-export function normalizarWebhook(cuerpo: WebhookMeta): MensajeEntrante[] {
+export function normalizarWebhook(
+  cuerpo: WebhookMeta,
+  alOmitir?: (o: Omitido) => void,
+): MensajeEntrante[] {
   const salida: MensajeEntrante[] = [];
 
-  for (const entrada of cuerpo.entry ?? []) {
-    for (const cambio of entrada.changes ?? []) {
-      if (cambio.field !== 'messages') continue;
-      const valor: ValorCambio = cambio.value;
+  for (const entrada of cuerpo?.entry ?? []) {
+    for (const cambio of entrada?.changes ?? []) {
+      if (cambio?.field !== 'messages') continue;
+      const valor: ValorCambio = cambio.value ?? {};
       const nombre = valor.contacts?.[0]?.profile?.name;
 
       for (const m of valor.messages ?? []) {
-        const normalizado = normalizarMensaje(m, nombre);
-        if (normalizado) salida.push(normalizado);
+        const tipo = m?.type ?? 'sin tipo';
+        try {
+          // Sin remitente no hay a quién responder ni con quién asociar la
+          // conversación: se descarta en vez de reventar el lote.
+          if (!m?.from) {
+            alOmitir?.({ tipo, motivo: 'el mensaje no trae remitente (from)', id: m?.id });
+            continue;
+          }
+          const normalizado = normalizarMensaje(m, nombre);
+          if (normalizado) salida.push(normalizado);
+          else alOmitir?.({ tipo, motivo: 'tipo de mensaje no soportado', id: m.id });
+        } catch (e) {
+          alOmitir?.({ tipo, motivo: (e as Error).message, id: m?.id });
+        }
       }
     }
   }
@@ -24,11 +53,13 @@ export function normalizarWebhook(cuerpo: WebhookMeta): MensajeEntrante[] {
 }
 
 function normalizarMensaje(m: MensajeMeta, nombrePerfil?: string): MensajeEntrante | null {
+  const ts = new Date(Number(m.timestamp) * 1000);
   const base = {
     waMessageId: m.id,
     telefono: normalizarTelefono(m.from),
     nombrePerfil,
-    ts: new Date(Number(m.timestamp) * 1000),
+    // Un timestamp ilegible no justifica perder el mensaje: se usa la hora actual.
+    ts: Number.isNaN(ts.getTime()) ? new Date() : ts,
   };
 
   switch (m.type) {
