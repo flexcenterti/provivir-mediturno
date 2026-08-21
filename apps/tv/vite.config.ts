@@ -9,6 +9,9 @@ export default defineConfig({
   base: process.env.BASE_PUBLICA ?? '/tv/',
   server: {
     port: 5175,
+    // Sin esto vite se muda a otro puerto en silencio cuando el suyo está ocupado,
+    // y lo que responde en 5175 pasa a ser otra app. Se descubre tarde y mal.
+    strictPort: true,
     // Evita CORS en desarrollo: el front habla con /api del mismo origen.
     proxy: {
       '/api': { target: 'http://localhost:3000', changeOrigin: true },

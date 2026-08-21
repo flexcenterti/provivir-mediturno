@@ -66,7 +66,9 @@ export function App() {
       </header>
 
       <main className="p-main">
-        {error && <div className="error">{error}</div>}
+        {/* role="alert" lo anuncia el lector de pantalla al aparecer. Sin esto, quien
+            no ve la pantalla rellena el formulario, falla y no se entera de por qué. */}
+        {error && <div className="error" role="alert">{error}</div>}
 
         {paso === 'inicio' && (
           <section className="p-inicio">
@@ -111,7 +113,7 @@ export function App() {
             <h2>{servicio?.nombre}</h2>
             <label className="p-fecha">
               Fecha
-              <input type="date" value={fecha} min={hoyEnSede()} onChange={(e) => setFecha(e.target.value)} />
+              <input id="fecha" type="date" value={fecha} min={hoyEnSede()} onChange={(e) => setFecha(e.target.value)} />
             </label>
             <p className="p-sub">{fechaLarga(fecha)}</p>
 
@@ -159,12 +161,12 @@ function Identificar({ onListo, onVolver, onError }: {
     <form className="p-paso" onSubmit={enviar}>
       <h2>Identifícate</h2>
       <div className="field">
-        <label>Número de documento</label>
-        <input value={documento} onChange={(e) => setDocumento(e.target.value)} inputMode="numeric" required />
+        <label htmlFor="doc">Número de documento</label>
+        <input id="doc" value={documento} onChange={(e) => setDocumento(e.target.value)} inputMode="numeric" required />
       </div>
       <div className="field">
-        <label>Últimos 4 dígitos de tu teléfono</label>
-        <input value={ultimos4} onChange={(e) => setUltimos4(e.target.value)}
+        <label htmlFor="ult4">Últimos 4 dígitos de tu teléfono</label>
+        <input id="ult4" value={ultimos4} onChange={(e) => setUltimos4(e.target.value)}
                inputMode="numeric" maxLength={4} required />
         <span className="p-ayuda">Nos ayuda a confirmar que eres tú.</span>
       </div>
@@ -193,10 +195,12 @@ function Registrar({ onListo, onVolver, onError }: {
     } finally { setOcupado(false); }
   }
 
+  // El `htmlFor` no es adorno: sin él el lector de pantalla no anuncia la etiqueta
+  // al enfocar el campo, y tocarla no enfoca nada. Es un formulario público.
   const campo = (k: keyof typeof f, etiqueta: string, extra?: object) => (
     <div className="field">
-      <label>{etiqueta}</label>
-      <input value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} required {...extra} />
+      <label htmlFor={`r-${k}`}>{etiqueta}</label>
+      <input id={`r-${k}`} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} required {...extra} />
     </div>
   );
 

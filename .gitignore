@@ -25,3 +25,7 @@ tmp/
 # Runtime local
 .pgdata/
 .redisdata/
+
+# Salida de las pruebas de navegador
+test-results/
+playwright-report/

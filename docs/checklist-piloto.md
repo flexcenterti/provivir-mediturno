@@ -90,7 +90,10 @@ al iframe embebido en el sitio del cliente y a la URL registrada en el panel de 
 
 ## Brecha de cobertura conocida
 
-⬜ **Pruebas e2e de navegador (Playwright)**: la guía las pide al cerrar la Fase 3.
+✅ **Pruebas e2e de navegador (Playwright)**: 13 pruebas sobre los tres frontends.
+`npm run e2e` (o `-- --project=portal`, `-- --headed` para verlas correr). Levanta la
+API y los tres vite contra `provivir_e2e`, una base propia que se recrea en cada
+corrida. Verificadas en tres ejecuciones seguidas.
 No se ejecutaron porque el entorno de desarrollo no tiene navegador ni permisos para
 instalarlo. Los flujos se verificaron contra la API y manualmente. **Recomendación:
 correrlas en el entorno de staging antes del lanzamiento**, donde sí hay Docker.

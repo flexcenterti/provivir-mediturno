@@ -135,7 +135,7 @@ function Login({ onEntrar }: { onEntrar: (u: UsuarioSesion) => void }) {
           <h1>Grupo Provivir</h1>
         </div>
         <p className="login-sub">CDC Oriente · Plataforma de agendamiento</p>
-        {error && <div className="error">{error}</div>}
+        {error && <div className="error" role="alert">{error}</div>}
         <div className="field">
           <label htmlFor="email">Correo</label>
           <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required />
