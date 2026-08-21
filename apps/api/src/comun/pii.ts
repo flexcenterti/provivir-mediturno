@@ -11,10 +11,20 @@ export function enmascararDocumento(documento: string | null | undefined): strin
 
 export function enmascararTelefono(telefono: string | null | undefined): string {
   if (!telefono) return '—';
+
+  /*
+   * Los identificadores de nombre de usuario ("wa:US.1349…") llevan dígitos, así
+   * que sin distinguirlos salían enmascarados igual que un teléfono: en soporte
+   * alguien buscaría un número terminado en esas cifras y no existiría. Se
+   * conserva la marca para que se vea de un vistazo que no es un número.
+   */
+  if (telefono.startsWith('wa:')) {
+    const id = telefono.slice(3);
+    return `wa:${id.length <= 4 ? '*'.repeat(id.length) : `***${id.slice(-4)}`}`;
+  }
+
   const digitos = telefono.replace(/\D/g, '');
-  // Los alias de WhatsApp no tienen dígitos: sin esto salían como cadena vacía y
-  // la traza no servía para correlacionar nada.
-  if (digitos.length <= 4) return enmascararDocumento(telefono.replace(/^wa:/, ''));
+  if (digitos.length <= 4) return enmascararDocumento(telefono);
   return `***${digitos.slice(-4)}`;
 }
 

@@ -130,7 +130,7 @@ describe('un mensaje raro no puede tumbar la entrega', () => {
     expect(mensajes[0]!.texto).toBe('este sí');
     expect(omitidos).toHaveLength(1);
     expect(omitidos[0]).toMatchObject({
-      tipo: 'text', motivo: 'sin remitente: ni `from` ni `contacts[].wa_id`', id: 'w1',
+      tipo: 'text', motivo: 'sin remitente: ni `from`/`from_user_id` ni `contacts[].wa_id`/`user_id`', id: 'w1',
     });
   });
 
@@ -239,5 +239,79 @@ describe('la traza dice la forma, nunca el contenido', () => {
     // Lo que buscamos: el nombre del campo nuevo, sin su valor.
     expect(omitidos[0]!.forma).toContain('username');
     expect(omitidos[0]!.forma).not.toContain('ana.torres');
+  });
+});
+
+/**
+ * Cuerpos tomados literalmente de la documentación de Meta. Con nombres de usuario
+ * el remitente no viene en `from` sino en `from_user_id`, y el contacto trae
+ * `user_id` en vez de `wa_id`. Antes se descartaban: ese paciente escribía y no
+ * recibía nada.
+ */
+describe('nombres de usuario de WhatsApp · cuerpos oficiales de Meta', () => {
+  const conNumero = {
+    object: 'whatsapp_business_account',
+    entry: [{ id: '102290129340398', changes: [{ field: 'messages', value: {
+      messaging_product: 'whatsapp',
+      metadata: { display_phone_number: '15550783881', phone_number_id: '106540352242922' },
+      contacts: [{ profile: { name: 'Jefferson R.' }, wa_id: '573001234567' }],
+      messages: [{
+        from: '573001234567', id: 'wamid.CONNUM', timestamp: '1749416383',
+        type: 'text', text: { body: 'Hola, quiero información sobre el servicio' },
+      }],
+    } }] }],
+  } as never;
+
+  const conUsername = {
+    object: 'whatsapp_business_account',
+    entry: [{ id: '102290129340398', changes: [{ field: 'messages', value: {
+      messaging_product: 'whatsapp',
+      metadata: { display_phone_number: '15550783881', phone_number_id: '106540352242922' },
+      contacts: [{ profile: { name: 'Sheena Nelson', username: '@realsheenanelson' }, user_id: 'US.13491208655302741918' }],
+      messages: [{
+        from_user_id: 'US.13491208655302741918', id: 'wamid.CONUSER', timestamp: '1749416383',
+        type: 'text', text: { body: '¿Viene en otro color?' },
+      }],
+    } }] }],
+  } as never;
+
+  it('el que trae teléfono se normaliza a E.164', () => {
+    const [m] = normalizarWebhook(conNumero);
+    expect(m).toMatchObject({ telefono: '+573001234567', nombrePerfil: 'Jefferson R.', texto: 'Hola, quiero información sobre el servicio' });
+    expect(esTelefono(m!.telefono)).toBe(true);
+  });
+
+  it('el que trae nombre de usuario ya no se descarta', () => {
+    const omitidos: Omitido[] = [];
+    const [m] = normalizarWebhook(conUsername, (o) => omitidos.push(o));
+
+    expect(omitidos).toHaveLength(0);
+    expect(m).toMatchObject({ nombrePerfil: 'Sheena Nelson', texto: '¿Viene en otro color?' });
+    // Se guarda el user_id, no el @alias: el alias lo puede cambiar el paciente.
+    expect(m!.telefono).toBe('wa:US.13491208655302741918');
+  });
+
+  it('un user_id no se confunde nunca con un teléfono', () => {
+    const [m] = normalizarWebhook(conUsername);
+    expect(esTelefono(m!.telefono)).toBe(false);
+    // De ahí depende que no se le mande recordatorio ni se le cruce con la base.
+    expect(variantesDeTelefono(m!.telefono)).toEqual(['wa:US.13491208655302741918']);
+  });
+
+  it('al responder se le manda a Meta el identificador tal cual', () => {
+    const [m] = normalizarWebhook(conUsername);
+    expect(paraEnviar(m!.telefono)).toBe('US.13491208655302741918');
+  });
+
+  it('los dos cuerpos producen identidades distintas', () => {
+    const a = normalizarWebhook(conNumero)[0]!.telefono;
+    const b = normalizarWebhook(conUsername)[0]!.telefono;
+    expect(a).not.toBe(b);
+  });
+
+  it('el alias sirve de nombre si el perfil no trae uno', () => {
+    const sinNombre = JSON.parse(JSON.stringify(conUsername));
+    delete sinNombre.entry[0].changes[0].value.contacts[0].profile.name;
+    expect(normalizarWebhook(sinNombre)[0]!.nombrePerfil).toBe('@realsheenanelson');
   });
 });

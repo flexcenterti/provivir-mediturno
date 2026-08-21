@@ -43,21 +43,26 @@ export function normalizarWebhook(
     for (const cambio of entrada?.changes ?? []) {
       if (cambio?.field !== 'messages') continue;
       const valor: ValorCambio = cambio.value ?? {};
-      const nombre = valor.contacts?.[0]?.profile?.name;
-      // Con nombres de usuario el remitente puede no venir en `from`; el wa_id del
-      // contacto es la otra forma en que Meta lo identifica.
-      const waId = valor.contacts?.[0]?.wa_id;
+      const contacto = valor.contacts?.[0];
+      // El alias sirve como nombre si el perfil no trae uno.
+      const nombre = contacto?.profile?.name ?? contacto?.profile?.username;
+      // Respaldo a nivel de contacto por si el mensaje no trae el remitente.
+      const delContacto = contacto?.wa_id ?? contacto?.user_id;
 
       for (const m of valor.messages ?? []) {
         const tipo = m?.type ?? 'sin tipo';
         try {
           // Sin remitente no hay a quién responder ni con quién asociar la
           // conversación: se descarta en vez de reventar el lote.
-          const remitente = m?.from ?? waId;
+          // Cuatro formas de identificar al remitente, en orden de preferencia. Con
+          // teléfono llegan `from`/`wa_id`; con nombre de usuario, `from_user_id`/
+          // `user_id`. Se prefiere siempre el del mensaje: `contacts` es del lote y
+          // un lote podría traer mensajes de más de una persona.
+          const remitente = m?.from ?? m?.from_user_id ?? delContacto;
           if (!remitente) {
             alOmitir?.({
               tipo,
-              motivo: 'sin remitente: ni `from` ni `contacts[].wa_id`',
+              motivo: 'sin remitente: ni `from`/`from_user_id` ni `contacts[].wa_id`/`user_id`',
               id: m?.id,
               // La forma del mensaje y la del contacto revelan en qué campo viene
               // el remitente cuando Meta cambia el formato.
@@ -65,7 +70,7 @@ export function normalizarWebhook(
             });
             continue;
           }
-          const normalizado = normalizarMensaje({ ...m, from: remitente }, nombre);
+          const normalizado = normalizarMensaje(m, remitente, nombre);
           if (normalizado) salida.push(normalizado);
           else alOmitir?.({ tipo, motivo: 'tipo de mensaje no soportado', id: m.id });
         } catch (e) {
@@ -78,11 +83,12 @@ export function normalizarWebhook(
   return salida;
 }
 
-function normalizarMensaje(m: MensajeMeta, nombrePerfil?: string): MensajeEntrante | null {
+/** `identidad` la resuelve quien llama: puede venir de cuatro campos distintos. */
+function normalizarMensaje(m: MensajeMeta, identidad: string, nombrePerfil?: string): MensajeEntrante | null {
   const ts = new Date(Number(m.timestamp) * 1000);
   const base = {
     waMessageId: m.id,
-    telefono: normalizarIdentidad(m.from),
+    telefono: normalizarIdentidad(identidad),
     nombrePerfil,
     // Un timestamp ilegible no justifica perder el mensaje: se usa la hora actual.
     ts: Number.isNaN(ts.getTime()) ? new Date() : ts,
