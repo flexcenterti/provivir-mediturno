@@ -5,6 +5,21 @@ export interface Omitido {
   tipo: string;
   motivo: string;
   id?: string;
+  /** Nombres de los campos que traía, sin sus valores. Ver `formaDe`. */
+  forma?: string;
+}
+
+/**
+ * Enumera las CLAVES de un objeto, nunca sus valores.
+ *
+ * Cuando Meta empieza a mandar un campo que no conocemos —los nombres de usuario
+ * de WhatsApp llegan sin `from` ni `wa_id`— esto dice cómo se llama sin volcar el
+ * teléfono, el alias ni el texto del paciente al registro.
+ */
+export function formaDe(o: unknown): string {
+  if (o === null || o === undefined) return String(o);
+  if (typeof o !== 'object') return typeof o;
+  return `{${Object.keys(o).join(', ')}}`;
 }
 
 /**
@@ -40,7 +55,14 @@ export function normalizarWebhook(
           // conversación: se descarta en vez de reventar el lote.
           const remitente = m?.from ?? waId;
           if (!remitente) {
-            alOmitir?.({ tipo, motivo: 'sin remitente: ni `from` ni `contacts[].wa_id`', id: m?.id });
+            alOmitir?.({
+              tipo,
+              motivo: 'sin remitente: ni `from` ni `contacts[].wa_id`',
+              id: m?.id,
+              // La forma del mensaje y la del contacto revelan en qué campo viene
+              // el remitente cuando Meta cambia el formato.
+              forma: `mensaje ${formaDe(m)} · contacto ${formaDe(valor.contacts?.[0])} · value ${formaDe(valor)}`,
+            });
             continue;
           }
           const normalizado = normalizarMensaje({ ...m, from: remitente }, nombre);

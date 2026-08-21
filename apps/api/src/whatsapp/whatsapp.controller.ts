@@ -74,7 +74,9 @@ export class WhatsappController {
     // Lo descartado se registra con su tipo: es la única pista de qué mandó el
     // paciente cuando algo no encaja, y llega sin datos personales.
     const mensajes = normalizarWebhook(cuerpo, (o) =>
-      this.log.warn(`Mensaje descartado (tipo ${o.tipo}): ${o.motivo}`),
+      this.log.warn(
+        `Mensaje descartado (tipo ${o.tipo}): ${o.motivo}` + (o.forma ? ` · ${o.forma}` : ''),
+      ),
     );
 
     // Deja constancia de TODA entrega, incluidas las que no traen mensajes (acuses

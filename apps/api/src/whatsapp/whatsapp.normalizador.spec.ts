@@ -1,7 +1,8 @@
 import {
   esTelefono, normalizarIdentidad, normalizarTelefono, normalizarWebhook,
-  paraEnviar, variantesDeTelefono,
+  paraEnviar, variantesDeTelefono, formaDe,
 } from './whatsapp.normalizador';
+import type { Omitido } from './whatsapp.normalizador';
 import type { WebhookMeta } from './whatsapp.tipos';
 
 const envoltorio = (mensajes: unknown[], nombre = 'Ana Torres'): WebhookMeta => ({
@@ -127,9 +128,10 @@ describe('un mensaje raro no puede tumbar la entrega', () => {
 
     expect(mensajes).toHaveLength(1);
     expect(mensajes[0]!.texto).toBe('este sí');
-    expect(omitidos).toEqual([
-      { tipo: 'text', motivo: 'sin remitente: ni `from` ni `contacts[].wa_id`', id: 'w1' },
-    ]);
+    expect(omitidos).toHaveLength(1);
+    expect(omitidos[0]).toMatchObject({
+      tipo: 'text', motivo: 'sin remitente: ni `from` ni `contacts[].wa_id`', id: 'w1',
+    });
   });
 
   it('avisa del tipo no soportado sin descartar el lote', () => {
@@ -210,5 +212,32 @@ describe('identidad del remitente cuando no hay teléfono', () => {
     // El envoltorio declara wa_id 573002222222 en contacts.
     const [m] = normalizarWebhook(cuerpo);
     expect(m!.telefono).toBe('+573002222222');
+  });
+});
+
+describe('la traza dice la forma, nunca el contenido', () => {
+  it('enumera las claves sin revelar valores', () => {
+    const forma = formaDe({ id: 'w1', type: 'text', sender_identity: '+573001112222' });
+    expect(forma).toBe('{id, type, sender_identity}');
+    expect(forma).not.toContain('573001112222');
+  });
+
+  it('adjunta la forma al descartar un mensaje sin remitente conocido', () => {
+    const omitidos: Omitido[] = [];
+    normalizarWebhook(
+      {
+        object: 'whatsapp_business_account',
+        entry: [{ id: 'e', changes: [{ field: 'messages', value: {
+          messaging_product: 'whatsapp',
+          contacts: [{ profile: { name: 'Ana' }, username: 'ana.torres' }],
+          messages: [{ id: 'w1', type: 'text', timestamp: '1', text: { body: 'hola' } }],
+        } as never }] }],
+      },
+      (o) => omitidos.push(o),
+    );
+
+    // Lo que buscamos: el nombre del campo nuevo, sin su valor.
+    expect(omitidos[0]!.forma).toContain('username');
+    expect(omitidos[0]!.forma).not.toContain('ana.torres');
   });
 });
