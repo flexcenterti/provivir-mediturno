@@ -146,13 +146,20 @@ done
 
 # Dominio único con rutas: el backoffice en la raíz, portal y TV en las subcarpetas
 # que coinciden con el `base` con que se compilaron.
-rm -rf despliegue/web
+# Se VACÍA el directorio en vez de borrarlo: `rm -rf` crea un inodo nuevo y el
+# bind mount de Caddy sigue apuntando al viejo, que queda huérfano y vacío.
+# Síntoma: los archivos están en el host y Caddy responde 404.
 mkdir -p despliegue/web
+find despliegue/web -mindepth 1 -delete
+
 cp -r apps/backoffice/dist/. despliegue/web/
 cp -r apps/portal/dist      despliegue/web/citas
 cp -r apps/tv/dist          despliegue/web/tv
 chown -R "$USUARIO":"$(id -gn "$USUARIO")" despliegue/web
 ok "backoffice en / · portal en /citas · pantallas en /tv"
+
+# Caddy se recrea al final, para que su bind mount tome el contenido actual.
+RECREAR_CADDY=1
 
 # ─────────────────── 4. Puertos ───────────────────
 paso "Puertos 80 y 443"
@@ -205,6 +212,11 @@ done
 
 # El seed crea usuarios con contraseña conocida: nunca en producción.
 aviso "El seed NO se ejecuta en producción. Las credenciales reales se crean aparte."
+
+if [ "${RECREAR_CADDY:-0}" = "1" ]; then
+  docker compose -f "$COMPOSE" --env-file "$ENV_PROD" up -d --force-recreate caddy >/dev/null 2>&1
+  ok "Caddy recreado con los frontends actuales"
+fi
 
 # ─────────────────── 6. Comprobar ───────────────────
 paso "Comprobación"
