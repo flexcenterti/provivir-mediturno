@@ -111,6 +111,11 @@ export class AnthropicAdaptador implements ClienteLlm {
       return { texto: '', llamadas: [], motivo: 'rechazo' };
     }
 
+    // Equivalente de `length` en OpenAI.
+    if (m.stop_reason === 'max_tokens') {
+      return { texto: '', llamadas: [], motivo: 'truncado' };
+    }
+
     const texto = m.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map((b) => b.text)

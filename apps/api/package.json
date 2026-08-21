@@ -19,7 +19,8 @@
     "carga:k6": "k6 run carga/k6-agendamiento.js",
     "carga:limpiar": "tsx scripts/limpiar-carga.ts",
     "webhook:probar": "bash scripts/probar-webhook.sh",
-    "postinstall": "test ! -f prisma/schema.prisma || prisma generate"
+    "postinstall": "test ! -f prisma/schema.prisma || prisma generate",
+    "evaluar": "ts-node scripts/evaluar-ia.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

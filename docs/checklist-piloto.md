@@ -47,7 +47,7 @@ son credenciales, insumos del cliente o decisiones suyas.
 
 - ⬜ Acuerdo de tratamiento de datos (DPA) con OpenAI y verificación de su retención de API.
 - ⬜ Actualizar el aviso de privacidad del portal para declarar el procesamiento por terceros.
-- ⬜ Probar `gpt-5-nano` contra `gpt-5-mini` (el configurado) con el set de 30 mensajes anotados.
+- ✅ Comparados `gpt-5-mini`, `gpt-5-nano` y `gpt-4.1-mini` con el arnés de evaluación. Gana `gpt-5-mini`, único sin fallos críticos. Detalle en `docs/adr-a5-proveedor-ia.md`.
 
 Detalle en `docs/adr-a5-proveedor-ia.md`.
 
@@ -64,7 +64,11 @@ Detalle en `docs/adr-a5-proveedor-ia.md`.
 - ⬜ Carga real del archivo del cliente (P1) en staging y revisión del reporte de errores.
 - ⬜ Parámetros del cliente configurados desde Administración → Reglas (P2, P3, P6).
 - ⬜ Número de prueba de Meta operando 3–5 días con el equipo del cliente.
-- ⬜ **Evaluación de la IA con 30 mensajes reales anotados** (intención esperada vs. detectada).
+- 🟡 **Evaluación de la IA.** El arnés existe y corre: `npm run evaluar -w @provivir/api`
+  (`--repeticiones 3`, `--modelos a,b`, `--categoria seguridad`). Los 30 casos de
+  `apps/api/evaluacion/casos.json` son **sintéticos**: sirven para detectar regresiones,
+  no sustituyen a los 30 mensajes **reales** anotados, que siguen pendientes. Al llegar,
+  se agregan al mismo archivo con el mismo formato.
   Requiere C1 y mensajes reales. **Pendiente: es la brecha de calidad más importante.**
 - ⬜ Contactos CSV migrados (P9).
 - ⬜ Enlaces de YouTube configurados (P10) y **rotación validada en el TV real de la sede**

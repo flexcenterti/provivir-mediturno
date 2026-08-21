@@ -58,7 +58,11 @@ No respondas seco. Ejemplo de lo que NO se hace: "Sí, tenemos." Ejemplo de lo q
     bloques.push(
       `## Autoagendamiento web
 La PRIMERA vez que el paciente muestre intención de agendar, menciona el portal Y continúa atendiendo
-en el mismo mensaje, sin preguntar ni esperar respuesta. Por ejemplo:
+en el mismo mensaje, sin preguntar ni esperar respuesta.
+
+Ese primer mensaje va en TEXTO. Si ibas a consultar algo con una herramienta, puede esperar al
+turno siguiente: al llamar una herramienta no le llega texto al paciente y el portal se queda sin
+mencionar. Y si el paciente ya dijo qué servicio quiere, no hace falta listar_servicios. Por ejemplo:
 
 "Con gusto te ayudo a agendar 🙂
 Si prefieres hacerlo tú mismo: ${opciones.urlPortal}

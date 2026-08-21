@@ -41,8 +41,10 @@ export class OpenAiAdaptador implements ClienteLlm {
 
     const respuesta = await this.cliente.chat.completions.create({
       model: this.modelo,
-      // Respuestas de WhatsApp: cortas a propósito.
-      max_completion_tokens: 2048,
+      // En los modelos con razonamiento este tope cubre TAMBIÉN los tokens de
+      // pensamiento, que no se ven en la respuesta. Con 2048 se agotaban antes de
+      // llegar a escribir. La brevedad en WhatsApp la impone el prompt, no esto.
+      max_completion_tokens: 4096,
       messages: [
         // OpenAI no tiene campo `system` aparte: va como primer mensaje.
         { role: 'system', content: params.system },
@@ -162,6 +164,11 @@ export class OpenAiAdaptador implements ClienteLlm {
         nombre: t.function.name,
         argumentos: this.parsearArgumentos(t.function.arguments, t.function.name),
       }));
+
+    // Cortado a mitad: se marca como tal en vez de pasar por turno terminado.
+    if (eleccion.finish_reason === 'length') {
+      return { texto: '', llamadas: [], motivo: 'truncado' };
+    }
 
     return {
       texto: (mensaje.content ?? '').trim(),

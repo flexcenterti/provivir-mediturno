@@ -91,6 +91,12 @@ describe('Adaptador de Anthropic', () => {
   it('traduce el rechazo del clasificador de seguridad', () => {
     expect(leer({ stop_reason: 'refusal', content: [] })).toMatchObject({ motivo: 'rechazo' });
   });
+
+  it('marca como truncada la respuesta cortada por el tope de tokens', () => {
+    // Media frase no debe llegar al paciente como si el turno hubiera terminado.
+    expect(leer({ stop_reason: 'max_tokens', content: [{ type: 'text', text: 'Claro, tu cita es el' }] }))
+      .toEqual({ texto: '', llamadas: [], motivo: 'truncado' });
+  });
 });
 
 describe('Adaptador de OpenAI', () => {
@@ -240,6 +246,13 @@ describe('Adaptador de OpenAI', () => {
 
   it('una respuesta sin opciones no revienta', () => {
     expect(leer({ choices: [] })).toEqual({ texto: '', llamadas: [], motivo: 'fin' });
+  });
+
+  it('marca como truncada la respuesta cortada por el tope de tokens', () => {
+    // Ocurre con los modelos de razonamiento: los tokens de pensamiento consumen
+    // el mismo presupuesto, así que se agota sin que la respuesta visible sea larga.
+    expect(leer({ choices: [{ finish_reason: 'length', message: { content: 'Claro, tu cita es el' } }] }))
+      .toEqual({ texto: '', llamadas: [], motivo: 'truncado' });
   });
 });
 

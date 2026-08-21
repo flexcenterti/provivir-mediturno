@@ -92,6 +92,16 @@ export class IaService {
         };
       }
 
+      // Media frase es peor que ninguna: el paciente no sabe si lo atendieron.
+      if (respuesta.motivo === 'truncado') {
+        this.log.warn('El modelo agoto su presupuesto de tokens sin cerrar el turno');
+        return {
+          ...resultado,
+          respuesta: 'Se me enredo la respuesta. Te paso con una asistente para no hacerte esperar.',
+          escalar: { motivo: 'Respuesta truncada por limite de tokens', prioridad: 'media' },
+        };
+      }
+
       const texto = respuesta.texto;
 
       if (respuesta.motivo !== 'herramientas') {

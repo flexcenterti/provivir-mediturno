@@ -34,7 +34,13 @@ export interface RespuestaLlm {
    * `herramientas` — pide ejecutar herramientas y volver.
    * `rechazo` — un clasificador de seguridad declinó responder; hay que escalar.
    */
-  motivo: 'fin' | 'herramientas' | 'rechazo';
+  /**
+   * `truncado`: el modelo agotó su presupuesto de tokens a mitad de frase. No es
+   * un turno terminado y no debe enviarse al paciente. En los modelos con
+   * razonamiento, los tokens de pensamiento cuentan contra ese mismo tope, así
+   * que ocurre sin que la respuesta visible sea larga.
+   */
+  motivo: 'fin' | 'herramientas' | 'rechazo' | 'truncado';
 }
 
 /** Puerto del modelo. Cada proveedor lo implementa en `ia/adaptadores/`. */
