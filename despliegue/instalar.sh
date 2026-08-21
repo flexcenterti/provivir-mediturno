@@ -119,13 +119,29 @@ STT_URL=https://api.openai.com/v1/audio/transcriptions
 STT_API_KEY=
 STT_MODELO=whisper-1
 
-# CAPTCHA del portal público
+# CAPTCHA del portal público (Cloudflare Turnstile).
+# Las DOS se configuran a la vez. Con solo el secreto, el backend exige un token
+# que el portal nunca envía y agendar falla siempre. La clave del sitio se hornea
+# en el build, así que tras cambiarla hay que recompilar (volver a correr esto).
+TURNSTILE_SITE_KEY=
 TURNSTILE_SECRET=
 ENV
   chmod 600 "$ENV_PROD"
   ok "$ENV_PROD creado con secretos generados"
   aviso "Faltan las claves de Meta y OpenAI: edítalas cuando las tengas"
 fi
+
+# Las claves que se añaden al proyecto DESPUÉS de la primera instalación no llegan
+# nunca a un .env ya existente, porque el bloque de arriba lo conserva entero. Se
+# agregan aquí, vacías, para que al menos aparezcan y se puedan completar.
+asegurar_clave() {
+  grep -qE "^$1=" "$ENV_PROD" && return 0
+  printf '\n# %s\n%s=%s\n' "$2" "$1" "${3:-}" >> "$ENV_PROD"
+  aviso "$1 agregada al .env (vacía)"
+}
+
+asegurar_clave TURNSTILE_SITE_KEY \
+  'Clave pública de Cloudflare Turnstile. Va junto con TURNSTILE_SECRET: una sola de las dos rompe el agendamiento.'
 
 # El usuario que despliega debe poder leerlo para que compose lo pase al contenedor.
 chown "$USUARIO":"$(id -gn "$USUARIO")" "$ENV_PROD"
@@ -138,10 +154,26 @@ COMO_USUARIO=(sudo -u "$USUARIO" env "PATH=/home/$USUARIO/.local/node/bin:$PATH"
 
 "${COMO_USUARIO[@]}" npm ci --silent
 
+# La clave pública de Turnstile se inyecta en tiempo de compilación: Vite la
+# sustituye como literal y, sin ella, elimina el módulo entero del bundle.
+CLAVE_SITIO="$(grep -E '^TURNSTILE_SITE_KEY=' "$ENV_PROD" | cut -d= -f2-)"
+SECRETO_CAPTCHA="$(grep -E '^TURNSTILE_SECRET=' "$ENV_PROD" | cut -d= -f2-)"
+
+# Media configuración es peor que ninguna: el backend exigiría un token que el
+# portal no manda, y agendar fallaría en todos los intentos.
+if [ -n "$CLAVE_SITIO" ] && [ -z "$SECRETO_CAPTCHA" ]; then
+  aviso "TURNSTILE_SITE_KEY está puesta pero TURNSTILE_SECRET no: el portal mostrará el CAPTCHA y el backend no lo validará"
+elif [ -z "$CLAVE_SITIO" ] && [ -n "$SECRETO_CAPTCHA" ]; then
+  aviso "TURNSTILE_SECRET está puesto pero TURNSTILE_SITE_KEY no: AGENDAR FALLARÁ SIEMPRE en el portal"
+elif [ -n "$CLAVE_SITIO" ]; then
+  ok "CAPTCHA activo en el portal"
+fi
+
 # Solo los frontends: la API se compila DENTRO de la imagen de Docker, con su propio
 # cliente de Prisma. Compilarla aquí solo duplicaría trabajo y puntos de fallo.
 for app in backoffice portal tv; do
-  "${COMO_USUARIO[@]}" npm run build -w "@provivir/$app" --silent
+  "${COMO_USUARIO[@]}" VITE_TURNSTILE_SITE_KEY="$CLAVE_SITIO" \
+    npm run build -w "@provivir/$app" --silent
 done
 
 # Dominio único con rutas: el backoffice en la raíz, portal y TV en las subcarpetas

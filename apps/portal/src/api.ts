@@ -13,6 +13,8 @@ export interface Aviso {
   responsable: string; finalidad: string; derechos: string; base: string; captchaActivo: boolean;
 }
 
+import { tokenCaptcha } from './turnstile';
+
 async function pedir<T>(ruta: string, cuerpo?: object): Promise<T> {
   const r = await fetch(`/api/portal${ruta}`, {
     method: cuerpo ? 'POST' : 'GET',
@@ -26,16 +28,31 @@ async function pedir<T>(ruta: string, cuerpo?: object): Promise<T> {
   return r.json();
 }
 
+/**
+ * Igual que `pedir`, pero adjunta un token de CAPTCHA. Se reserva para las tres
+ * operaciones que el backend protege: identificar, registrar y agendar. Consultar
+ * cupos no lo lleva —es solo lectura y el paciente la repite mucho mientras
+ * busca hora—, así que pedir un token ahí solo añadiría fricción.
+ *
+ * El token es de un solo uso: se obtiene uno por llamada, no uno por sesión.
+ */
+async function pedirProtegido<T>(ruta: string, cuerpo: object): Promise<T> {
+  const captcha = await tokenCaptcha();
+  return pedir<T>(ruta, { ...cuerpo, ...(captcha ? { captcha } : {}) });
+}
+
+type Sesion = { sesion: string; paciente: { nombres: string; apellidos: string } };
+
 export const api = {
   aviso: () => pedir<Aviso>('/aviso-privacidad'),
   servicios: () => pedir<Servicio[]>('/servicios'),
   identificar: (documento: string, telefonoUltimos4: string) =>
-    pedir<{ sesion: string; paciente: { nombres: string; apellidos: string } }>('/identificar', { documento, telefonoUltimos4 }),
+    pedirProtegido<Sesion>('/identificar', { documento, telefonoUltimos4 }),
   registrar: (datos: object) =>
-    pedir<{ sesion: string; paciente: { nombres: string; apellidos: string } }>('/registrar', { ...datos, aceptaPrivacidad: 'si' }),
+    pedirProtegido<Sesion>('/registrar', { ...datos, aceptaPrivacidad: 'si' }),
   cupos: (servicioId: string, fecha: string) => pedir<Cupo[]>('/cupos', { servicioId, fecha, limite: 12 }),
   agendar: (cuerpo: object) =>
-    pedir<{ creada: boolean; confirmacion?: Confirmacion; motivo?: string; alternativas?: Cupo[] }>('/agendar', cuerpo),
+    pedirProtegido<{ creada: boolean; confirmacion?: Confirmacion; motivo?: string; alternativas?: Cupo[] }>('/agendar', cuerpo),
 };
 
 /** El día operativo es el de la sede (Cali, UTC−5), no el del navegador del paciente. */

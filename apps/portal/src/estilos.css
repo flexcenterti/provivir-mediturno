@@ -112,3 +112,15 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
   background: var(--card); border-radius: 12px; padding: 1rem; font-size: .82rem;
   line-height: 1.6; box-shadow: var(--shadow); }
 .p-aviso-texto p { margin-bottom: .5rem; }
+
+/* Turnstile · con `interaction-only` el widget no se dibuja salvo que Cloudflare
+   rete al visitante. Cuando aparece, se centra sobre el formulario en vez de
+   empujar el contenido hacia abajo. */
+.captcha:not(:empty) {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 45%);
+  z-index: 100;
+}
