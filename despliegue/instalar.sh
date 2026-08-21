@@ -134,8 +134,15 @@ chown "$USUARIO":"$(id -gn "$USUARIO")" "$ENV_PROD"
 paso "Compilando los frontends"
 
 cd "$RAIZ"
-sudo -u "$USUARIO" env "PATH=/home/$USUARIO/.local/node/bin:$PATH" npm ci --silent
-sudo -u "$USUARIO" env "PATH=/home/$USUARIO/.local/node/bin:$PATH" npm run build --silent
+COMO_USUARIO=(sudo -u "$USUARIO" env "PATH=/home/$USUARIO/.local/node/bin:$PATH")
+
+"${COMO_USUARIO[@]}" npm ci --silent
+
+# Solo los frontends: la API se compila DENTRO de la imagen de Docker, con su propio
+# cliente de Prisma. Compilarla aquí solo duplicaría trabajo y puntos de fallo.
+for app in backoffice portal tv; do
+  "${COMO_USUARIO[@]}" npm run build -w "@provivir/$app" --silent
+done
 
 # Dominio único con rutas: el backoffice en la raíz, portal y TV en las subcarpetas
 # que coinciden con el `base` con que se compilaron.

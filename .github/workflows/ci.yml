@@ -60,8 +60,10 @@ jobs:
 
       - run: npm run lint
 
-      - name: Generar cliente Prisma
-        run: npm run db:generate -w @provivir/api
+      # El cliente de Prisma lo genera el postinstall de @provivir/api. Esto verifica
+      # que el hook siga funcionando: sin él, `npm ci` deja el proyecto sin compilar.
+      - name: Verificar que el postinstall generó el cliente Prisma
+        run: test -d node_modules/.prisma/client
 
       # Las migraciones deben aplicar limpias sobre una base vacía
       - name: Migraciones

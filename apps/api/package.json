@@ -18,7 +18,8 @@
     "redis:local": "bash scripts/redis-local.sh",
     "carga:k6": "k6 run carga/k6-agendamiento.js",
     "carga:limpiar": "tsx scripts/limpiar-carga.ts",
-    "webhook:probar": "bash scripts/probar-webhook.sh"
+    "webhook:probar": "bash scripts/probar-webhook.sh",
+    "postinstall": "test ! -f prisma/schema.prisma || prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
