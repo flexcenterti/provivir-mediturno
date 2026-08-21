@@ -55,6 +55,27 @@ son credenciales, insumos del cliente o decisiones suyas.
 
 Detalle en `docs/adr-a5-proveedor-ia.md`.
 
+## Nombres de usuario de WhatsApp
+
+Un paciente puede escribir sin exponer su teléfono: Meta entrega `from_user_id`
+(`CO.1023…`) en vez de `from`. La plataforma **lo recibe y lo atiende**, con una
+limitación que no depende de nosotros:
+
+**No se le puede responder por API.** Comprobado contra Meta de v21.0 a v26.0 con
+identificadores inexistentes: `to` exige un teléfono, `to_user_id` se ignora y
+`recipient_type` solo acepta `["group","individual"]`. El alias tampoco sirve.
+
+Qué hace la plataforma mientras tanto: escala la conversación con **prioridad alta**
+y el motivo explícito. Una asistente sí puede contestarle desde la bandeja de
+WhatsApp Business, donde estos usuarios se ven con normalidad. Y como ese paciente
+no tiene teléfono, tampoco se le cruza con la base ni se le mandan recordatorios
+hasta que dé su número.
+
+- ⬜ Decidir si se agenda a quien no quiere dar teléfono, sabiendo que se queda sin
+  recordatorio, o si el número es obligatorio para confirmar la cita.
+- ⬜ Revisar si Meta habilita el envío a estos usuarios: el código ya lo intenta con
+  la forma estándar, así que funcionaría sin tocar nada.
+
 ## Decisiones pendientes del cliente
 
 | # | Decisión | Dónde está documentada |

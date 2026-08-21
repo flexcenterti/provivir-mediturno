@@ -6,7 +6,7 @@ import { AuditoriaService } from '../auditoria/auditoria.service';
 import { TurnosGateway } from '../turnos/turnos.gateway';
 import { IaService } from '../ia/ia.service';
 import type { MensajeLlm } from '../ia/ia.tipos';
-import { MetaCliente } from './meta.cliente';
+import { DestinatarioSinTelefono, MetaCliente } from './meta.cliente';
 import { TranscripcionService } from './transcripcion.service';
 import { variantesDeTelefono } from './whatsapp.normalizador';
 import { enmascararTelefono } from '../comun/pii';
@@ -178,7 +178,21 @@ export class ConversacionService {
     );
 
     if (resultado.respuesta) {
-      await this.enviar(conversacionId, telefono, resultado.respuesta);
+      try {
+        await this.enviar(conversacionId, telefono, resultado.respuesta);
+      } catch (e) {
+        if (!(e instanceof DestinatarioSinTelefono)) throw e;
+        // Reintentar no sirve de nada, y dejarlo así deja al paciente sin
+        // respuesta y sin que nadie lo sepa. Una asistente sí puede contestarle
+        // desde la bandeja de WhatsApp Business.
+        this.log.warn(`Sin canal de respuesta para ${enmascararTelefono(telefono)}: se escala`);
+        await this.escalar(
+          conversacionId,
+          'El paciente escribe con nombre de usuario de WhatsApp: no se le puede responder por API. Contéstale desde la bandeja de WhatsApp Business.',
+          'alta',
+        );
+        return;
+      }
     }
 
     await this.prisma.conversacion.update({

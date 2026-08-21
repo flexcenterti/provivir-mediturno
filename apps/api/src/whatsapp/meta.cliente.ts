@@ -7,7 +7,7 @@ import { dirname, extname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { enmascararTelefono } from '../comun/pii';
-import { paraEnviar } from './whatsapp.normalizador';
+import { esTelefono, paraEnviar } from './whatsapp.normalizador';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 
@@ -24,6 +24,25 @@ export interface BotonInteractivo {
  * enviado en vez de fallar, para que el resto del sistema sea probable sin
  * credenciales reales.
  */
+/**
+ * El paciente escribió con nombre de usuario y la API no admite responderle.
+ *
+ * Se comprobó contra Meta, de v21.0 a v26.0, con identificadores inexistentes para
+ * no molestar a nadie: `to` exige un teléfono («The phone number is malformed»),
+ * `to_user_id` se ignora y `recipient_type` solo acepta `["group","individual"]`.
+ * El alias tampoco sirve como destino.
+ *
+ * Es un error PERMANENTE: reintentarlo no lo arregla. Quien lo reciba debe pasar
+ * la conversación a una persona, que sí puede contestar desde la bandeja de
+ * WhatsApp Business, donde estos usuarios se ven con normalidad.
+ */
+export class DestinatarioSinTelefono extends Error {
+  constructor(detalle: string) {
+    super(`No se puede responder por API a un usuario sin teléfono: ${detalle}`);
+    this.name = 'DestinatarioSinTelefono';
+  }
+}
+
 @Injectable()
 export class MetaCliente {
   private readonly log = new Logger(MetaCliente.name);
@@ -77,20 +96,30 @@ export class MetaCliente {
   }
 
   private async enviar(telefono: string, carga: Record<string, unknown>): Promise<string> {
-    // `to` lleva el identificador tal como llegó: si el paciente usa nombre de
-    // usuario, la marca interna `wa:` no debe viajar a Meta.
-    const cuerpo = { messaging_product: 'whatsapp', recipient_type: 'individual', to: paraEnviar(telefono), ...carga };
-
     if (!this.configurado) {
       const simulado = `simulado-${randomUUID()}`;
       this.log.log(`[simulación] → ${enmascararTelefono(telefono)}: ${JSON.stringify(carga).slice(0, 160)}`);
       return simulado;
     }
 
+    // `paraEnviar` quita la marca interna `wa:`, que Meta no conoce.
+    const id = paraEnviar(telefono);
+
+    try {
+      // Se intenta igual con la forma estándar: si Meta habilita el envío a estos
+      // usuarios, funcionará sin tocar nada. Hoy responde 131009.
+      return await this.postear({ recipient_type: 'individual', to: id, ...carga });
+    } catch (e) {
+      if (esTelefono(telefono)) throw e;
+      throw new DestinatarioSinTelefono((e as Error).message);
+    }
+  }
+
+  private async postear(cuerpo: Record<string, unknown>): Promise<string> {
     const r = await fetch(`${GRAPH}/${this.phoneNumberId}/messages`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(cuerpo),
+      body: JSON.stringify({ messaging_product: 'whatsapp', ...cuerpo }),
     });
 
     if (!r.ok) {
