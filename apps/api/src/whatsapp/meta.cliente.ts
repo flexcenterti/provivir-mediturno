@@ -7,6 +7,7 @@ import { dirname, extname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { enmascararTelefono } from '../comun/pii';
+import { paraEnviar } from './whatsapp.normalizador';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 
@@ -76,7 +77,9 @@ export class MetaCliente {
   }
 
   private async enviar(telefono: string, carga: Record<string, unknown>): Promise<string> {
-    const cuerpo = { messaging_product: 'whatsapp', recipient_type: 'individual', to: telefono, ...carga };
+    // `to` lleva el identificador tal como llegó: si el paciente usa nombre de
+    // usuario, la marca interna `wa:` no debe viajar a Meta.
+    const cuerpo = { messaging_product: 'whatsapp', recipient_type: 'individual', to: paraEnviar(telefono), ...carga };
 
     if (!this.configurado) {
       const simulado = `simulado-${randomUUID()}`;

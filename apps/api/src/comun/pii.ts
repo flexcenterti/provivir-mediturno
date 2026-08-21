@@ -12,7 +12,9 @@ export function enmascararDocumento(documento: string | null | undefined): strin
 export function enmascararTelefono(telefono: string | null | undefined): string {
   if (!telefono) return '—';
   const digitos = telefono.replace(/\D/g, '');
-  if (digitos.length <= 4) return '*'.repeat(digitos.length);
+  // Los alias de WhatsApp no tienen dígitos: sin esto salían como cadena vacía y
+  // la traza no servía para correlacionar nada.
+  if (digitos.length <= 4) return enmascararDocumento(telefono.replace(/^wa:/, ''));
   return `***${digitos.slice(-4)}`;
 }
 

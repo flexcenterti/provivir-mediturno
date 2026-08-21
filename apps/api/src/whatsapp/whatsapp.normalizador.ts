@@ -29,17 +29,21 @@ export function normalizarWebhook(
       if (cambio?.field !== 'messages') continue;
       const valor: ValorCambio = cambio.value ?? {};
       const nombre = valor.contacts?.[0]?.profile?.name;
+      // Con nombres de usuario el remitente puede no venir en `from`; el wa_id del
+      // contacto es la otra forma en que Meta lo identifica.
+      const waId = valor.contacts?.[0]?.wa_id;
 
       for (const m of valor.messages ?? []) {
         const tipo = m?.type ?? 'sin tipo';
         try {
           // Sin remitente no hay a quién responder ni con quién asociar la
           // conversación: se descarta en vez de reventar el lote.
-          if (!m?.from) {
-            alOmitir?.({ tipo, motivo: 'el mensaje no trae remitente (from)', id: m?.id });
+          const remitente = m?.from ?? waId;
+          if (!remitente) {
+            alOmitir?.({ tipo, motivo: 'sin remitente: ni `from` ni `contacts[].wa_id`', id: m?.id });
             continue;
           }
-          const normalizado = normalizarMensaje(m, nombre);
+          const normalizado = normalizarMensaje({ ...m, from: remitente }, nombre);
           if (normalizado) salida.push(normalizado);
           else alOmitir?.({ tipo, motivo: 'tipo de mensaje no soportado', id: m.id });
         } catch (e) {
@@ -56,7 +60,7 @@ function normalizarMensaje(m: MensajeMeta, nombrePerfil?: string): MensajeEntran
   const ts = new Date(Number(m.timestamp) * 1000);
   const base = {
     waMessageId: m.id,
-    telefono: normalizarTelefono(m.from),
+    telefono: normalizarIdentidad(m.from),
     nombrePerfil,
     // Un timestamp ilegible no justifica perder el mensaje: se usa la hora actual.
     ts: Number.isNaN(ts.getTime()) ? new Date() : ts,
@@ -108,6 +112,39 @@ function normalizarMensaje(m: MensajeMeta, nombrePerfil?: string): MensajeEntran
 }
 
 /**
+ * WhatsApp ya NO siempre entrega el teléfono del remitente: con los nombres de
+ * usuario llega un alias, y a veces no llega nada en `from`.
+ *
+ * Antes todo pasaba por normalizarTelefono, que se queda con los dígitos. Un
+ * alias sin dígitos daba "+", el mismo valor para todos: como la conversación
+ * abierta se busca por este campo, dos pacientes distintos habrían compartido
+ * hilo — uno leyendo lo del otro y la IA respondiéndole con su contexto. Un alias
+ * como "@paciente_2026" daba "+2026", que es un teléfono inventado.
+ *
+ * Por eso la identidad se marca: lo que no es un teléfono se guarda con prefijo,
+ * imposible de confundir con uno y sin colisiones.
+ */
+export const PREFIJO_ALIAS = 'wa:';
+
+export function normalizarIdentidad(crudo: string): string {
+  const texto = String(crudo ?? '').trim();
+  const digitos = texto.replace(/\D/g, '');
+  // Un teléfono trae solo dígitos y separadores, y al menos siete cifras.
+  const pareceTelefono = /^[+\s().-]*[\d\s().-]+$/.test(texto) && digitos.length >= 7;
+
+  if (!pareceTelefono) return `${PREFIJO_ALIAS}${texto}`;
+  return normalizarTelefono(texto);
+}
+
+/** ¿Podemos llamar, mandar SMS o cruzar con la base por este identificador? */
+export const esTelefono = (identidad: string): boolean =>
+  Boolean(identidad) && !identidad.startsWith(PREFIJO_ALIAS);
+
+/** Lo que va en `to` al responder: Meta espera el mismo identificador que envió. */
+export const paraEnviar = (identidad: string): string =>
+  identidad.startsWith(PREFIJO_ALIAS) ? identidad.slice(PREFIJO_ALIAS.length) : identidad;
+
+/**
  * RN-09.4 · WhatsApp entrega el número sin formato. Se normaliza a E.164 con
  * prefijo de Colombia cuando llega sin indicativo, para que coincida con los
  * teléfonos de la base cargada.
@@ -120,6 +157,11 @@ export function normalizarTelefono(crudo: string): string {
 
 /** Variantes con las que un mismo número puede estar guardado en la base. */
 export function variantesDeTelefono(e164: string): string[] {
+  // Un alias no tiene variantes. Sin esta salida temprana se generaban cadenas
+  // vacías, y buscar `telefono IN ('')` casa con cualquier paciente sin teléfono:
+  // se le atribuiría la conversación a quien no es.
+  if (!esTelefono(e164)) return [e164];
+
   const digitos = e164.replace(/\D/g, '');
   const sinIndicativo = digitos.startsWith('57') ? digitos.slice(2) : digitos;
   return [...new Set([

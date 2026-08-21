@@ -1,4 +1,7 @@
-import { normalizarTelefono, normalizarWebhook, variantesDeTelefono } from './whatsapp.normalizador';
+import {
+  esTelefono, normalizarIdentidad, normalizarTelefono, normalizarWebhook,
+  paraEnviar, variantesDeTelefono,
+} from './whatsapp.normalizador';
 import type { WebhookMeta } from './whatsapp.tipos';
 
 const envoltorio = (mensajes: unknown[], nombre = 'Ana Torres'): WebhookMeta => ({
@@ -104,19 +107,29 @@ describe('RN-09.4 · normalización del número de contacto', () => {
  * reintentar un cuerpo ilegible no lo arregla nunca. Esto ocurrió en producción.
  */
 describe('un mensaje raro no puede tumbar la entrega', () => {
-  it('descarta el que no trae remitente y conserva los demás', () => {
+  it('descarta solo cuando no hay NINGUNA forma de identificar al remitente', () => {
+    // Sin `from` se recurre al wa_id del contacto; si tampoco está, no hay a quién
+    // responder. Lo que no puede pasar es que se caiga el lote entero.
     const omitidos: Array<{ tipo: string; motivo: string }> = [];
     const mensajes = normalizarWebhook(
-      envoltorio([
-        { id: 'w1', type: 'text', timestamp: '1', text: { body: 'sin from' } },
-        { id: 'w2', from: '573001112222', type: 'text', timestamp: '1', text: { body: 'este sí' } },
-      ]),
+      {
+        object: 'whatsapp_business_account',
+        entry: [{ id: 'e', changes: [{ field: 'messages', value: {
+          messaging_product: 'whatsapp',
+          messages: [
+            { id: 'w1', type: 'text', timestamp: '1', text: { body: 'anónimo' } },
+            { id: 'w2', from: '573001112222', type: 'text', timestamp: '1', text: { body: 'este sí' } },
+          ] as never,
+        } }] }],
+      },
       (o) => omitidos.push(o),
     );
 
     expect(mensajes).toHaveLength(1);
     expect(mensajes[0]!.texto).toBe('este sí');
-    expect(omitidos).toEqual([{ tipo: 'text', motivo: 'el mensaje no trae remitente (from)', id: 'w1' }]);
+    expect(omitidos).toEqual([
+      { tipo: 'text', motivo: 'sin remitente: ni `from` ni `contacts[].wa_id`', id: 'w1' },
+    ]);
   });
 
   it('avisa del tipo no soportado sin descartar el lote', () => {
@@ -146,5 +159,56 @@ describe('un mensaje raro no puede tumbar la entrega', () => {
     );
     expect(m!.texto).toBe('hola');
     expect(Number.isNaN(m!.ts.getTime())).toBe(false);
+  });
+});
+
+/**
+ * WhatsApp ya no siempre entrega el teléfono: con los nombres de usuario llega un
+ * alias. Todo pasaba por normalizarTelefono, que se queda con los dígitos, así que
+ * un alias sin dígitos daba "+" — el MISMO valor para todos. Como la conversación
+ * abierta se busca por este campo, dos pacientes distintos habrían compartido hilo.
+ */
+describe('identidad del remitente cuando no hay teléfono', () => {
+  it('reconoce los teléfonos en los formatos que llegan', () => {
+    expect(normalizarIdentidad('573004765496')).toBe('+573004765496');
+    expect(normalizarIdentidad('3001112222')).toBe('+573001112222');
+    expect(normalizarIdentidad('+57 300 111 2222')).toBe('+573001112222');
+  });
+
+  it('no convierte un alias en un teléfono inventado', () => {
+    // "@paciente_2026" daba "+2026", que es un número de otra persona o de nadie.
+    expect(normalizarIdentidad('@paciente_2026')).toBe('wa:@paciente_2026');
+    expect(normalizarIdentidad('carlos.rivas')).toBe('wa:carlos.rivas');
+  });
+
+  it('dos alias distintos NUNCA colapsan en la misma identidad', () => {
+    const identidades = ['carlos.rivas', 'maria', 'jose_2026', ''].map(normalizarIdentidad);
+    expect(new Set(identidades).size).toBe(identidades.length);
+    expect(identidades).not.toContain('+');
+  });
+
+  it('distingue lo que sirve para llamar de lo que no', () => {
+    expect(esTelefono('+573004765496')).toBe(true);
+    expect(esTelefono('wa:carlos.rivas')).toBe(false);
+  });
+
+  it('al responder se le quita la marca interna: Meta no la conoce', () => {
+    expect(paraEnviar('wa:carlos.rivas')).toBe('carlos.rivas');
+    expect(paraEnviar('+573004765496')).toBe('+573004765496');
+  });
+
+  it('un alias no genera variantes vacías', () => {
+    // `telefono IN ('')` casa con cualquier paciente sin teléfono: se le
+    // atribuiría la conversación a quien no es.
+    const v = variantesDeTelefono('wa:carlos.rivas');
+    expect(v).toEqual(['wa:carlos.rivas']);
+    expect(v).not.toContain('');
+  });
+
+  it('usa el wa_id del contacto cuando el mensaje no trae remitente', () => {
+    const cuerpo = envoltorio([{ id: 'w1', type: 'text', timestamp: '1', text: { body: 'hola' } }]);
+    // El envoltorio declara wa_id 573002222222 en contacts.
+    const [m] = normalizarWebhook(cuerpo);
+    expect(m!.telefono).toBe('+573002222222');
   });
 });
