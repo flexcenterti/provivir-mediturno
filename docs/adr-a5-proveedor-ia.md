@@ -82,17 +82,29 @@ argumentos, que no debe tumbar la conversación.
 
 ## Modelos
 
-Verificado en el catálogo de OpenAI a la fecha:
+Los identificadores de una versión anterior de este documento (`gpt-5.6-terra` y
+compañía) **no existían**: eran marcadores de posición que llegaron al código y al
+instalador. La API devolvía 404 al primer mensaje. Lo que sigue está tomado de
+`GET /v1/models` con la clave del cliente.
 
-| Modelo | Entrada / salida por 1M tokens | Uso sugerido |
-|---|---|---|
-| `gpt-5.6-luna` | $0.20 / $1.20 | Opción económica — probar con el set anotado |
-| `gpt-5.6-terra` | $2.00 / $12.00 | **Configurado por defecto** |
-| `gpt-5.6-sol` | $5.00 / $30.00 | Solo si la evaluación lo justifica |
+Probado con las herramientas reales del motor contra la API en vivo:
 
-Se dejó `terra` por defecto porque equivocarse en una fecha u hora de cita tiene costo
-operativo real. **`luna` es 10× más barato y debe probarse con el set anotado**: si
-sostiene la calidad, el ahorro es sustancial en el volumen de WhatsApp de la clínica.
+| Modelo | Ofrece el portal (RN-09.8) | Escala la urgencia | Latencia por turno |
+|---|---|---|---|
+| `gpt-5-mini` | sí | sí, prioridad alta | 4–5 s |
+| `gpt-5` | no: fue a `listar_servicios` | sí, prioridad alta | 5–11 s |
+| `gpt-4.1-mini` | no | **no**: respondió solo texto | ~1 s |
+
+**Configurado por defecto: `gpt-5-mini`.**
+
+`gpt-4.1-mini` es cinco veces más rápido y por eso resulta tentador, pero falló en lo
+único que no puede fallar: ante «mi hijo tiene fiebre alta y vómito» dio consejo médico
+en texto **sin llamar a `escalar_a_asistente`**. El padre recibe una respuesta y ninguna
+asistente se entera. La latencia no es la restricción que manda aquí.
+
+Esto es una prueba de humo de dos casos, no una evaluación: sigue pendiente el set de
+30 mensajes anotados, que es el que decide de verdad. `gpt-5-nano` no se probó y es el
+siguiente candidato a evaluar por costo.
 
 ## Pendiente antes de conectar las claves
 

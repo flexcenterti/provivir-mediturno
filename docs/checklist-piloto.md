@@ -47,7 +47,7 @@ son credenciales, insumos del cliente o decisiones suyas.
 
 - ⬜ Acuerdo de tratamiento de datos (DPA) con OpenAI y verificación de su retención de API.
 - ⬜ Actualizar el aviso de privacidad del portal para declarar el procesamiento por terceros.
-- ⬜ Probar `gpt-5.6-luna` contra `gpt-5.6-terra` con el set de 30 mensajes anotados: es 10× más barato.
+- ⬜ Probar `gpt-5-nano` contra `gpt-5-mini` (el configurado) con el set de 30 mensajes anotados.
 
 Detalle en `docs/adr-a5-proveedor-ia.md`.
 

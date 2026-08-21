@@ -110,7 +110,7 @@ META_WEBHOOK_VERIFY_TOKEN=djvnksdfj489_
 # IA conversacional y transcripción
 IA_PROVEEDOR=openai
 OPENAI_API_KEY=
-OPENAI_MODEL=gpt-5.6-terra
+OPENAI_MODEL=gpt-5-mini
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-opus-5
 

@@ -42,7 +42,7 @@ const esquema = z.object({
   // los dos adaptadores viven en ia/adaptadores/.
   IA_PROVEEDOR: z.enum(['openai', 'anthropic']).default('openai'),
   OPENAI_API_KEY: z.string().optional(),
-  OPENAI_MODEL: z.string().default('gpt-5.6-terra'),
+  OPENAI_MODEL: z.string().default('gpt-5-mini'),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default('claude-opus-5'),
 

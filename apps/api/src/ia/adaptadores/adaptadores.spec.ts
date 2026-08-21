@@ -133,6 +133,70 @@ describe('Adaptador de OpenAI', () => {
     expect(r).toEqual({ texto: 'Listo', llamadas: [], motivo: 'fin' });
   });
 
+  describe('esquemas en modo strict', () => {
+    const estricto = (e: Record<string, unknown>) =>
+      (adaptador as unknown as { aEsquemaEstricto(x: Record<string, unknown>): Record<string, unknown> })
+        .aEsquemaEstricto(e);
+
+    /**
+     * Comprueba la única regla que la API impone y que no se ve venir: en `strict`,
+     * `required` debe listar TODAS las propiedades. Omitir una devuelve 400 y
+     * tumba la conversación entera, no solo esa herramienta.
+     */
+    const todasObligatorias = (e: Record<string, unknown>, ruta = 'raíz'): void => {
+      const props = e.properties as Record<string, Record<string, unknown>> | undefined;
+      if (props) {
+        expect(new Set(e.required as string[])).toEqual(new Set(Object.keys(props)));
+        for (const [k, sub] of Object.entries(props)) todasObligatorias(sub, `${ruta}.${k}`);
+      }
+      if (e.items && typeof e.items === 'object') todasObligatorias(e.items as Record<string, unknown>, `${ruta}[]`);
+    };
+
+    it('cada herramienta del motor sobrevive a la conversión', () => {
+      for (const h of HERRAMIENTAS) todasObligatorias(estricto(h.parametros));
+    });
+
+    it('lo opcional pasa a admitir null en vez de desaparecer', () => {
+      // ofrecer_cupos.prestadorId es opcional: filtrar por un médico concreto.
+      const e = estricto(HERRAMIENTAS.find((h) => h.nombre === 'ofrecer_cupos')!.parametros);
+      const props = e.properties as Record<string, { type: unknown }>;
+      expect(props.prestadorId!.type).toEqual(['string', 'null']);
+      // Lo que ya era obligatorio no se toca.
+      expect(props.servicioId!.type).toBe('string');
+    });
+
+    it('un enum nulificable admite null también entre sus valores', () => {
+      const e = estricto({
+        type: 'object',
+        properties: { prioridad: { type: 'string', enum: ['alta', 'baja'] } },
+        required: [],
+      });
+      expect((e.properties as Record<string, unknown>).prioridad).toMatchObject({
+        type: ['string', 'null'],
+        enum: ['alta', 'baja', null],
+      });
+    });
+
+    it('desciende por objetos anidados y por items de arreglo', () => {
+      const e = estricto({
+        type: 'object',
+        properties: {
+          lista: { type: 'array', items: { type: 'object', properties: { a: { type: 'string' } }, required: [] } },
+        },
+        required: ['lista'],
+      });
+      const items = (e.properties as Record<string, { items: Record<string, unknown> }>).lista!.items;
+      expect(items.required).toEqual(['a']);
+    });
+
+    it('no altera el esquema original: las herramientas siguen siendo neutras', () => {
+      const original = HERRAMIENTAS.find((h) => h.nombre === 'ofrecer_cupos')!.parametros;
+      const antes = JSON.stringify(original);
+      estricto(original);
+      expect(JSON.stringify(original)).toBe(antes);
+    });
+  });
+
   it('lee una respuesta con herramientas y deserializa los argumentos', () => {
     const r = leer({
       choices: [{

@@ -22,7 +22,7 @@ export class OpenAiAdaptador implements ClienteLlm {
 
   constructor(config: ConfigService) {
     const apiKey = config.get<string>('OPENAI_API_KEY');
-    this.modelo = config.get<string>('OPENAI_MODEL') ?? 'gpt-5.6-terra';
+    this.modelo = config.get<string>('OPENAI_MODEL') ?? 'gpt-5-mini';
 
     if (apiKey) this.cliente = new OpenAI({ apiKey });
     else this.log.warn('OPENAI_API_KEY sin configurar');
@@ -53,14 +53,62 @@ export class OpenAiAdaptador implements ClienteLlm {
         function: {
           name: h.nombre,
           description: h.descripcion,
-          parameters: h.parametros,
           // Garantiza que los argumentos validen contra el esquema.
+          parameters: this.aEsquemaEstricto(h.parametros),
           strict: true,
         },
       })),
     });
 
     return this.aRespuesta(respuesta);
+  }
+
+  /**
+   * En modo `strict`, OpenAI exige que TODA propiedad aparezca en `required`: lo
+   * opcional se expresa admitiendo `null`, no omitiéndolo. Anthropic no lo pide.
+   *
+   * Es una exigencia del proveedor, no del dominio, así que la traducción vive
+   * aquí y las herramientas siguen declarando obligatorio solo lo que de verdad
+   * lo es. Sin esto la API responde 400 y la conversación entera se cae:
+   *   "'required' ... to be an array including every key in properties"
+   */
+  private aEsquemaEstricto(esquema: Record<string, unknown>): Record<string, unknown> {
+    const salida: Record<string, unknown> = { ...esquema };
+
+    const propiedades = salida.properties as Record<string, Record<string, unknown>> | undefined;
+    if (propiedades) {
+      const obligatorias = new Set((salida.required as string[] | undefined) ?? []);
+      salida.properties = Object.fromEntries(
+        Object.entries(propiedades).map(([clave, sub]) => {
+          const convertida = this.aEsquemaEstricto(sub);
+          return [clave, obligatorias.has(clave) ? convertida : this.admitirNulo(convertida)];
+        }),
+      );
+      // Todas, no solo las obligatorias: eso es lo que `strict` significa aquí.
+      salida.required = Object.keys(propiedades);
+    }
+
+    if (salida.items && typeof salida.items === 'object') {
+      salida.items = this.aEsquemaEstricto(salida.items as Record<string, unknown>);
+    }
+
+    return salida;
+  }
+
+  /** Vuelve nulificable un subesquema, conservando el resto de sus restricciones. */
+  private admitirNulo(esquema: Record<string, unknown>): Record<string, unknown> {
+    const tipo = esquema.type;
+    if (tipo === undefined) return esquema;
+
+    const tipos = Array.isArray(tipo) ? tipo : [tipo];
+    if (tipos.includes('null')) return esquema;
+
+    const salida: Record<string, unknown> = { ...esquema, type: [...tipos, 'null'] };
+    // Un enum nulificable debe admitir null también en la lista de valores.
+    if (Array.isArray(salida.enum) && !salida.enum.includes(null)) {
+      salida.enum = [...salida.enum, null];
+    }
+    return salida;
   }
 
   private aMensajes(mensajes: MensajeLlm[]): OpenAI.Chat.ChatCompletionMessageParam[] {
