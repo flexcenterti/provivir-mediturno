@@ -1,0 +1,581 @@
+{
+  "info": {
+    "name": "Provivir · Webhook WhatsApp",
+    "description": "Simula lo que hace Meta contra el webhook de la plataforma.\n\nANTES DE EMPEZAR: define las variables `base`, `META_APP_SECRET` y `META_WEBHOOK_VERIFY_TOKEN` en la pestaña Variables de la colección (o en un Environment).\n\nLa firma HMAC se calcula sola en el pre-request script de la colección. No hay que copiar nada a mano.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Firma cada POST igual que lo hace Meta (HMAC-SHA256 del cuerpo).",
+          "// El GET de verificación no lleva firma.",
+          "if (pm.request.method === 'POST' && pm.request.body && pm.request.body.raw) {",
+          "",
+          "    // Un id único por envío. Si se repite, la plataforma lo toma como un reintento",
+          "    // de Meta y lo ignora: responde 200 pero no procesa nada, y parece que funcionó.",
+          "    pm.collectionVariables.set('wamid', 'wamid.postman.' + Date.now());",
+          "    pm.collectionVariables.set('timestamp', Math.floor(Date.now() / 1000));",
+          "",
+          "    const secreto = pm.environment.get('META_APP_SECRET')",
+          "        || pm.collectionVariables.get('META_APP_SECRET');",
+          "",
+          "    if (!secreto) {",
+          "        console.warn('Falta META_APP_SECRET: la petición saldrá sin firma y dará 401.');",
+          "    } else {",
+          "        // CLAVE: se firma el cuerpo YA RESUELTO. Firmar la plantilla con {{variables}}",
+          "        // produce una firma que nunca coincide con lo que realmente viaja.",
+          "        const cuerpo = pm.variables.replaceIn(pm.request.body.raw);",
+          "        const firma = CryptoJS.HmacSHA256(cuerpo, secreto).toString(CryptoJS.enc.Hex);",
+          "        pm.request.headers.upsert({ key: 'x-hub-signature-256', value: 'sha256=' + firma });",
+          "    }",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://localhost:3000",
+      "description": "Local: http://localhost:3000 · Servidor: https://provivir.exagos.co"
+    },
+    {
+      "key": "META_APP_SECRET",
+      "value": "secreto-local-de-pruebas-reemplazar-por-el-de-meta",
+      "description": "El de la app de Meta. En local, el mismo del .env."
+    },
+    {
+      "key": "META_WEBHOOK_VERIFY_TOKEN",
+      "value": "djvnksdfj489_"
+    },
+    {
+      "key": "telefono",
+      "value": "573001234567",
+      "description": "Número del paciente simulado"
+    },
+    {
+      "key": "wamid",
+      "value": "",
+      "description": "Lo genera el pre-request script"
+    },
+    {
+      "key": "timestamp",
+      "value": "",
+      "description": "Lo genera el pre-request script"
+    }
+  ],
+  "item": [
+    {
+      "name": "1 · Verificación de registro",
+      "item": [
+        {
+          "name": "Token correcto → devuelve el challenge",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));",
+                  "pm.test('el cuerpo es exactamente el challenge', () => pm.response.text() === '1234567890');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token={{META_WEBHOOK_VERIFY_TOKEN}}&hub.challenge=1234567890",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "whatsapp"
+              ],
+              "query": [
+                {
+                  "key": "hub.mode",
+                  "value": "subscribe"
+                },
+                {
+                  "key": "hub.verify_token",
+                  "value": "{{META_WEBHOOK_VERIFY_TOKEN}}"
+                },
+                {
+                  "key": "hub.challenge",
+                  "value": "1234567890"
+                }
+              ]
+            },
+            "description": "Lo que Meta hace al dar de alta la URL. Debe devolver el challenge tal cual, sin comillas ni JSON."
+          }
+        },
+        {
+          "name": "Token incorrecto → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=token-equivocado&hub.challenge=1234567890",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "whatsapp"
+              ],
+              "query": [
+                {
+                  "key": "hub.mode",
+                  "value": "subscribe"
+                },
+                {
+                  "key": "hub.verify_token",
+                  "value": "token-equivocado"
+                },
+                {
+                  "key": "hub.challenge",
+                  "value": "1234567890"
+                }
+              ]
+            },
+            "description": "Impide que alguien más registre su app apuntando a tu webhook."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 · Firma HMAC",
+      "item": [
+        {
+          "name": "Firma válida → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WABA_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"573150000001\",\n              \"phone_number_id\": \"PHONE_ID\"\n            },\n            \"contacts\": [\n              {\n                \"profile\": {\n                  \"name\": \"Paciente de Prueba\"\n                },\n                \"wa_id\": \"{{telefono}}\"\n              }\n            ],\n            \"messages\": [\n              {\n                \"id\": \"{{wamid}}\",\n                \"from\": \"{{telefono}}\",\n                \"timestamp\": \"{{timestamp}}\",\n                \"type\": \"text\",\n                \"text\": {\n                  \"body\": \"Hola, quiero agendar una cita\"\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base}}/api/webhooks/whatsapp",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "whatsapp"
+              ]
+            },
+            "description": "El pre-request script firma el cuerpo con META_APP_SECRET."
+          }
+        },
+        {
+          "name": "Sin firma → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WABA_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"573150000001\",\n              \"phone_number_id\": \"PHONE_ID\"\n            },\n            \"contacts\": [\n              {\n                \"profile\": {\n                  \"name\": \"Paciente de Prueba\"\n                },\n                \"wa_id\": \"{{telefono}}\"\n              }\n            ],\n            \"messages\": [\n              {\n                \"id\": \"{{wamid}}\",\n                \"from\": \"{{telefono}}\",\n                \"timestamp\": \"{{timestamp}}\",\n                \"type\": \"text\",\n                \"text\": {\n                  \"body\": \"hola\"\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base}}/api/webhooks/whatsapp",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "whatsapp"
+              ]
+            },
+            "description": "Ojo: para que este dé 401 hay que DESACTIVAR el pre-request script de la colección desde la pestaña Scripts de esta petición, o cambiar temporalmente META_APP_SECRET a vacío."
+          }
+        },
+        {
+          "name": "Firma de otro secreto → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-hub-signature-256",
+                "value": "sha256=0000000000000000000000000000000000000000000000000000000000000000"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WABA_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"573150000001\",\n              \"phone_number_id\": \"PHONE_ID\"\n            },\n            \"contacts\": [\n              {\n                \"profile\": {\n                  \"name\": \"Paciente de Prueba\"\n                },\n                \"wa_id\": \"{{telefono}}\"\n              }\n            ],\n            \"messages\": [\n              {\n                \"id\": \"{{wamid}}\",\n                \"from\": \"{{telefono}}\",\n                \"timestamp\": \"{{timestamp}}\",\n                \"type\": \"text\",\n                \"text\": {\n                  \"body\": \"hola\"\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base}}/api/webhooks/whatsapp",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "whatsapp"
+              ]
+            },
+            "description": "La cabecera fija de abajo pisa la que calcula el script: es una firma con formato válido pero de otro secreto."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 · Tipos de mensaje entrante",
+      "item": [
+        {
+          "name": "Texto → la IA responde o escala",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WABA_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"573150000001\",\n              \"phone_number_id\": \"PHONE_ID\"\n            },\n            \"contacts\": [\n              {\n                \"profile\": {\n                  \"name\": \"Paciente de Prueba\"\n                },\n                \"wa_id\": \"{{telefono}}\"\n              }\n            ],\n            \"messages\": [\n              {\n                \"id\": \"{{wamid}}\",\n                \"from\": \"{{telefono}}\",\n                \"timestamp\": \"{{timestamp}}\",\n                \"type\": \"text\",\n                \"text\": {\n                  \"body\": \"Quiero una cita de medicina general\"\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base}}/api/webhooks/whatsapp",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "whatsapp"
+              ]
+            },
+            "description": "Sin clave de IA configurada, la conversación escala a la asistente."
+          }
+        },
+        {
+          "name": "Nota de voz → escala si no hay STT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WABA_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"573150000001\",\n              \"phone_number_id\": \"PHONE_ID\"\n            },\n            \"contacts\": [\n              {\n                \"profile\": {\n                  \"name\": \"Paciente de Prueba\"\n                },\n                \"wa_id\": \"{{telefono}}\"\n              }\n            ],\n            \"messages\": [\n              {\n                \"id\": \"{{wamid}}\",\n                \"from\": \"{{telefono}}\",\n                \"timestamp\": \"{{timestamp}}\",\n                \"type\": \"audio\",\n                \"audio\": {\n                  \"id\": \"MEDIA_AUDIO_1\",\n                  \"mime_type\": \"audio/ogg\",\n                  \"voice\": true\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base}}/api/webhooks/whatsapp",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "whatsapp"
+              ]
+            },
+            "description": "RN-09.2: sin transcripción configurada NO se adivina el contenido; escala con el audio adjunto."
+          }
+        },
+        {
+          "name": "Imagen (orden médica) → escala de inmediato",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WABA_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"573150000001\",\n              \"phone_number_id\": \"PHONE_ID\"\n            },\n            \"contacts\": [\n              {\n                \"profile\": {\n                  \"name\": \"Paciente de Prueba\"\n                },\n                \"wa_id\": \"{{telefono}}\"\n              }\n            ],\n            \"messages\": [\n              {\n                \"id\": \"{{wamid}}\",\n                \"from\": \"{{telefono}}\",\n                \"timestamp\": \"{{timestamp}}\",\n                \"type\": \"image\",\n                \"image\": {\n                  \"id\": \"MEDIA_IMG_1\",\n                  \"mime_type\": \"image/jpeg\"\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base}}/api/webhooks/whatsapp",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "whatsapp"
+              ]
+            },
+            "description": "RN-08: escala SIN pasar por la IA. La caligrafía médica no es fuente de verdad."
+          }
+        },
+        {
+          "name": "Documento PDF",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WABA_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"573150000001\",\n              \"phone_number_id\": \"PHONE_ID\"\n            },\n            \"contacts\": [\n              {\n                \"profile\": {\n                  \"name\": \"Paciente de Prueba\"\n                },\n                \"wa_id\": \"{{telefono}}\"\n              }\n            ],\n            \"messages\": [\n              {\n                \"id\": \"{{wamid}}\",\n                \"from\": \"{{telefono}}\",\n                \"timestamp\": \"{{timestamp}}\",\n                \"type\": \"document\",\n                \"document\": {\n                  \"id\": \"MEDIA_DOC_1\",\n                  \"mime_type\": \"application/pdf\",\n                  \"filename\": \"orden.pdf\"\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base}}/api/webhooks/whatsapp",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "whatsapp"
+              ]
+            },
+            "description": "Se trata igual que una imagen: escala con el archivo adjunto."
+          }
+        },
+        {
+          "name": "Respuesta a botón",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WABA_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"messaging_product\": \"whatsapp\",\n            \"metadata\": {\n              \"display_phone_number\": \"573150000001\",\n              \"phone_number_id\": \"PHONE_ID\"\n            },\n            \"contacts\": [\n              {\n                \"profile\": {\n                  \"name\": \"Paciente de Prueba\"\n                },\n                \"wa_id\": \"{{telefono}}\"\n              }\n            ],\n            \"messages\": [\n              {\n                \"id\": \"{{wamid}}\",\n                \"from\": \"{{telefono}}\",\n                \"timestamp\": \"{{timestamp}}\",\n                \"type\": \"interactive\",\n                \"interactive\": {\n                  \"type\": \"button_reply\",\n                  \"button_reply\": {\n                    \"id\": \"chat\",\n                    \"title\": \"Seguir por aquí\"\n                  }\n                }\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base}}/api/webhooks/whatsapp",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "whatsapp"
+              ]
+            },
+            "description": "Se normaliza como texto para que la IA no distinga el canal."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 · Eventos que no son mensajes",
+      "item": [
+        {
+          "name": "Acuse de entrega → 200 e ignorado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('responde 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"object\": \"whatsapp_business_account\",\n  \"entry\": [\n    {\n      \"id\": \"WABA_ID\",\n      \"changes\": [\n        {\n          \"field\": \"messages\",\n          \"value\": {\n            \"statuses\": [\n              {\n                \"id\": \"wamid.x\",\n                \"status\": \"delivered\",\n                \"timestamp\": \"1\",\n                \"recipient_id\": \"573001234567\"\n              }\n            ]\n          }\n        }\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base}}/api/webhooks/whatsapp",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "webhooks",
+                "whatsapp"
+              ]
+            },
+            "description": "Meta manda muchos de estos. Se aceptan y se ignoran: no son mensajes del paciente."
+          }
+        }
+      ]
+    }
+  ]
+}
