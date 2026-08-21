@@ -12,8 +12,16 @@
  * NO crea servicios, prestadores ni agendas: eso es el catálogo real de la
  * clínica y se carga desde el backoffice, que existe justo para ello.
  *
- * Uso:
- *   npx ts-node scripts/alta-inicial.ts --email admin@grupoprovivir.com --nombre "John Mendoza"
+ * Vive en src/ y no en scripts/ a propósito: así lo compila `nest build` y viaja
+ * dentro de la imagen, que no lleva ts-node ni los fuentes. Colgarlo de scripts/
+ * exigiría meter ese directorio en el `include`, y eso desplaza el rootDir y
+ * anida todo el dist bajo dist/src.
+ *
+ * En producción:
+ *   node apps/api/dist/cli/alta-inicial.js --email admin@grupoprovivir.com --nombre "John Mendoza"
+ *
+ * En desarrollo:
+ *   npx ts-node src/cli/alta-inicial.ts --email ... --nombre ...
  *
  * Opciones:
  *   --rol admin|asistente|prestador|pantalla   (por defecto: admin)
@@ -24,7 +32,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { PrismaClient, type Rol } from '@prisma/client';
-import { hashearPassword } from '../src/auth/argon2.opciones';
+import { hashearPassword } from '../auth/argon2.opciones';
 
 const prisma = new PrismaClient();
 
