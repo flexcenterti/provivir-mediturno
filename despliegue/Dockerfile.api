@@ -21,7 +21,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # postgresql-client para los respaldos; tini para que las señales lleguen al proceso.
-RUN apk add --no-cache postgresql16-client openssl tini
+# El nombre del paquete de cliente cambia entre versiones de Alpine: se intenta el
+# de la major que usamos y se cae al genérico, en vez de romper la imagen entera.
+RUN apk add --no-cache openssl tini \
+ && (apk add --no-cache postgresql16-client \
+     || apk add --no-cache postgresql-client \
+     || echo "AVISO: sin cliente de postgres en la imagen; los respaldos se harán desde el contenedor de la base")
 
 COPY package*.json ./
 COPY packages/shared/package.json packages/shared/
