@@ -6,6 +6,12 @@ import {
 
 type Seccion = 'carga' | 'auditoria' | 'pantallas' | 'kiosko' | 'configuracion';
 
+/**
+ * En producción las tres apps comparten dominio y la TV vive en /tv.
+ * En desarrollo cada una corre en su puerto, así que se apunta al de la TV.
+ */
+const URL_PANTALLAS = import.meta.env.DEV ? 'http://localhost:5175/' : '/tv/';
+
 const SECCIONES: Array<{ id: Seccion; etiqueta: string }> = [
   { id: 'carga', etiqueta: 'Carga masiva' },
   { id: 'auditoria', etiqueta: 'Auditoría' },
@@ -262,7 +268,9 @@ function Pantallas() {
                 </td>
                 <td className="acciones-fila">
                   <button className="btn btn-ghost" onClick={() => setEditando(p)}>Configurar</button>
-                  <a className="btn btn-ghost" href={`http://localhost:5175/?pantalla=${p.id}`}
+                  {/* Relativo: en producción la TV cuelga de /tv del mismo dominio,
+                      y en desarrollo el proxy de Vite lo resuelve igual. */}
+                  <a className="btn btn-ghost" href={`${URL_PANTALLAS}?pantalla=${p.id}`}
                      target="_blank" rel="noreferrer">Abrir</a>
                 </td>
               </tr>

@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  // En producción esta app se sirve bajo una subruta del dominio único, así que
+  // los assets deben resolverse relativos a ella. En desarrollo vive en la raíz
+  // de su propio puerto, por eso el valor es configurable.
+  base: process.env.BASE_PUBLICA ?? '/citas/',
   server: {
     port: 5174,
     // Evita CORS en desarrollo: el front habla con /api del mismo origen.

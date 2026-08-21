@@ -32,9 +32,11 @@ JWT_SECRET=CAMBIAR
 JWT_ACCESS_TTL=15m
 JWT_REFRESH_TTL=7d
 
-# Dominios reales
-CORS_ORIGINS=https://agenda.grupoprovivir.com,https://citas.grupoprovivir.com,https://tv.grupoprovivir.com
-PORTAL_URL=https://citas.grupoprovivir.com
+# Dominio público. Temporal: provivir.exagos.co
+# Cambiarlo aquí actualiza Caddy, el QR y el enlace que envía el bot por WhatsApp.
+DOMINIO=provivir.exagos.co
+CORS_ORIGINS=https://provivir.exagos.co
+PORTAL_URL=https://provivir.exagos.co/citas
 
 # Rate limiting (valores de producción)
 THROTTLE_TTL_MS=60000
@@ -76,10 +78,13 @@ pacientes sin cifrar no debe existir.
 ```bash
 git clone <repo> /opt/provivir && cd /opt/provivir
 npm ci && npm run build          # genera los tres frontends
+
+# Dominio único con rutas: el backoffice va en la raíz, portal y TV en subcarpetas
+# que coinciden con el `base` con que se compilaron.
 mkdir -p despliegue/web
-cp -r apps/backoffice/dist despliegue/web/backoffice
-cp -r apps/portal/dist     despliegue/web/portal
-cp -r apps/tv/dist         despliegue/web/tv
+cp -r apps/backoffice/dist/.  despliegue/web/
+cp -r apps/portal/dist        despliegue/web/citas
+cp -r apps/tv/dist            despliegue/web/tv
 
 docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env up -d
 docker compose -f despliegue/docker-compose.prod.yml exec api npx prisma migrate deploy
@@ -90,17 +95,47 @@ credenciales reales se crean aparte, una vez.
 
 ## 4. DNS y TLS
 
-Apunta al servidor: `agenda`, `citas`, `wa` y `tv` bajo `grupoprovivir.com`.
-Caddy emite y renueva los certificados solo; no hay que tocar nada.
+Un solo registro `A` apuntando al servidor:
 
-`tv.grupoprovivir.com` **solo responde desde la red interna de la sede** — ajusta los
-rangos IP del `Caddyfile` a la red real de la clínica.
+```
+provivir.exagos.co    A    <IP del VPS>
+```
+
+Caddy emite y renueva el certificado solo. Todo cuelga de ese host:
+
+| Ruta | Aplicación |
+|---|---|
+| `/` | Backoffice (tras login) |
+| `/citas` | Portal público de autoagendamiento |
+| `/tv` | Pantallas de sala — **solo desde la red de la sede** |
+| `/api` | API |
+| `/api/webhooks/whatsapp` | Webhook de Meta |
+| `/tiempo-real` | WebSocket de llamados |
+
+Ajusta los rangos IP de `@redInterna` en el `Caddyfile` a la red real de la clínica.
+
+### Cambiar al dominio definitivo
+
+Cuando el cliente defina su dominio, son tres líneas en `/etc/provivir/.env`:
+
+```bash
+DOMINIO=agenda.grupoprovivir.com
+CORS_ORIGINS=https://agenda.grupoprovivir.com
+PORTAL_URL=https://agenda.grupoprovivir.com/citas
+```
+
+Luego `docker compose up -d caddy api`. Caddy pide el certificado nuevo solo.
+
+**Antes de cambiar, revisa qué apunta al dominio viejo:** el webhook registrado en el
+panel de Meta, los QR impresos en la sede y el iframe embebido en el sitio del cliente.
+Si el dominio definitivo permite subdominios, `Caddyfile.subdominios.ejemplo` tiene la
+variante con un host por aplicación.
 
 ## 5. Webhook de Meta
 
 En el panel de Meta, con el número de **prueba** primero:
 
-- URL: `https://wa.grupoprovivir.com/api/webhooks/whatsapp`
+- URL: `https://provivir.exagos.co/api/webhooks/whatsapp`
 - Token de verificación: el mismo `META_WEBHOOK_VERIFY_TOKEN`
 - Campo suscrito: `messages`
 
@@ -129,18 +164,19 @@ Copiar los respaldos **fuera del servidor**: si el VPS muere, los respaldos muer
 ## 7. Verificación posterior
 
 ```bash
-curl -sS https://agenda.grupoprovivir.com/api/health/ready       # {"estado":"ok","db":"ok"}
+curl -sS https://provivir.exagos.co/api/health/ready       # {"estado":"ok","db":"ok"}
 docker compose -f despliegue/docker-compose.prod.yml ps          # todo healthy
 docker compose -f despliegue/docker-compose.prod.yml logs -f api
 ```
 
-Revisa las cabeceras en <https://securityheaders.com> apuntando a los dos dominios públicos.
+Revisa las cabeceras en <https://securityheaders.com> apuntando a `https://provivir.exagos.co`
+y a `https://provivir.exagos.co/citas`, que llevan políticas distintas.
 
 ## 8. Actualizaciones
 
 ```bash
 cd /opt/provivir && git pull
-npm ci && npm run build && cp -r apps/*/dist despliegue/web/...
+npm ci && npm run build && cp -r apps/backoffice/dist/. despliegue/web/ && cp -r apps/portal/dist despliegue/web/citas && cp -r apps/tv/dist despliegue/web/tv
 docker compose -f despliegue/docker-compose.prod.yml up -d --build api
 docker compose -f despliegue/docker-compose.prod.yml exec api npx prisma migrate deploy
 ```

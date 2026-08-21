@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  base: process.env.BASE_PUBLICA ?? '/',
   server: {
     port: 5173,
     // Evita CORS en desarrollo: el front habla con /api del mismo origen.

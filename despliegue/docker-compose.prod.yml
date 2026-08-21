@@ -62,6 +62,9 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: always
+    # El dominio se inyecta aquí: cambiarlo es editar /etc/provivir/.env y reiniciar.
+    environment:
+      DOMINIO: ${DOMINIO:?falta DOMINIO}
     ports: ["80:80", "443:443", "443:443/udp"]
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro

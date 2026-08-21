@@ -26,7 +26,7 @@ son credenciales, insumos del cliente o decisiones suyas.
 | ⬜ C2 | Meta: `APP_SECRET`, `ACCESS_TOKEN`, `PHONE_NUMBER_ID`, `WEBHOOK_VERIFY_TOKEN` | Cliente + Meta | Todo el canal WhatsApp. **Camino crítico más largo**: exige verificación de negocio con documentos legales del cliente. Empezar ya. |
 | ⬜ C3 | `TURNSTILE_SECRET` | Equipo técnico | CAPTCHA del portal. Sin él el portal opera con rate limiting pero sin CAPTCHA. |
 | ⬜ C4 | STT · resuelto con OpenAI Whisper | Equipo técnico | Solo configuración, cero código: `STT_URL=https://api.openai.com/v1/audio/transcriptions` y la misma clave de C1. |
-| ⬜ C5 | Dominios y DNS | Cliente | `PORTAL_URL`, CORS, certificados. |
+| ⬜ C5 | DNS de `provivir.exagos.co` → IP del VPS | Equipo técnico | Un solo registro A. Caddy emite el certificado solo. |
 
 ## Insumos del cliente (P1–P10)
 
@@ -73,6 +73,16 @@ Detalle en `docs/adr-a5-proveedor-ia.md`.
   wifi en salas, impresora de tickets.
 - ⬜ Capacitación: asistentes (bandeja y mostrador), John (dashboard), médicos (vista prestador, 10 min).
 - ⬜ Respaldos copiados **fuera del servidor**.
+
+## Dominio temporal
+
+Se despliega en **`provivir.exagos.co`** con enrutamiento por ruta (`/` backoffice,
+`/citas` portal, `/tv` pantallas), pendiente del dominio definitivo del cliente.
+Cambiarlo son tres variables en `/etc/provivir/.env` y un reinicio de Caddy.
+
+⚠️ **No imprimir los QR de la sede hasta tener el dominio definitivo.** El QR codifica
+`PORTAL_URL`; si el dominio cambia después, todo lo impreso queda muerto. Lo mismo aplica
+al iframe embebido en el sitio del cliente y a la URL registrada en el panel de Meta.
 
 ## Brecha de cobertura conocida
 
