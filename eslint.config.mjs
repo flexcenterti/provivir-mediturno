@@ -18,8 +18,9 @@ export default tseslint.config(
     },
   },
   {
-    // El seed y los scripts de arranque reportan por consola a propósito.
-    files: ['apps/api/prisma/seed.ts', 'apps/api/scripts/**/*.ts'],
+    // El seed, los scripts de arranque y los CLI reportan por consola a propósito:
+    // su salida ES la interfaz, no un rastro de depuración olvidado.
+    files: ['apps/api/prisma/seed.ts', 'apps/api/scripts/**/*.ts', 'apps/api/src/cli/**/*.ts'],
     rules: { 'no-console': 'off' },
   },
   {
