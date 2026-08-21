@@ -145,9 +145,14 @@ describe('Auth (e2e)', () => {
       expect(r.body.estado).toBe('ok');
     });
 
-    it('/api/health/ready confirma que la base responde', async () => {
+    it('/api/health/ready confirma que la base responde Y tiene el esquema', async () => {
       const r = await request(app.getHttpServer()).get('/api/health/ready').expect(200);
-      expect(r.body).toEqual({ estado: 'ok', db: 'ok' });
+      expect(r.body).toMatchObject({ estado: 'ok', db: 'ok' });
+    });
+
+    it('el readiness reporta si la configuración se cargó', async () => {
+      const r = await request(app.getHttpServer()).get('/api/health/ready').expect(200);
+      expect(r.body.configuracion).toBe('ok');
     });
   });
 });

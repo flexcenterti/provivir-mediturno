@@ -1,6 +1,8 @@
 node_modules/
 dist/
 build/
+# Frontends compilados que el instalador coloca para Caddy
+despliegue/web/
 coverage/
 *.log
 .DS_Store

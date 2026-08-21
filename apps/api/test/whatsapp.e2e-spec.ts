@@ -62,7 +62,8 @@ describe('Canal WhatsApp (e2e)', () => {
   let llm: LlmFalso;
   let http: ReturnType<INestApplication['getHttpServer']>;
 
-  const SECRETO = 'secreto-de-prueba';
+  // Definidos en test/setup-e2e.ts, que corre antes de importar AppModule.
+  const SECRETO = process.env.META_APP_SECRET!;
   const TEL = '+573009991111';
   const DOC = '9600000001';
   const LUNES = '2026-09-21';
@@ -70,9 +71,6 @@ describe('Canal WhatsApp (e2e)', () => {
   let enviados: Array<{ telefono: string; texto: string }> = [];
 
   beforeAll(async () => {
-    process.env.META_APP_SECRET = SECRETO;
-    process.env.META_WEBHOOK_VERIFY_TOKEN = 'token-verificacion';
-
     llm = new LlmFalso();
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })

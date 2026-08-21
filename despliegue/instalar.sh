@@ -184,8 +184,24 @@ for _ in $(seq 1 60); do
 done
 
 paso "Migraciones"
-docker compose -f "$COMPOSE" --env-file "$ENV_PROD" exec -T api npx prisma migrate deploy
+
+# `run --rm` levanta un contenedor efímero con las mismas dependencias. Con `exec`
+# había un círculo vicioso: la API no arranca sin el esquema, y el esquema se
+# aplicaba dentro de la API. Resultado: reinicios en bucle.
+docker compose -f "$COMPOSE" --env-file "$ENV_PROD" \
+  run --rm --entrypoint sh api -c "cd apps/api && npx prisma migrate deploy"
 ok "esquema al día"
+
+# Ahora que el esquema existe, la API puede arrancar de verdad.
+docker compose -f "$COMPOSE" --env-file "$ENV_PROD" up -d --force-recreate api
+echo "  esperando a que la API responda…"
+for _ in $(seq 1 45); do
+  if docker compose -f "$COMPOSE" --env-file "$ENV_PROD" exec -T api \
+       node -e "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+    ok "API respondiendo"; break
+  fi
+  sleep 2
+done
 
 # El seed crea usuarios con contraseña conocida: nunca en producción.
 aviso "El seed NO se ejecuta en producción. Las credenciales reales se crean aparte."

@@ -4,3 +4,4 @@ node_modules
 .pgdata
 docs
 apps/api/prisma/migrations
+despliegue/web

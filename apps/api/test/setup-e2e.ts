@@ -5,3 +5,13 @@
  */
 process.env.THROTTLE_LOGIN_LIMIT = '1000';
 process.env.THROTTLE_LIMIT = '10000';
+
+/**
+ * Credenciales de Meta para las pruebas del webhook.
+ *
+ * Van AQUÍ y no en el `beforeAll` del test: `ConfigModule.forRoot()` lee y valida
+ * el entorno al importar el módulo, que ocurre antes de que corra cualquier hook.
+ * Asignarlas después no tendría efecto.
+ */
+process.env.META_APP_SECRET = 'secreto-de-prueba';
+process.env.META_WEBHOOK_VERIFY_TOKEN = 'token-verificacion';

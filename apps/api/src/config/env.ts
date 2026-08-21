@@ -59,7 +59,14 @@ const esquema = z.object({
 export type Env = z.infer<typeof esquema>;
 
 export function validarEnv(config: Record<string, unknown>): Env {
-  const r = esquema.safeParse(config);
+  // Las variables del entorno SIEMPRE ganan sobre el archivo .env.
+  //
+  // Es la precedencia que espera cualquiera: se sobreescribe un valor al desplegar
+  // o al correr una prueba sin tocar archivos. Sin esto, un .env olvidado en el
+  // directorio de trabajo pisa silenciosamente lo que inyecta el contenedor.
+  // zod descarta las claves que no declara el esquema, así que esparcir todo
+  // process.env es seguro.
+  const r = esquema.safeParse({ ...config, ...process.env });
   if (!r.success) {
     const detalle = r.error.issues.map((i) => `  · ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Configuración de entorno inválida:\n${detalle}`);
