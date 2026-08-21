@@ -4,12 +4,10 @@
  * Idempotente: se puede correr varias veces sin duplicar.
  */
 import { PrismaClient, type Prisma } from '@prisma/client';
-import * as argon2 from 'argon2';
+import { hashearPassword } from '../src/auth/argon2.opciones';
 
 const prisma = new PrismaClient();
 const SEDE_ID = 'cdc-oriente';
-
-const ARGON2: argon2.Options = { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 };
 
 /** Solo para desarrollo. En staging/prod las credenciales se crean aparte. */
 const PASSWORD_DEV = 'Provivir2026!';
@@ -187,7 +185,7 @@ async function main(): Promise<void> {
   }
   console.log(`  configuración: ${CONFIGURACION.length} parámetros`);
 
-  const hash = await argon2.hash(PASSWORD_DEV, ARGON2);
+  const hash = await hashearPassword(PASSWORD_DEV);
   const USUARIOS = [
     { nombre: 'John Mendoza',   email: 'admin@provivir.local',      rol: 'admin' as const,     prestadorId: null },
     { nombre: 'Paula Asistente', email: 'asistente@provivir.local',  rol: 'asistente' as const, prestadorId: null },

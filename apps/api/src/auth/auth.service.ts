@@ -5,17 +5,7 @@ import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayload } from './auth.types';
 import type { LoginDto } from './dto/login.dto';
-
-/**
- * Parámetros Argon2id. Coste deliberadamente alto: el login es infrecuente
- * (asistentes y médicos, no pacientes) y el costo de un hash débil es una fuga de credenciales.
- */
-const ARGON2_OPCIONES: argon2.Options = {
-  type: argon2.argon2id,
-  memoryCost: 19456,
-  timeCost: 2,
-  parallelism: 1,
-};
+import { ARGON2_OPCIONES } from './argon2.opciones';
 
 @Injectable()
 export class AuthService {
