@@ -61,20 +61,21 @@ Un paciente puede escribir sin exponer su teléfono: Meta entrega `from_user_id`
 (`CO.1023…`) en vez de `from`. La plataforma **lo recibe y lo atiende**, con una
 limitación que no depende de nosotros:
 
-**No se le puede responder por API.** Comprobado contra Meta de v21.0 a v26.0 con
-identificadores inexistentes: `to` exige un teléfono, `to_user_id` se ignora y
-`recipient_type` solo acepta `["group","individual"]`. El alias tampoco sirve.
+**Para responderle, el destinatario va en `recipient`, no en `to`.** Poner el
+identificador en `to` devuelve `131009 · The phone number is malformed` y el
+paciente se queda sin respuesta. Comprobado contra la API: `recipient` se reconoce
+desde v21.0.
 
-Qué hace la plataforma mientras tanto: escala la conversación con **prioridad alta**
-y el motivo explícito. Una asistente sí puede contestarle desde la bandeja de
-WhatsApp Business, donde estos usuarios se ven con normalidad. Y como ese paciente
-no tiene teléfono, tampoco se le cruza con la base ni se le mandan recordatorios
-hasta que dé su número.
+Si aun así el envío falla, la conversación se escala con **prioridad alta** en vez
+de reintentar en vano: una asistente puede contestar desde la bandeja de WhatsApp
+Business, donde estos usuarios se ven con normalidad.
+
+Lo que sigue sin poder hacerse es lo que necesita un número: ese paciente no se
+cruza con la base —siempre es «nuevo», aunque lleve años en la clínica— ni recibe
+recordatorios, hasta que dé su teléfono.
 
 - ⬜ Decidir si se agenda a quien no quiere dar teléfono, sabiendo que se queda sin
   recordatorio, o si el número es obligatorio para confirmar la cita.
-- ⬜ Revisar si Meta habilita el envío a estos usuarios: el código ya lo intenta con
-  la forma estándar, así que funcionaría sin tocar nada.
 
 ## Decisiones pendientes del cliente
 

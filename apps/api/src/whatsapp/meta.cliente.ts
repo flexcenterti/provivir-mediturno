@@ -25,16 +25,12 @@ export interface BotonInteractivo {
  * credenciales reales.
  */
 /**
- * El paciente escribió con nombre de usuario y la API no admite responderle.
+ * No se pudo entregar la respuesta a un paciente sin teléfono.
  *
- * Se comprobó contra Meta, de v21.0 a v26.0, con identificadores inexistentes para
- * no molestar a nadie: `to` exige un teléfono («The phone number is malformed»),
- * `to_user_id` se ignora y `recipient_type` solo acepta `["group","individual"]`.
- * El alias tampoco sirve como destino.
- *
- * Es un error PERMANENTE: reintentarlo no lo arregla. Quien lo reciba debe pasar
- * la conversación a una persona, que sí puede contestar desde la bandeja de
- * WhatsApp Business, donde estos usuarios se ven con normalidad.
+ * Ya no debería ocurrir —el campo correcto es `recipient`— pero si Meta rechaza
+ * el envío igualmente, reintentar no lo arregla: el destino no cambia. Quien lo
+ * reciba pasa la conversación a una persona, que sí puede contestar desde la
+ * bandeja de WhatsApp Business.
  */
 export class DestinatarioSinTelefono extends Error {
   constructor(detalle: string) {
@@ -105,10 +101,19 @@ export class MetaCliente {
     // `paraEnviar` quita la marca interna `wa:`, que Meta no conoce.
     const id = paraEnviar(telefono);
 
+    /*
+     * El destinatario va en un campo distinto según cómo se identifique:
+     *   · teléfono           → `to`
+     *   · nombre de usuario  → `recipient` (el identificador "CO.1023…")
+     *
+     * Poner el user_id en `to` devuelve 131009 «The phone number is malformed».
+     * Comprobado contra la API: `recipient` se reconoce desde v21.0, así que no
+     * hace falta subir de versión.
+     */
+    const destino = esTelefono(telefono) ? { to: id } : { recipient: id };
+
     try {
-      // Se intenta igual con la forma estándar: si Meta habilita el envío a estos
-      // usuarios, funcionará sin tocar nada. Hoy responde 131009.
-      return await this.postear({ recipient_type: 'individual', to: id, ...carga });
+      return await this.postear({ recipient_type: 'individual', ...destino, ...carga });
     } catch (e) {
       if (esTelefono(telefono)) throw e;
       throw new DestinatarioSinTelefono((e as Error).message);
