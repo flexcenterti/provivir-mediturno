@@ -28,19 +28,23 @@ son credenciales, insumos del cliente o decisiones suyas.
 | ⬜ C4 | STT · resuelto con OpenAI Whisper | Equipo técnico | Solo configuración, cero código: `STT_URL=https://api.openai.com/v1/audio/transcriptions` y la misma clave de C1. |
 | ⬜ C5 | DNS de `provivir.exagos.co` → IP del VPS | Equipo técnico | Un solo registro A. Caddy emite el certificado solo. |
 
-## Insumos del cliente (P1–P10)
+## Insumos del cliente
+
+> 🟡 = cubierto con **datos de demostración** para poder probar, no entregado por el
+> cliente. Cargar con `node apps/api/dist/cli/datos-demo.js`; retirar con `--purgar`.
+> Los pacientes de demostración llevan la condición «DEMO» visible en su ficha. (P1–P10)
 
 | # | Insumo | Bloquea | Estado |
 |---|---|---|---|
-| ⬜ P1 | Exportación de la base de pacientes con servicios históricos | Carga masiva | Importador listo y probado |
-| ⬜ P2 | Duraciones reales por prestador y tipo | Configuración de agendas | Editable desde Catálogo |
-| ⬜ P3 | Ventana de control por prestador (7/10/30 días) | RN-01 | Editable desde Catálogo |
-| ⬜ P4 | Criterios de prioridad alta/media/baja | Bandeja | Opera con tiempo de espera mientras tanto |
-| ⬜ P5 | Métricas del "pantallazo único" | Tablero | No bloquea la primera entrega |
-| ⬜ P6 | Documentación comercial de servicios | Calidad de la IA | Sin ella el bot informa pero vende poco |
-| ⬜ P7 | Esquema de atención y horarios actuales | Parametrización | — |
-| ⬜ P8 | Dinámica definitiva del kiosko | Activación futura | Módulo apagado por bandera |
-| ⬜ P9 | CSV de contactos del celular (50.000+) | Migración del número | Importador listo y probado |
+| 🟡 P1 | Exportación de la base de pacientes con servicios históricos | Carga masiva | Importador listo y probado |
+| 🟡 P2 | Duraciones reales por prestador y tipo | Configuración de agendas | Editable desde Catálogo |
+| 🟡 P3 | Ventana de control por prestador (7/10/30 días) | RN-01 | Editable desde Catálogo |
+| 🟡 P4 | Criterios de prioridad alta/media/baja | Bandeja | Opera con tiempo de espera mientras tanto |
+| 🟡 P5 | Métricas del "pantallazo único" | Tablero | No bloquea la primera entrega |
+| 🟡 P6 | Documentación comercial de servicios | Calidad de la IA | Sin ella el bot informa pero vende poco |
+| 🟡 P7 | Esquema de atención y horarios actuales | Parametrización | — |
+| 🟡 P8 | Dinámica definitiva del kiosko | Activación futura | Módulo apagado por bandera |
+| 🟡 P9 | CSV de contactos del celular (50.000+) | Migración del número | Importador listo y probado |
 | ⬜ P10 | Enlaces de YouTube (canal + videos) | Frame de pantallas | Configurable desde Administración |
 
 ## Antes de conectar las claves de IA
