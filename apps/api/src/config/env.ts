@@ -47,8 +47,9 @@ const esquema = z.object({
   STT_API_KEY: z.string().optional(),
   STT_MODELO: z.string().default('whisper-1'),
 
-  // Checklist §4.10 · media fuera del webroot
+  // Checklist §4.10 · media y subidas fuera del webroot
   DIR_MEDIA: z.string().default('media'),
+  DIR_SUBIDAS: z.string().default('uploads'),
 });
 
 export type Env = z.infer<typeof esquema>;
