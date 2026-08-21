@@ -1,11 +1,12 @@
 import {
   BadRequestException, Body, Controller, Get, Header, HttpCode, HttpStatus,
-  Post, Query, Req, UnauthorizedException,
+  Logger, Post, Query, Req, UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { Publico } from '../auth/decorators/publico.decorator';
+import { enmascararTelefono } from '../comun/pii';
 import { firmaValida, respuestaDeVerificacion } from './firma';
 import { normalizarWebhook } from './whatsapp.normalizador';
 import { WhatsappCola } from './whatsapp.cola';
@@ -24,6 +25,8 @@ import type { WebhookMeta } from './whatsapp.tipos';
 @Controller('webhooks/whatsapp')
 @Publico()
 export class WhatsappController {
+  private readonly log = new Logger(WhatsappController.name);
+
   constructor(
     private readonly config: ConfigService,
     private readonly cola: WhatsappCola,
@@ -36,7 +39,11 @@ export class WhatsappController {
   verificar(@Query() params: Record<string, string>): string {
     const esperado = this.config.get<string>('META_WEBHOOK_VERIFY_TOKEN') ?? '';
     const challenge = respuestaDeVerificacion(params, esperado);
-    if (challenge === null) throw new UnauthorizedException();
+    if (challenge === null) {
+      this.log.warn(`Verificación rechazada: el token recibido no coincide (modo=${params['hub.mode']})`);
+      throw new UnauthorizedException();
+    }
+    this.log.log('Verificación del webhook superada');
     return challenge;
   }
 
@@ -54,12 +61,28 @@ export class WhatsappController {
     }
 
     if (!firmaValida(crudo, req.header('x-hub-signature-256'), secreto)) {
+      // Sin esta traza, un META_APP_SECRET equivocado se ve igual que un mensaje
+      // que nunca llegó: 401 silencioso y el paciente sin respuesta.
+      this.log.warn(
+        `Firma inválida: se descarta la entrega (${crudo.length} bytes, ` +
+        `cabecera ${req.header('x-hub-signature-256') ? 'presente' : 'ausente'}). ` +
+        'Revisa META_APP_SECRET.',
+      );
       throw new UnauthorizedException('Firma inválida');
     }
 
     const mensajes = normalizarWebhook(cuerpo);
-    for (const m of mensajes) {
-      await this.cola.encolarEntrante(m);
+
+    // Deja constancia de TODA entrega, incluidas las que no traen mensajes (acuses
+    // de entrega y lectura). Es lo único que distingue «Meta no llamó» de «llamó y
+    // no había nada que procesar», y esa diferencia decide dónde buscar el fallo.
+    if (mensajes.length === 0) {
+      this.log.log('Entrega recibida sin mensajes (acuse de estado)');
+    } else {
+      for (const m of mensajes) {
+        this.log.log(`Mensaje entrante ${m.tipo} de ${enmascararTelefono(m.telefono)} (${m.waMessageId})`);
+        await this.cola.encolarEntrante(m);
+      }
     }
 
     return { recibido: true };
