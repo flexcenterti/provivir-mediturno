@@ -49,7 +49,7 @@ son credenciales, insumos del cliente o decisiones suyas.
 
 ## Antes de conectar las claves de IA
 
-- ⬜ Acuerdo de tratamiento de datos (DPA) con OpenAI y verificación de su retención de API.
+- ✅ Acuerdo de tratamiento de datos (DPA) con OpenAI. Queda verificar su retención de API.
 - ⬜ Actualizar el aviso de privacidad del portal para declarar el procesamiento por terceros.
 - ✅ Comparados `gpt-5-mini`, `gpt-5-nano` y `gpt-4.1-mini` con el arnés de evaluación. Gana `gpt-5-mini`, único sin fallos críticos. Detalle en `docs/adr-a5-proveedor-ia.md`.
 
