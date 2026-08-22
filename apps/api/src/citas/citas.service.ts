@@ -62,6 +62,13 @@ export class CitasService {
     const fecha = aFechaUtc(dto.fecha);
     const servicio = await this.prisma.servicio.findUnique({ where: { id: dto.servicioId } });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    /*
+     * Un servicio retirado no se ofrece ni se agenda. Los prestadores ya se
+     * filtraban por `activo`, el servicio no: al retirarlo desaparecía del portal
+     * pero el motor seguía dando cupos, así que se podía seguir agendando desde el
+     * mostrador y desde la IA. Las citas ya creadas no se tocan.
+     */
+    if (!servicio.activo) throw new NotFoundException('El servicio ya no está disponible');
 
     const tipo = (dto.tipo ?? servicio.tipo) as TipoCita;
     const limite = dto.limite ?? 10;
@@ -156,6 +163,13 @@ export class CitasService {
 
     const servicio = await this.prisma.servicio.findUnique({ where: { id: dto.servicioId } });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
+    /*
+     * Un servicio retirado no se ofrece ni se agenda. Los prestadores ya se
+     * filtraban por `activo`, el servicio no: al retirarlo desaparecía del portal
+     * pero el motor seguía dando cupos, así que se podía seguir agendando desde el
+     * mostrador y desde la IA. Las citas ya creadas no se tocan.
+     */
+    if (!servicio.activo) throw new NotFoundException('El servicio ya no está disponible');
 
     const paciente = await this.prisma.paciente.findUnique({ where: { id: dto.pacienteId } });
     if (!paciente) throw new NotFoundException('Paciente no encontrado');

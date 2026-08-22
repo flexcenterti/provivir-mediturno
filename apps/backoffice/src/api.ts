@@ -172,7 +172,11 @@ export const api = {
 export interface Paciente { id: string; documento: string; nombres: string; apellidos: string; telefono: string | null; condiciones: string[]; origen: string }
 export interface HistorialItem { id: string; fecha: string; servicioTexto: string }
 export interface Prestador { id: string; nombre: string; especialidad: string; grupoBalanceo: boolean; consultorio: string | null }
-export interface Servicio { id: string; nombre: string; categoria: string; tipo: string; duracionMin: number; cupos: number }
+export interface Servicio {
+  id: string; nombre: string; categoria: string; tipo: string;
+  duracionMin: number; cupos: number;
+  requiereOrden?: boolean; politicaCosto?: string; activo?: boolean;
+}
 export interface Cita {
   id: string; codigo: string; tipo: string; fecha: string; horaInicio: number; duracionMin: number;
   estado: string; origen: string; observacion: string | null;
