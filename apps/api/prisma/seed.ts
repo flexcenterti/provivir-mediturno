@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   for (const u of USUARIOS) {
     await prisma.usuario.upsert({
       where: { email: u.email },
-      update: { nombre: u.nombre, rol: u.rol, hashPassword: hash, perfilId: perfiles.get(PERFIL_DE_ROL[u.rol]) },
+      update: { nombre: u.nombre, rol: u.rol, hashPassword: hash, activo: true, perfilId: perfiles.get(PERFIL_DE_ROL[u.rol]) },
       create: { ...u, hashPassword: hash, sedeId: SEDE_ID, perfilId: perfiles.get(PERFIL_DE_ROL[u.rol]) },
     });
   }

@@ -153,6 +153,19 @@ export class AccesoService {
     const actual = await this.prisma.usuario.findUnique({ where: { id } });
     if (!actual) throw new NotFoundException('El usuario no existe');
 
+    /*
+     * Nadie se desactiva a sí mismo. La sesión muere en la misma petición —la
+     * estrategia revalida contra la base—, así que ni siquiera se puede deshacer:
+     * hay que pedírselo a otra persona. Y no hay razón legítima para hacerlo,
+     * porque para dejar de trabajar basta con cerrar sesión.
+     */
+    if (dto.activo === false && id === usuario) {
+      throw new ConflictException(
+        'No puedes desactivar tu propia cuenta: perderías el acceso en el acto y no podrías deshacerlo. ' +
+        'Pídeselo a otra persona con permiso de gestión.',
+      );
+    }
+
     if (dto.activo === false || dto.perfilId) await this.exigirQueQuedeAlguienGestionando(undefined, id);
 
     const actualizado = await this.prisma.usuario.update({

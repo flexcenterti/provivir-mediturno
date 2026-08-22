@@ -22,11 +22,11 @@ son credenciales, insumos del cliente o decisiones suyas.
 
 | # | Qué | Quién | Bloquea |
 |---|---|---|---|
-| ⬜ C1 | `OPENAI_API_KEY` | Equipo técnico | Respuestas de la IA **y transcripción de notas de voz**. Sin ella todo escala a la asistente; la plataforma sigue funcionando. `ANTHROPIC_API_KEY` es opcional: queda como proveedor alterno. |
-| ⬜ C2 | Meta: `APP_SECRET`, `ACCESS_TOKEN`, `PHONE_NUMBER_ID`, `WEBHOOK_VERIFY_TOKEN` | Cliente + Meta | Todo el canal WhatsApp. **Camino crítico más largo**: exige verificación de negocio con documentos legales del cliente. Empezar ya. |
+| ✅ C1 | `OPENAI_API_KEY` | Equipo técnico | Respuestas de la IA **y transcripción de notas de voz**. Sin ella todo escala a la asistente; la plataforma sigue funcionando. `ANTHROPIC_API_KEY` es opcional: queda como proveedor alterno. |
+| ✅ C2 | Meta: `APP_SECRET`, `ACCESS_TOKEN`, `PHONE_NUMBER_ID`, `WEBHOOK_VERIFY_TOKEN` | Cliente + Meta | Todo el canal WhatsApp. **Camino crítico más largo**: exige verificación de negocio con documentos legales del cliente. Empezar ya. |
 | ⬜ C3 | `TURNSTILE_SECRET` | Equipo técnico | CAPTCHA del portal. Sin él el portal opera con rate limiting pero sin CAPTCHA. |
-| ⬜ C4 | STT · resuelto con OpenAI Whisper | Equipo técnico | Solo configuración, cero código: `STT_URL=https://api.openai.com/v1/audio/transcriptions` y la misma clave de C1. |
-| ⬜ C5 | DNS de `provivir.exagos.co` → IP del VPS | Equipo técnico | Un solo registro A. Caddy emite el certificado solo. |
+| ✅ C4 | STT · resuelto con OpenAI Whisper | Equipo técnico | Solo configuración, cero código: `STT_URL=https://api.openai.com/v1/audio/transcriptions` y la misma clave de C1. |
+| ✅ C5 | DNS de `provivir.exagos.co` → IP del VPS | Equipo técnico | Un solo registro A. Caddy emite el certificado solo. |
 
 ## Insumos del cliente
 
