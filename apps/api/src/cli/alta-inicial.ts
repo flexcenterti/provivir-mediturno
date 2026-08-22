@@ -32,19 +32,11 @@
  */
 import { PrismaClient, type Rol } from '@prisma/client';
 import { crearUsuario, ROLES } from './usuarios.comun';
+import { CONFIGURACION_BASE } from './configuracion.base';
 
 const prisma = new PrismaClient();
 
 /** Valores por defecto de las reglas. Ver docs/ para el porqué de cada uno. */
-const CONFIGURACION = [
-  { clave: 'hueco_max_min', valor: '0', descripcion: 'RN-03.2 · Hueco máximo tolerado al recomendar cupos. 0 = compactar al máximo.' },
-  { clave: 'ventana_control_dias_defecto', valor: '10', descripcion: 'RN-01.3 · Ventana de control por defecto si el prestador no define la suya.' },
-  { clave: 'kiosko_activo', valor: 'false', descripcion: 'D3 · El kiosko queda construido pero apagado.' },
-  { clave: 'umbral_confianza_ia', valor: '70', descripcion: 'RN-08 · Bajo este umbral la IA escala a la asistente.' },
-  { clave: 'intervalo_institucional_min', valor: '10', descripcion: 'RN-11.2 · Cada cuántos minutos se interrumpe el canal para el video institucional.' },
-  { clave: 'anticipacion_llegada_min', valor: '15', descripcion: 'Minutos de anticipación con que se permite registrar llegada.' },
-  { clave: 'tolerancia_retraso_min', valor: '10', descripcion: 'Tolerancia de retraso antes de degradar la prioridad en cola.' },
-];
 
 function argumento(nombre: string): string | undefined {
   const i = process.argv.indexOf(`--${nombre}`);
@@ -95,11 +87,11 @@ async function main(): Promise<void> {
   // Solo se crean las que faltan: un valor ya ajustado desde el backoffice es
   // una decisión operativa y este script no tiene por qué revertirla.
   let nuevas = 0;
-  for (const c of CONFIGURACION) {
+  for (const c of CONFIGURACION_BASE) {
     const r = await prisma.configuracion.createMany({ data: c, skipDuplicates: true });
     nuevas += r.count;
   }
-  console.log(`  ${nuevas > 0 ? '+' : '='} configuración: ${nuevas} parámetro(s) nuevo(s), ${CONFIGURACION.length - nuevas} ya presente(s)`);
+  console.log(`  ${nuevas > 0 ? '+' : '='} configuración: ${nuevas} parámetro(s) nuevo(s), ${CONFIGURACION_BASE.length - nuevas} ya presente(s)`);
 
   // ── 3. Usuario ──
   const r = await crearUsuario(prisma, {

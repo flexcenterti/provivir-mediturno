@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { TurnosGateway } from './turnos.gateway';
+import { ConfiguracionService } from '../configuracion/configuracion.service';
+import { esModoNombre, nombreParaPantalla, type ModoNombre } from '../pantallas/nombre-en-pantalla';
 import { minutosEsperando, ordenarCola, prioridadPorCondiciones } from './turnos.reglas';
 import type { LlamarSiguienteDto, PriorizarTurnoDto, RegistrarLlegadaDto } from './dto/turno.dto';
 import { hoyEnSede, type Prioridad } from '@provivir/shared';
@@ -12,10 +14,17 @@ const INCLUIR = {
 
 @Injectable()
 export class TurnosService {
+  /** Cómo se muestra el paciente en los televisores. Ver nombre-en-pantalla.ts */
+  private modoNombre(): ModoNombre {
+    const crudo = this.configuracion.texto('mostrar_nombre_en_pantalla', 'abreviado');
+    return esModoNombre(crudo) ? crudo : 'abreviado';
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditoria: AuditoriaService,
     private readonly gateway: TurnosGateway,
+    private readonly configuracion: ConfiguracionService,
   ) {}
 
   /**
@@ -139,7 +148,13 @@ export class TurnosService {
       {
         turnoId: turno.id,
         codigo: turno.cita.codigo,
-        paciente: `${turno.cita.paciente.nombres} ${turno.cita.paciente.apellidos}`,
+        // Mismo criterio que el estado que consulta la pantalla: si divergieran,
+        // el nombre completo se colaría por el canal en vivo.
+        paciente: nombreParaPantalla(
+          turno.cita.paciente.nombres,
+          turno.cita.paciente.apellidos,
+          this.modoNombre(),
+        ),
         prestador: turno.cita.prestador.nombre,
         consultorio: turno.consultorio,
         servicioId: turno.cita.servicioId,

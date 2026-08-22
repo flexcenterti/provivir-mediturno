@@ -48,20 +48,28 @@
 	}
 
 	# ── Pantallas de sala ──
-	# Solo desde la red de la sede: son televisores, no una app pública.
-	# Ajustar los rangos a la red real de la clínica antes del lanzamiento.
-	@redInterna remote_ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12
+	#
+	# Accesibles desde cualquier red, por decisión del cliente: los televisores se
+	# instalan y reinstalan sin que haya un técnico de redes cerca, y atarlos a un
+	# rango de IP convertía cada cambio de router en una incidencia.
+	#
+	# Lo que las protege es que la URL lleva el id de la pantalla (un UUID), y ese
+	# id solo se ve desde el backoffice, que sí exige sesión. Es una defensa por
+	# secreto: quien tenga el enlace entra, y el enlace no caduca. Si alguno se
+	# filtra, se corta creando una pantalla nueva y retirando la anterior.
+	#
+	# Por eso importa lo que se muestra: ver `mostrar_nombre_en_pantalla` en la
+	# configuración, que decide si el paciente aparece con nombre completo.
 	handle /tv* {
 		header {
 			# La TV embebe el frame de YouTube.
 			Content-Security-Policy "default-src 'self'; img-src 'self' data: https://i.ytimg.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://www.youtube.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self'"
 			X-Frame-Options "SAMEORIGIN"
+			# No se indexa: una pantalla en un buscador anularía el único control.
+			X-Robots-Tag "noindex, nofollow, noarchive"
 		}
-		handle @redInterna {
-			try_files {path} /tv/index.html
-			file_server
-		}
-		respond "Acceso restringido a la red de la sede" 403
+		try_files {path} /tv/index.html
+		file_server
 	}
 
 	# ── Backoffice ──

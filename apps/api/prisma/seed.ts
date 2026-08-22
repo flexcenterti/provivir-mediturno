@@ -14,6 +14,7 @@ import { PrismaClient } from '@prisma/client';
 import { hashearPassword } from '../src/auth/argon2.opciones';
 import { cargarCatalogo } from '../src/cli/catalogo.demo';
 import { asegurarPerfilesBase, PERFIL_DE_ROL } from '../src/cli/usuarios.comun';
+import { CONFIGURACION_BASE } from '../src/cli/configuracion.base';
 
 const prisma = new PrismaClient();
 const SEDE_ID = 'cdc-oriente';
@@ -21,16 +22,6 @@ const SEDE_ID = 'cdc-oriente';
 /** Solo para desarrollo. En staging/prod las credenciales se crean aparte. */
 const PASSWORD_DEV = 'Provivir2026!';
 
-/** Arquitectura §9 · parámetros de reglas fuera del código */
-const CONFIGURACION = [
-  { clave: 'hueco_max_min', valor: '0', descripcion: 'RN-03.2 · Hueco máximo tolerado al recomendar cupos. 0 = compactar al máximo.' },
-  { clave: 'ventana_control_dias_defecto', valor: '10', descripcion: 'RN-01.3 · Ventana de control por defecto si el prestador no define la suya.' },
-  { clave: 'kiosko_activo', valor: 'false', descripcion: 'D3 · El kiosko queda construido pero apagado.' },
-  { clave: 'umbral_confianza_ia', valor: '70', descripcion: 'RN-08 · Bajo este umbral la IA escala a la asistente.' },
-  { clave: 'intervalo_institucional_min', valor: '10', descripcion: 'RN-11.2 · Cada cuántos minutos se interrumpe el canal para el video institucional.' },
-  { clave: 'anticipacion_llegada_min', valor: '15', descripcion: 'Minutos de anticipación con que se permite registrar llegada.' },
-  { clave: 'tolerancia_retraso_min', valor: '10', descripcion: 'Tolerancia de retraso antes de degradar la prioridad en cola.' },
-];
 
 async function main(): Promise<void> {
   console.log('Seed · Grupo Provivir (CDC Oriente)');
@@ -42,10 +33,10 @@ async function main(): Promise<void> {
     create: { id: SEDE_ID, nombre: 'CDC Oriente', direccion: 'Grupo Provivir · Cali', waNumero: '+57 315 000 0001', horario: '7:00–18:00' },
   });
 
-  for (const c of CONFIGURACION) {
+  for (const c of CONFIGURACION_BASE) {
     await prisma.configuracion.upsert({ where: { clave: c.clave }, update: { descripcion: c.descripcion }, create: c });
   }
-  console.log(`  configuración: ${CONFIGURACION.length} parámetros`);
+  console.log(`  configuración: ${CONFIGURACION_BASE.length} parámetros`);
 
   // En desarrollo los pacientes NO se marcan como demo: las pruebas e2e y el
   // trabajo diario los tratan como si fueran reales, que es el punto del seed.

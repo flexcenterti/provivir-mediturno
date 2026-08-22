@@ -2,6 +2,8 @@ import { Body, Controller, Get, NotFoundException, Param, Patch } from '@nestjs/
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConfiguracionService } from '../configuracion/configuracion.service';
+import { esModoNombre, nombreParaPantalla, type ModoNombre } from './nombre-en-pantalla';
 import { TurnosService } from '../turnos/turnos.service';
 import { Permisos } from '../auth/decorators/permisos.decorator';
 import { Publico } from '../auth/decorators/publico.decorator';
@@ -25,6 +27,7 @@ export class PantallasController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly turnos: TurnosService,
+    private readonly configuracion: ConfiguracionService,
   ) {}
 
   @Get()
@@ -46,6 +49,9 @@ export class PantallasController {
 
     const llamados = await this.turnos.ultimosLlamados(pantalla.servicios, pantalla.turnosVisibles);
 
+    const crudo = this.configuracion.texto('mostrar_nombre_en_pantalla', 'abreviado');
+    const modoNombre: ModoNombre = esModoNombre(crudo) ? crudo : 'abreviado';
+
     return {
       pantalla: {
         id: pantalla.id,
@@ -60,7 +66,7 @@ export class PantallasController {
       },
       llamados: llamados.map((t) => ({
         codigo: t.cita.codigo,
-        paciente: `${t.cita.paciente.nombres} ${t.cita.paciente.apellidos}`,
+        paciente: nombreParaPantalla(t.cita.paciente.nombres, t.cita.paciente.apellidos, modoNombre),
         prestador: t.cita.prestador.nombre,
         consultorio: t.consultorio,
         ts: t.llamadoTs,

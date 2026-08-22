@@ -100,6 +100,28 @@ También por CLI, para lo que haga falta antes de tener acceso:
   `--purgar-prueba`. Terminan en `@prueba.provivir.local` para poder distinguirlas.
 - ⬜ Crear las cuentas reales del equipo (asistentes, médicos, pantallas).
 
+## Pantallas de sala · acceso
+
+Se sirven **sin restricción de red**, por decisión del cliente: los televisores se
+instalan y reinstalan sin un técnico de redes cerca, y atarlos a un rango de IP
+convertía cada cambio de router en una incidencia.
+
+Lo que las protege es que la URL lleva el id de la pantalla (un UUID) y ese id solo
+se ve desde el backoffice, que sí exige sesión. Es una defensa por secreto: quien
+tenga el enlace entra, y el enlace no caduca.
+
+Consecuencias asumidas, y cómo se acotan:
+
+- El paciente aparece **abreviado** («Rosa Q.») por defecto, no con nombre completo.
+  Se cambia en Administración → Reglas, clave `mostrar_nombre_en_pantalla`:
+  `completo` | `abreviado` | `oculto`.
+- Las pantallas responden `X-Robots-Tag: noindex`: una URL indexada anularía el
+  único control que queda.
+- ⬜ Definir con la clínica el procedimiento si un enlace se filtra: se crea una
+  pantalla nueva y se retira la anterior, lo que invalida el enlace viejo.
+- ⬜ Tratar los enlaces como credenciales: no mandarlos por WhatsApp ni dejarlos en
+  el historial de un televisor compartido.
+
 ## Decisiones pendientes del cliente
 
 | # | Decisión | Dónde está documentada |
