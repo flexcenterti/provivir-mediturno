@@ -4,6 +4,7 @@ import {
   type Servicio, type TrabajoCarga,
 } from '../api';
 import { Acceso } from './Acceso';
+import { interpretarYoutube } from '@provivir/shared';
 
 type Seccion = 'acceso' | 'carga' | 'auditoria' | 'pantallas' | 'kiosko' | 'configuracion';
 
@@ -291,6 +292,16 @@ function Pantallas() {
   );
 }
 
+/** Dice en el acto si lo pegado sirve, y qué poner si no. */
+function PistaYoutube({ valor }: { valor: string }) {
+  if (!valor.trim()) return <span className="p-ayuda">Vacío: la pantalla emitirá solo los institucionales.</span>;
+
+  const r = interpretarYoutube(valor);
+  if (r.tipo === 'directo') return <span className="p-ayuda ok">✓ Canal en directo · {r.canalId}</span>;
+  if (r.tipo === 'video') return <span className="p-ayuda ok">✓ Video en bucle · {r.videoId}</span>;
+  return <span className="p-ayuda mal">{r.motivo}</span>;
+}
+
 function FormPantalla({ pantalla, servicios, onCerrar, onGuardado }: {
   pantalla: Pantalla; servicios: Servicio[]; onCerrar: () => void; onGuardado: () => void;
 }) {
@@ -372,9 +383,14 @@ function FormPantalla({ pantalla, servicios, onCerrar, onGuardado }: {
         {f.media && (
           <>
             <div className="field">
-              <label>Canal de noticias (YouTube)</label>
-              <input value={f.canalYoutube} onChange={(e) => setF({ ...f, canalYoutube: e.target.value })}
-                     placeholder="https://youtube.com/@canal/live" />
+              <label htmlFor="p-canal">Canal de noticias (YouTube)</label>
+              <input id="p-canal" value={f.canalYoutube}
+                     onChange={(e) => setF({ ...f, canalYoutube: e.target.value })}
+                     placeholder="UC2Xq2PK-got3Rtz9ZJ32hLQ" />
+              {/* El @handle NO sirve para embeber un directo, y era lo que sugería el
+                  marcador anterior. Se avisa al escribir, no al descubrir la pantalla
+                  en negro en la sala de espera. */}
+              <PistaYoutube valor={f.canalYoutube} />
             </div>
             <div className="field">
               <label>Videos institucionales (uno por línea)</label>

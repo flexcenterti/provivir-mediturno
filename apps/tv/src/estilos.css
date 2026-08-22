@@ -70,3 +70,18 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
 .tv-pie { padding: 1rem 2rem; background: rgba(0,0,0,.25); font-size: 1.1rem; text-align: center; }
 
 @media (max-width: 1100px) { .tv-cuerpo { grid-template-columns: 1fr; } }
+
+/* Sin canal utilizable, se dice qué falta: el hueco negro con el error de YouTube
+   no lo sabe interpretar nadie en una sala de espera. */
+.tv-frame-vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .75rem;
+  text-align: center;
+  padding: 2rem;
+  opacity: .55;
+}
+.tv-frame-vacio p { font-size: 1.6rem; margin: 0; }
+.tv-frame-vacio small { font-size: .95rem; max-width: 40ch; line-height: 1.5; }

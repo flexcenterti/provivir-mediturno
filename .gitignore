@@ -29,3 +29,4 @@ tmp/
 # Salida de las pruebas de navegador
 test-results/
 playwright-report/
+dist-esm/

@@ -174,12 +174,12 @@ de urgencias.
 /** P10 · pantallas de sala con canal y videos institucionales. */
 export const PANTALLAS = [
   { nombre: 'Pantalla 1 · Sala Medicina General', servicios: ['mg', 'ctrl', 'vitc'], turnosVisibles: 4, sonido: true, media: true,
-    canalYoutube: 'https://www.youtube.com/@NoticiasCaracol/live',
+    canalYoutube: 'UC2Xq2PK-got3Rtz9ZJ32hLQ',
     videosPromo: ['https://www.youtube.com/watch?v=aqz-KE-bpKQ'],
     intervaloInstitucionalMin: 10,
     mensaje: 'La atención es únicamente con cita previa. Agenda por WhatsApp o en grupoprovivir.com.' },
   { nombre: 'Pantalla 2 · Sala Especialistas y Ecografía', servicios: ['gin', 'der', 'derp', 'nut', 'eco', 'ecod'], turnosVisibles: 4, sonido: true, media: true,
-    canalYoutube: 'https://www.youtube.com/@NoticiasCaracol/live',
+    canalYoutube: 'UC2Xq2PK-got3Rtz9ZJ32hLQ',
     videosPromo: ['https://www.youtube.com/watch?v=aqz-KE-bpKQ'],
     intervaloInstitucionalMin: 10,
     mensaje: 'Para tu ecografía, recuerda las indicaciones de preparación.' },

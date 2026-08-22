@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { interpretarYoutube, urlEmbedDirecto } from '@provivir/shared';
 import { io, type Socket } from 'socket.io-client';
 
 interface Llamado {
@@ -113,36 +114,50 @@ function FrameMultimedia({ config }: { config: ConfigPantalla }) {
   const [modo, setModo] = useState<'canal' | 'institucional'>('canal');
   const [indiceVideo, setIndiceVideo] = useState(0);
 
+  const canal = interpretarYoutube(config.canalYoutube);
+  const hayInstitucionales = config.videosPromo.length > 0;
+  // Sin canal utilizable, los institucionales son lo único que hay que emitir.
+  const enCanal = modo === 'canal' && canal.tipo !== 'invalida';
+
   useEffect(() => {
-    if (modo !== 'canal' || config.videosPromo.length === 0) return;
-    const ms = config.intervaloInstitucionalMin * 60_000;
-    const id = setTimeout(() => setModo('institucional'), ms);
+    if (!enCanal || !hayInstitucionales) return;
+    const id = setTimeout(() => setModo('institucional'), config.intervaloInstitucionalMin * 60_000);
     return () => clearTimeout(id);
-  }, [modo, config.intervaloInstitucionalMin, config.videosPromo.length]);
+  }, [enCanal, config.intervaloInstitucionalMin, hayInstitucionales]);
 
+  /*
+   * El directo NO se puede montar con la API de IFrame: solo acepta `videoId`, y un
+   * canal en vivo se embebe por `live_stream?channel=…`. Por eso el directo va como
+   * iframe normal y solo los institucionales usan la API, que es la que avisa
+   * cuando el video termina para volver al canal.
+   */
   useEffect(() => {
-    const contenedorActual = contenedor.current;
-    if (!contenedorActual) return;
+    const el = contenedor.current;
+    if (!el || enCanal) return;
 
-    // La API de IFrame se carga una sola vez por página.
+    const videoId = extraerVideoId(config.videosPromo[indiceVideo] ?? '');
+    if (!videoId) return;
+
     const iniciar = () => {
       const YT = (window as unknown as { YT?: YtNamespace }).YT;
       if (!YT?.Player) return;
-
-      const esCanal = modo === 'canal';
-      const player = new YT.Player(contenedorActual, {
+      const player = new YT.Player(el, {
         height: '100%',
         width: '100%',
-        ...(esCanal
-          ? { playerVars: { listType: 'user_uploads', autoplay: 1, mute: 1, controls: 0 } }
-          : { videoId: extraerVideoId(config.videosPromo[indiceVideo] ?? ''), playerVars: { autoplay: 1, controls: 0 } }),
+        videoId,
+        playerVars: { autoplay: 1, mute: 1, controls: 0, rel: 0, playsinline: 1 },
         events: {
           onStateChange: (e: { data: number }) => {
             // ENDED = 0 · al terminar el institucional se vuelve al canal en vivo.
-            if (!esCanal && e.data === 0) {
+            if (e.data === 0) {
               setIndiceVideo((i) => (i + 1) % Math.max(1, config.videosPromo.length));
               setModo('canal');
             }
+          },
+          // Un video que no se puede reproducir no debe congelar la rotación.
+          onError: () => {
+            setIndiceVideo((i) => (i + 1) % Math.max(1, config.videosPromo.length));
+            setModo('canal');
           },
         },
       });
@@ -155,17 +170,54 @@ function FrameMultimedia({ config }: { config: ConfigPantalla }) {
     script.src = 'https://www.youtube.com/iframe_api';
     (window as unknown as { onYouTubeIframeAPIReady?: () => void }).onYouTubeIframeAPIReady = iniciar;
     document.body.appendChild(script);
-  }, [modo, indiceVideo, config.videosPromo]);
+  }, [enCanal, indiceVideo, config.videosPromo]);
+
+  /*
+   * Qué se emite, decidido en un solo sitio. Encadenar ternarios en el JSX dejaba
+   * ramas inalcanzables sin que se notara.
+   */
+  const emitiendo: 'directo' | 'bucle' | 'institucional' | 'nada' =
+    enCanal && canal.tipo === 'directo' ? 'directo'
+    : enCanal && canal.tipo === 'video' ? 'bucle'
+    : hayInstitucionales ? 'institucional'
+    : 'nada';
 
   return (
     <section className="tv-media">
-      <div ref={contenedor} className="tv-frame" />
+      {emitiendo === 'directo' && canal.tipo === 'directo' && (
+        <iframe
+          className="tv-frame"
+          src={urlEmbedDirecto(canal.canalId)}
+          title="Canal en vivo"
+          allow="autoplay; encrypted-media"
+          frameBorder={0}
+        />
+      )}
+      {emitiendo === 'bucle' && canal.tipo === 'video' && (
+        <iframe
+          className="tv-frame"
+          src={`https://www.youtube.com/embed/${canal.videoId}?autoplay=1&mute=1&controls=0&loop=1&playlist=${canal.videoId}`}
+          title="Canal"
+          allow="autoplay; encrypted-media"
+          frameBorder={0}
+        />
+      )}
+      {emitiendo === 'institucional' && <div ref={contenedor} className="tv-frame" />}
+      {emitiendo === 'nada' && (
+        /* Se dice qué falta. El hueco negro con el error de YouTube no lo sabe
+           interpretar nadie en una sala de espera. */
+        <div className="tv-frame tv-frame-vacio">
+          <p>Canal de video sin configurar</p>
+          {canal.tipo === 'invalida' && <small>{canal.motivo}</small>}
+        </div>
+      )}
       <span className="tv-media-etiqueta">
-        {modo === 'canal' ? 'Noticias en vivo' : 'Grupo Provivir'}
+        {emitiendo === 'directo' ? 'En vivo' : 'Grupo Provivir'}
       </span>
     </section>
   );
 }
+
 
 interface YtNamespace {
   Player: new (el: HTMLElement, opciones: Record<string, unknown>) => { destroy?: () => void };
@@ -173,6 +225,7 @@ interface YtNamespace {
 
 /** Acepta una URL completa de YouTube o directamente el id del video. */
 function extraerVideoId(url: string): string {
-  const m = /(?:v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/.exec(url);
-  return m?.[1] ?? url;
+  const r = interpretarYoutube(url);
+  return r.tipo === 'video' ? r.videoId : '';
 }
+

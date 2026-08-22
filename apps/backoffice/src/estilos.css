@@ -249,3 +249,7 @@ tr.inactiva { opacity: .55; }
   letter-spacing: .04em;
   background: rgb(0 0 0 / 8%);
 }
+
+/* Validación en vivo del campo de YouTube. */
+.p-ayuda.ok  { color: var(--exito, #2b8a3e); }
+.p-ayuda.mal { color: var(--peligro, #c92a2a); }
