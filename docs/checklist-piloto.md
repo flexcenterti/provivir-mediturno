@@ -77,6 +77,20 @@ recordatorios, hasta que dé su teléfono.
 - ⬜ Decidir si se agenda a quien no quiere dar teléfono, sabiendo que se queda sin
   recordatorio, o si el número es obligatorio para confirmar la cita.
 
+## Usuarios
+
+No hay pantalla para gestionarlos todavía; se hace por CLI:
+
+    node apps/api/dist/cli/usuarios.js                    quién existe
+    node apps/api/dist/cli/usuarios.js --perfiles-prueba  uno por cada rol
+    node apps/api/dist/cli/usuarios.js --crear --email … --nombre … --rol …
+    node apps/api/dist/cli/usuarios.js --clave --email …  contraseña nueva
+    node apps/api/dist/cli/usuarios.js --desactivar --email …
+
+- ⬜ **Retirar las cuentas de prueba antes de atender pacientes reales**:
+  `--purgar-prueba`. Terminan en `@prueba.provivir.local` para poder distinguirlas.
+- ⬜ Crear las cuentas reales del equipo (asistentes, médicos, pantallas).
+
 ## Decisiones pendientes del cliente
 
 | # | Decisión | Dónde está documentada |

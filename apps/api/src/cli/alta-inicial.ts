@@ -30,9 +30,8 @@
  *
  * Idempotente: repetirlo no duplica ni pisa nada, salvo con --recrear-clave.
  */
-import { randomBytes } from 'node:crypto';
 import { PrismaClient, type Rol } from '@prisma/client';
-import { hashearPassword } from '../auth/argon2.opciones';
+import { crearUsuario, ROLES } from './usuarios.comun';
 
 const prisma = new PrismaClient();
 
@@ -46,26 +45,6 @@ const CONFIGURACION = [
   { clave: 'anticipacion_llegada_min', valor: '15', descripcion: 'Minutos de anticipación con que se permite registrar llegada.' },
   { clave: 'tolerancia_retraso_min', valor: '10', descripcion: 'Tolerancia de retraso antes de degradar la prioridad en cola.' },
 ];
-
-const ROLES: readonly Rol[] = ['admin', 'asistente', 'prestador', 'pantalla'];
-
-/**
- * Contraseña generada, no elegida. Se excluyen los caracteres que se confunden
- * al dictarla por teléfono (O/0, l/1/I) porque alguien la va a dictar.
- */
-function generarPassword(): string {
-  const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-  const simbolos = '!@#$%&*?';
-  const tomar = (fuente: string, n: number) =>
-    Array.from(randomBytes(n)).map((b) => fuente[b % fuente.length]).join('');
-  // Se baraja para que los símbolos no queden siempre al final.
-  const bruto = (tomar(alfabeto, 18) + tomar(simbolos, 3)).split('');
-  for (let i = bruto.length - 1; i > 0; i--) {
-    const j = randomBytes(1)[0]! % (i + 1);
-    [bruto[i], bruto[j]] = [bruto[j]!, bruto[i]!];
-  }
-  return bruto.join('');
-}
 
 function argumento(nombre: string): string | undefined {
   const i = process.argv.indexOf(`--${nombre}`);
@@ -123,39 +102,27 @@ async function main(): Promise<void> {
   console.log(`  ${nuevas > 0 ? '+' : '='} configuración: ${nuevas} parámetro(s) nuevo(s), ${CONFIGURACION.length - nuevas} ya presente(s)`);
 
   // ── 3. Usuario ──
-  const existente = await prisma.usuario.findUnique({ where: { email } });
-  if (existente && !bandera('recrear-clave')) {
-    morir(`Ya existe un usuario con ${email}. Para cambiarle la contraseña: --recrear-clave`);
-  }
+  const r = await crearUsuario(prisma, {
+    email, nombre, rol, sedeId,
+    prestadorId: argumento('prestador-id'),
+    recrearClave: bandera('recrear-clave'),
+  }).catch((e) => morir((e as Error).message));
 
-  if (rol === 'prestador') {
-    const prestadorId = argumento('prestador-id');
-    if (!prestadorId) morir('Un usuario con rol=prestador necesita --prestador-id (RN-06.2).');
-    if (!(await prisma.prestador.findUnique({ where: { id: prestadorId } }))) {
-      morir(`No existe el prestador "${prestadorId}". Créalo antes desde el backoffice.`);
-    }
+  if (r.estado === 'ya-existe') {
+    morir(`Ya existe un usuario con ${r.email}. Para cambiarle la contraseña: --recrear-clave`);
   }
-
-  const password = generarPassword();
-  const hashPassword = await hashearPassword(password);
-  const prestadorId = argumento('prestador-id') ?? null;
-
-  if (existente) {
-    await prisma.usuario.update({ where: { email }, data: { hashPassword, activo: true } });
-    console.log(`  ~ contraseña de ${email} reemplazada`);
-  } else {
-    await prisma.usuario.create({ data: { nombre, email, rol, prestadorId, hashPassword, sedeId } });
-    console.log(`  + usuario ${email} (${rol}) creado`);
-  }
+  console.log(`  ${r.estado === 'creado' ? '+' : '~'} usuario ${r.email} (${r.rol})`);
 
   console.log(`
   ────────────────────────────────────────────────
-    ${email}
-    ${password}
+    ${r.email}
+    ${r.password}
   ────────────────────────────────────────────────
 
   Esta contraseña no se vuelve a mostrar y no queda en ningún registro:
   solo existe su hash. Cámbiala tras el primer acceso.
+
+  Para el resto de perfiles: node apps/api/dist/cli/usuarios.js --perfiles-prueba
 `);
 }
 
