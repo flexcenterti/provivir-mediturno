@@ -175,3 +175,77 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
 .kiosko-opcion { padding: 1.4rem 1rem; border: 2px dashed var(--line); border-radius: 12px;
   text-align: center; font-weight: 600; background: #FBFCFC; }
 code { font-family: var(--fm); font-size: .82rem; background: #EDF1F2; padding: .1rem .35rem; border-radius: 5px; }
+
+/* ── Perfiles y usuarios ─────────────────────────────────────────────── */
+
+.panel-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .75rem;
+}
+
+.panel-interno {
+  border: 1px solid var(--borde, #d9dee5);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Las casillas se agrupan por área: una lista plana de 17 permisos no se lee. */
+.permisos-area {
+  border: 1px solid var(--borde, #d9dee5);
+  border-radius: 8px;
+  padding: .75rem 1rem 1rem;
+  margin-bottom: .75rem;
+}
+.permisos-area legend {
+  padding: 0 .4rem;
+  font-weight: 600;
+  font-size: .85rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.permiso {
+  display: flex;
+  align-items: flex-start;
+  gap: .6rem;
+  padding: .35rem 0;
+  cursor: pointer;
+}
+.permiso input { margin-top: .25rem; flex: none; }
+.permiso span { display: flex; flex-direction: column; }
+.permiso em { font-style: normal; font-size: .85rem; opacity: .7; }
+
+/* La contraseña se muestra una sola vez: tiene que saltar a la vista. */
+.aviso-clave {
+  border: 2px solid var(--acento, #1c7ed6);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.aviso-clave .clave {
+  display: block;
+  margin: .5rem 0;
+  padding: .6rem .8rem;
+  font-size: 1.15rem;
+  letter-spacing: .05em;
+  background: rgb(0 0 0 / 6%);
+  border-radius: 6px;
+  user-select: all;
+}
+.aviso-clave p { font-size: .9rem; opacity: .8; margin: .25rem 0 .75rem; }
+
+tr.inactiva { opacity: .55; }
+
+.etiqueta {
+  display: inline-block;
+  padding: .1rem .45rem;
+  border-radius: 999px;
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  background: rgb(0 0 0 / 8%);
+}

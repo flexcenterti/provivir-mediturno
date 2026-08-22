@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { AgendasService } from './agendas.service';
 import { BloquearAgendaDto, CrearAgendaDto, ProgramacionMensualDto } from './dto/agenda.dto';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from '../auth/auth.types';
 
@@ -20,21 +20,21 @@ export class AgendasController {
   }
 
   @Post()
-  @Roles('admin', 'asistente')
+  @Permisos('agenda.editar')
   crear(@Body() dto: CrearAgendaDto, @UsuarioActual() usuario: UsuarioAutenticado) {
     return this.agendas.crear(dto, usuario.id);
   }
 
   /** RN-06.4 · varios días del mes con una franja, en un solo paso. */
   @Post('programacion-mensual')
-  @Roles('admin', 'asistente')
+  @Permisos('agenda.editar')
   programacionMensual(@Body() dto: ProgramacionMensualDto, @UsuarioActual() usuario: UsuarioAutenticado) {
     return this.agendas.programacionMensual(dto, usuario.id);
   }
 
   /** RN-06.3 · sin `confirmar` devuelve el impacto; con `confirmar` lo aplica. */
   @Post(':id/bloquear')
-  @Roles('admin', 'asistente')
+  @Permisos('agenda.editar')
   bloquear(
     @Param('id') id: string,
     @Body() dto: BloquearAgendaDto,
@@ -44,7 +44,7 @@ export class AgendasController {
   }
 
   @Post(':id/desbloquear')
-  @Roles('admin', 'asistente')
+  @Permisos('agenda.editar')
   desbloquear(@Param('id') id: string, @UsuarioActual() usuario: UsuarioAutenticado) {
     return this.agendas.desbloquear(id, usuario.id);
   }

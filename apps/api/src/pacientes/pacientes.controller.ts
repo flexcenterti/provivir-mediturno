@@ -1,12 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { PacientesService } from './pacientes.service';
 import { ActualizarPacienteDto, BuscarPacientesDto, CrearPacienteDto } from './dto/paciente.dto';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from '../auth/auth.types';
 
 @Controller('pacientes')
-@Roles('admin', 'asistente')
+@Permisos('pacientes.ver')
 export class PacientesController {
   constructor(private readonly pacientes: PacientesService) {}
 
@@ -41,7 +41,7 @@ export class PacientesController {
   }
 
   @Delete(':id')
-  @Roles('admin')
+  @Permisos('pacientes.editar')
   desactivar(@Param('id') id: string, @UsuarioActual() usuario: UsuarioAutenticado) {
     return this.pacientes.desactivar(id, usuario.id);
   }

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Put } from '@nestjs/common';
 import { IsString, MaxLength } from 'class-validator';
 import { ConfiguracionService } from './configuracion.service';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from '../auth/auth.types';
@@ -12,7 +12,7 @@ class FijarValorDto {
 }
 
 @Controller('configuracion')
-@Roles('admin')
+@Permisos('configuracion.editar')
 export class ConfiguracionController {
   constructor(
     private readonly config: ConfiguracionService,

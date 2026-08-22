@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { BandejaService } from './bandeja.service';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from '../auth/auth.types';
 
@@ -11,7 +11,7 @@ class ResponderDto {
 }
 
 @Controller('bandeja')
-@Roles('admin', 'asistente')
+@Permisos('bandeja.operar')
 export class BandejaController {
   constructor(private readonly bandeja: BandejaService) {}
 

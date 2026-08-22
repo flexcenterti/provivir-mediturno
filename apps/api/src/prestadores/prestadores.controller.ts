@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { PrestadoresService } from './prestadores.service';
 import { ActualizarPrestadorDto, CrearPrestadorDto } from './dto/prestador.dto';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from '../auth/auth.types';
 
@@ -27,13 +27,13 @@ export class PrestadoresController {
   }
 
   @Post()
-  @Roles('admin')
+  @Permisos('catalogo.editar')
   crear(@Body() dto: CrearPrestadorDto, @UsuarioActual() usuario: UsuarioAutenticado) {
     return this.prestadores.crear(dto, usuario.id);
   }
 
   @Patch(':id')
-  @Roles('admin')
+  @Permisos('catalogo.editar')
   actualizar(
     @Param('id') id: string,
     @Body() dto: ActualizarPrestadorDto,

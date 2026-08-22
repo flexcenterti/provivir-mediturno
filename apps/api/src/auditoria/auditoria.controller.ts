@@ -1,10 +1,10 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { PaginacionDto, armarPagina } from '../comun/paginacion';
 
 @Controller('auditoria')
-@Roles('admin')
+@Permisos('auditoria.ver')
 export class AuditoriaController {
   constructor(private readonly prisma: PrismaService) {}
 

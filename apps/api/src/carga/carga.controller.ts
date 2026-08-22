@@ -9,7 +9,7 @@ import { extname } from 'node:path';
 import type { Response } from 'express';
 import { CargaCola } from './carga.cola';
 import { ContactosProcesador } from './contactos.procesador';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from '../auth/auth.types';
 
@@ -19,7 +19,7 @@ const EXTENSIONES = ['.csv', '.txt'];
 export const DIR_SUBIDAS = process.env.DIR_SUBIDAS ?? 'uploads';
 
 @Controller('carga')
-@Roles('admin')
+@Permisos('carga.ejecutar')
 export class CargaController {
   constructor(
     private readonly cola: CargaCola,

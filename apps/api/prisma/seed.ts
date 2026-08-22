@@ -13,6 +13,7 @@
 import { PrismaClient } from '@prisma/client';
 import { hashearPassword } from '../src/auth/argon2.opciones';
 import { cargarCatalogo } from '../src/cli/catalogo.demo';
+import { asegurarPerfilesBase, PERFIL_DE_ROL } from '../src/cli/usuarios.comun';
 
 const prisma = new PrismaClient();
 const SEDE_ID = 'cdc-oriente';
@@ -52,6 +53,9 @@ async function main(): Promise<void> {
   console.log(`  servicios: ${r.servicios} · prestadores: ${r.prestadores} · agendas: ${r.agendas}`);
   console.log(`  pacientes: ${r.pacientes} · pantallas: ${r.pantallas} · contactos: ${r.contactos}`);
 
+  await asegurarPerfilesBase(prisma, SEDE_ID);
+  const perfiles = new Map((await prisma.perfil.findMany()).map((p) => [p.nombre, p.id]));
+
   const hash = await hashearPassword(PASSWORD_DEV);
   const USUARIOS = [
     { nombre: 'John Mendoza',   email: 'admin@provivir.local',      rol: 'admin' as const,     prestadorId: null },
@@ -62,11 +66,11 @@ async function main(): Promise<void> {
   for (const u of USUARIOS) {
     await prisma.usuario.upsert({
       where: { email: u.email },
-      update: { nombre: u.nombre, rol: u.rol, hashPassword: hash },
-      create: { ...u, hashPassword: hash, sedeId: SEDE_ID },
+      update: { nombre: u.nombre, rol: u.rol, hashPassword: hash, perfilId: perfiles.get(PERFIL_DE_ROL[u.rol]) },
+      create: { ...u, hashPassword: hash, sedeId: SEDE_ID, perfilId: perfiles.get(PERFIL_DE_ROL[u.rol]) },
     });
   }
-  console.log(`  usuarios: ${USUARIOS.length} (uno por rol) · password dev: ${PASSWORD_DEV}`);
+  console.log(`  perfiles: ${perfiles.size} · usuarios: ${USUARIOS.length} · password dev: ${PASSWORD_DEV}`);
 
   console.log('Seed completo.');
 }

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CitasService } from './citas.service';
 import { CancelarCitaDto, ConsultarCuposDto, CrearCitaDto, ReprogramarCitaDto } from './dto/cita.dto';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from '../auth/auth.types';
 
@@ -44,13 +44,13 @@ export class CitasController {
    * en vez de un error seco: la IA y el portal necesitan seguir la conversación.
    */
   @Post('citas')
-  @Roles('admin', 'asistente')
+  @Permisos('citas.gestionar')
   crear(@Body() dto: CrearCitaDto, @UsuarioActual() usuario: UsuarioAutenticado) {
     return this.citas.crearConAlternativas(dto, usuario.id);
   }
 
   @Patch('citas/:id/reprogramar')
-  @Roles('admin', 'asistente')
+  @Permisos('citas.gestionar')
   reprogramar(
     @Param('id') id: string,
     @Body() dto: ReprogramarCitaDto,
@@ -60,7 +60,7 @@ export class CitasController {
   }
 
   @Patch('citas/:id/cancelar')
-  @Roles('admin', 'asistente')
+  @Permisos('citas.gestionar')
   cancelar(
     @Param('id') id: string,
     @Body() dto: CancelarCitaDto,

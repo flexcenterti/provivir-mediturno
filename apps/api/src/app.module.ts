@@ -7,7 +7,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
-import { RolesGuard } from './auth/guards/roles.guard';
+import { PermisosGuard } from './auth/guards/permisos.guard';
+import { AccesoModule } from './acceso/acceso.module';
 import { AuditoriaModule } from './auditoria/auditoria.module';
 import { ConfiguracionModule } from './configuracion/configuracion.module';
 import { ColasModule } from './colas/colas.module';
@@ -47,6 +48,7 @@ import { RecordatoriosModule } from './recordatorios/recordatorios.module';
     ColasModule,
     HealthModule,
     AuthModule,
+    AccesoModule,
     // Fase 1 · núcleo de datos
     PacientesModule,
     PrestadoresModule,
@@ -73,7 +75,7 @@ import { RecordatoriosModule } from './recordatorios/recordatorios.module';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     // Orden importante: primero autentica, después autoriza por rol.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
-    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermisosGuard },
   ],
 })
 export class AppModule {}

@@ -113,13 +113,14 @@ model Sede {
   horario   String
   creadoEn  DateTime @default(now()) @map("creado_en")
 
-  pacientes     Paciente[]
-  prestadores   Prestador[]
-  agendas       Agenda[]
-  citas         Cita[]
+  pacientes      Paciente[]
+  prestadores    Prestador[]
+  agendas        Agenda[]
+  citas          Cita[]
   conversaciones Conversacion[]
-  pantallas     Pantalla[]
-  usuarios      Usuario[]
+  pantallas      Pantalla[]
+  usuarios       Usuario[]
+  perfiles       Perfil[]
 
   @@map("sede")
 }
@@ -127,28 +128,28 @@ model Sede {
 // ─────────────────────────── Pacientes (RN-12) ───────────────────────────
 
 model Paciente {
-  id           String         @id @default(uuid())
-  tdoc         String         @default("CC")
+  id            String         @id @default(uuid())
+  tdoc          String         @default("CC")
   /// RN-12.5 · Identificador principal para deduplicación en recargas
-  documento    String         @unique
-  nombres      String
-  apellidos    String
-  telefono     String?
-  whatsapp     String?
-  correo       String?
-  fechaNac     DateTime?      @map("fecha_nac") @db.Date
-  sexo         String?
+  documento     String         @unique
+  nombres       String
+  apellidos     String
+  telefono      String?
+  whatsapp      String?
+  correo        String?
+  fechaNac      DateTime?      @map("fecha_nac") @db.Date
+  sexo          String?
   /// Marcas preferenciales para la cola de atención (RN-05.2, RN-17)
-  condiciones  String[]       @default([])
-  origen       OrigenPaciente @default(carga)
-  activo       Boolean        @default(true)
-  sedeId       String         @map("sede_id")
-  creadoEn     DateTime       @default(now()) @map("creado_en")
-  actualizadoEn DateTime      @updatedAt @map("actualizado_en")
+  condiciones   String[]       @default([])
+  origen        OrigenPaciente @default(carga)
+  activo        Boolean        @default(true)
+  sedeId        String         @map("sede_id")
+  creadoEn      DateTime       @default(now()) @map("creado_en")
+  actualizadoEn DateTime       @updatedAt @map("actualizado_en")
 
-  sede      Sede                @relation(fields: [sedeId], references: [id])
-  historial HistorialServicio[]
-  citas     Cita[]
+  sede           Sede                @relation(fields: [sedeId], references: [id])
+  historial      HistorialServicio[]
+  citas          Cita[]
   conversaciones Conversacion[]
 
   @@index([documento])
@@ -196,17 +197,17 @@ model Servicio {
 // ─────────────────────────── Prestadores (RN-01, RN-02) ───────────────────────────
 
 model Prestador {
-  id           String  @id
-  nombre       String
-  especialidad String
+  id            String  @id
+  nombre        String
+  especialidad  String
   /// RN-02.1 · true solo para el grupo de medicina general. Único grupo que balancea.
   grupoBalanceo Boolean @default(false) @map("grupo_balanceo")
-  vinculacion  String  @default("Interno")
-  consultorio  String?
-  activo       Boolean @default(true)
-  sedeId       String  @map("sede_id")
+  vinculacion   String  @default("Interno")
+  consultorio   String?
+  activo        Boolean @default(true)
+  sedeId        String  @map("sede_id")
 
-  sede      Sede               @relation(fields: [sedeId], references: [id])
+  sede      Sede                @relation(fields: [sedeId], references: [id])
   servicios PrestadorServicio[]
   config    PrestadorConfig?
   agendas   Agenda[]
@@ -244,23 +245,23 @@ model PrestadorConfig {
 
 /// RN-06.1 · Solo administración crea/modifica/bloquea. El prestador la ve en solo lectura.
 model Agenda {
-  id          String     @id @default(uuid())
-  prestadorId String     @map("prestador_id")
-  modo        ModoAgenda
+  id            String     @id @default(uuid())
+  prestadorId   String     @map("prestador_id")
+  modo          ModoAgenda
   /// modo=semanal: días de la semana (1=lunes … 7=domingo)
-  diasSemana  Int[]      @default([]) @map("dias_semana")
+  diasSemana    Int[]      @default([]) @map("dias_semana")
   /// modo=calendario: fecha puntual
-  fecha       DateTime?  @db.Date
-  horaIni     String     @map("hora_ini")
-  horaFin     String     @map("hora_fin")
-  slotMin     Int        @map("slot_min")
-  servicioId  String?    @map("servicio_id")
-  consultorio String?
-  activa      Boolean    @default(true)
+  fecha         DateTime?  @db.Date
+  horaIni       String     @map("hora_ini")
+  horaFin       String     @map("hora_fin")
+  slotMin       Int        @map("slot_min")
+  servicioId    String?    @map("servicio_id")
+  consultorio   String?
+  activa        Boolean    @default(true)
   /// RN-06.3 · Bloqueo con citas asignadas → notificación y reprogramación
-  bloqueada   Boolean    @default(false)
-  motivoBloqueo String?  @map("motivo_bloqueo")
-  sedeId      String     @map("sede_id")
+  bloqueada     Boolean    @default(false)
+  motivoBloqueo String?    @map("motivo_bloqueo")
+  sedeId        String     @map("sede_id")
 
   prestador Prestador @relation(fields: [prestadorId], references: [id], onDelete: Cascade)
   servicio  Servicio? @relation(fields: [servicioId], references: [id])
@@ -274,25 +275,25 @@ model Agenda {
 // ─────────────────────────── Citas · el núcleo (RN-01 a RN-04) ───────────────────────────
 
 model Cita {
-  id          String     @id @default(uuid())
+  id            String     @id @default(uuid())
   /// Código de atención, único por sede y día
-  codigo      String
-  pacienteId  String     @map("paciente_id")
-  prestadorId String     @map("prestador_id")
-  servicioId  String     @map("servicio_id")
-  tipo        TipoCita
+  codigo        String
+  pacienteId    String     @map("paciente_id")
+  prestadorId   String     @map("prestador_id")
+  servicioId    String     @map("servicio_id")
+  tipo          TipoCita
   /// RN-01.3 · Un control exige su consulta origen y debe caer dentro de la ventana del prestador
-  citaOrigenId String?   @map("cita_origen_id")
-  fecha       DateTime   @db.Date
+  citaOrigenId  String?    @map("cita_origen_id")
+  fecha         DateTime   @db.Date
   /// Hora de inicio en minutos desde medianoche — aritmética de solapamiento sin ambigüedad de zona horaria
-  horaInicio  Int        @map("hora_inicio")
-  duracionMin Int        @map("duracion_min")
-  estado      EstadoCita @default(confirmada)
-  origen      OrigenCita
-  observacion String?
-  sedeId      String     @map("sede_id")
-  creadoEn    DateTime   @default(now()) @map("creado_en")
-  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  horaInicio    Int        @map("hora_inicio")
+  duracionMin   Int        @map("duracion_min")
+  estado        EstadoCita @default(confirmada)
+  origen        OrigenCita
+  observacion   String?
+  sedeId        String     @map("sede_id")
+  creadoEn      DateTime   @default(now()) @map("creado_en")
+  actualizadoEn DateTime   @updatedAt @map("actualizado_en")
 
   paciente   Paciente  @relation(fields: [pacienteId], references: [id])
   prestador  Prestador @relation(fields: [prestadorId], references: [id])
@@ -313,16 +314,16 @@ model Cita {
 // ─────────────────────────── Turnos · cola en sede (RN-05, RN-07) ───────────────────────────
 
 model Turno {
-  id           String      @id @default(uuid())
-  citaId       String      @unique @map("cita_id")
-  llegadaTs    DateTime    @default(now()) @map("llegada_ts")
-  estado       EstadoTurno @default(en_espera)
-  prioridad    Prioridad   @default(baja)
+  id               String      @id @default(uuid())
+  citaId           String      @unique @map("cita_id")
+  llegadaTs        DateTime    @default(now()) @map("llegada_ts")
+  estado           EstadoTurno @default(en_espera)
+  prioridad        Prioridad   @default(baja)
   /// RN-07.4 · Si el prestador prioriza, la nota del motivo es obligatoria y queda auditada
-  notaPriorizacion String? @map("nota_priorizacion")
-  priorizadoPor    String? @map("priorizado_por")
-  llamadoTs    DateTime?   @map("llamado_ts")
-  consultorio  String?
+  notaPriorizacion String?     @map("nota_priorizacion")
+  priorizadoPor    String?     @map("priorizado_por")
+  llamadoTs        DateTime?   @map("llamado_ts")
+  consultorio      String?
 
   cita Cita @relation(fields: [citaId], references: [id], onDelete: Cascade)
 
@@ -350,8 +351,8 @@ model Conversacion {
   sedeId     String             @map("sede_id")
   creadoEn   DateTime           @default(now()) @map("creado_en")
 
-  paciente Paciente?  @relation(fields: [pacienteId], references: [id])
-  sede     Sede       @relation(fields: [sedeId], references: [id])
+  paciente Paciente? @relation(fields: [pacienteId], references: [id])
+  sede     Sede      @relation(fields: [sedeId], references: [id])
   mensajes Mensaje[]
 
   /// Consulta de la bandeja: pendientes = escalada && sin resolver
@@ -382,19 +383,19 @@ model Mensaje {
 // ─────────────────────────── Pantallas de sala (RN-11) ───────────────────────────
 
 model Pantalla {
-  id             String   @id @default(uuid())
-  nombre         String
+  id                        String   @id @default(uuid())
+  nombre                    String
   /// RN-11.1 · Configuración por sala/servicio, no por pisos
-  servicios      String[] @default([])
-  turnosVisibles Int      @default(4) @map("turnos_visibles")
-  sonido         Boolean  @default(true)
-  mensaje        String?
+  servicios                 String[] @default([])
+  turnosVisibles            Int      @default(4) @map("turnos_visibles")
+  sonido                    Boolean  @default(true)
+  mensaje                   String?
   /// RN-11.2 · Frame multimedia: canal en vivo + videos institucionales rotando
-  media          Boolean  @default(false)
-  canalYoutube   String?  @map("canal_youtube")
-  videosPromo    String[] @default([]) @map("videos_promo")
-  intervaloInstitucionalMin Int @default(10) @map("intervalo_institucional_min")
-  sedeId         String   @map("sede_id")
+  media                     Boolean  @default(false)
+  canalYoutube              String?  @map("canal_youtube")
+  videosPromo               String[] @default([]) @map("videos_promo")
+  intervaloInstitucionalMin Int      @default(10) @map("intervalo_institucional_min")
+  sedeId                    String   @map("sede_id")
 
   sede Sede @relation(fields: [sedeId], references: [id])
 
@@ -403,22 +404,52 @@ model Pantalla {
 
 // ─────────────────────────── Usuarios y auditoría ───────────────────────────
 
+/**
+ * Perfil de acceso · qué puede ver y hacer quien lo tenga.
+ * Sustituye al enum de cuatro roles: una clínica real tiene matices que no caben
+ * en cuatro cajas, y cada matiz obligaba a tocar código. Los permisos válidos son
+ * la lista cerrada de packages/shared/src/permisos.ts.
+ */
+model Perfil {
+  id          String   @id @default(uuid())
+  nombre      String   @unique
+  descripcion String?
+  /// Claves de packages/shared · PERMISOS
+  permisos    String[] @default([])
+  /// Los perfiles base no se pueden borrar, pero sí editar.
+  sistema     Boolean  @default(false)
+  activo      Boolean  @default(true)
+  sedeId      String   @map("sede_id")
+  creadoEn    DateTime @default(now()) @map("creado_en")
+
+  sede     Sede      @relation(fields: [sedeId], references: [id])
+  usuarios Usuario[]
+
+  @@map("perfil")
+}
+
 model Usuario {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   nombre       String
-  email        String   @unique
-  hashPassword String   @map("hash_password")
+  email        String    @unique
+  hashPassword String    @map("hash_password")
+  /// Se conserva para el vínculo con la ficha del prestador y las pantallas.
+  /// La autorización la decide el perfil, no esto.
   rol          Rol
+  /// De dónde salen los permisos. Nulo solo durante la migración.
+  perfilId     String?   @map("perfil_id")
   /// Un usuario con rol=prestador se ata a su ficha de prestador (RN-06.2)
-  prestadorId  String?  @unique @map("prestador_id")
-  activo       Boolean  @default(true)
+  prestadorId  String?   @unique @map("prestador_id")
+  activo       Boolean   @default(true)
   ultimoAcceso DateTime? @map("ultimo_acceso")
-  sedeId       String   @map("sede_id")
-  creadoEn     DateTime @default(now()) @map("creado_en")
+  sedeId       String    @map("sede_id")
+  creadoEn     DateTime  @default(now()) @map("creado_en")
 
   prestador Prestador? @relation(fields: [prestadorId], references: [id])
   sede      Sede       @relation(fields: [sedeId], references: [id])
+  perfil    Perfil?    @relation(fields: [perfilId], references: [id])
 
+  @@index([perfilId])
   @@map("usuario")
 }
 

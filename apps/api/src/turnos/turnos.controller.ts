@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { TurnosService } from './turnos.service';
 import { LlamarSiguienteDto, PriorizarTurnoDto, RegistrarLlegadaDto } from './dto/turno.dto';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from '../auth/auth.types';
 
@@ -11,7 +11,7 @@ export class TurnosController {
 
   /** RN-07.1 · el mostrador es el canal principal de llegada. */
   @Post('llegada')
-  @Roles('admin', 'asistente')
+  @Permisos('mostrador.operar')
   registrarLlegada(@Body() dto: RegistrarLlegadaDto, @UsuarioActual() usuario: UsuarioAutenticado) {
     return this.turnos.registrarLlegada(dto, usuario.id);
   }
@@ -26,14 +26,14 @@ export class TurnosController {
 
   /** RN-07.3 · llamado automático al siguiente en cola. */
   @Post('llamar-siguiente')
-  @Roles('admin', 'asistente', 'prestador')
+  @Permisos('turnos.atender')
   llamarSiguiente(@Body() dto: LlamarSiguienteDto, @UsuarioActual() usuario: UsuarioAutenticado) {
     return this.turnos.llamarSiguiente(dto, usuario.id);
   }
 
   /** RN-07.4 · priorización con nota obligatoria (la exige el DTO). */
   @Patch(':id/priorizar')
-  @Roles('admin', 'asistente', 'prestador')
+  @Permisos('turnos.atender')
   priorizar(
     @Param('id') id: string,
     @Body() dto: PriorizarTurnoDto,
@@ -43,7 +43,7 @@ export class TurnosController {
   }
 
   @Patch(':id/finalizar')
-  @Roles('admin', 'asistente', 'prestador')
+  @Permisos('turnos.atender')
   finalizar(@Param('id') id: string, @UsuarioActual() usuario: UsuarioAutenticado) {
     return this.turnos.finalizar(id, usuario.id);
   }

@@ -1,10 +1,10 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { MetricasService } from './metricas.service';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { fechaEnZona } from '@provivir/shared';
 
 @Controller('metricas')
-@Roles('admin', 'asistente')
+@Permisos('metricas.ver')
 export class MetricasController {
   constructor(private readonly metricas: MetricasService) {}
 

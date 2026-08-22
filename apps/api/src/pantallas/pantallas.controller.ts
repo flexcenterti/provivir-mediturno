@@ -3,7 +3,7 @@ import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service';
 import { TurnosService } from '../turnos/turnos.service';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { Permisos } from '../auth/decorators/permisos.decorator';
 import { Publico } from '../auth/decorators/publico.decorator';
 
 class ActualizarPantallaDto {
@@ -28,7 +28,7 @@ export class PantallasController {
   ) {}
 
   @Get()
-  @Roles('admin', 'asistente')
+  @Permisos('pantallas.ver')
   listar() {
     return this.prisma.pantalla.findMany({ orderBy: { nombre: 'asc' } });
   }
@@ -69,7 +69,7 @@ export class PantallasController {
   }
 
   @Patch(':id')
-  @Roles('admin')
+  @Permisos('pantallas.editar')
   async actualizar(@Param('id') id: string, @Body() dto: ActualizarPantallaDto) {
     const pantalla = await this.prisma.pantalla.findUnique({ where: { id } });
     if (!pantalla) throw new NotFoundException('Pantalla no encontrada');

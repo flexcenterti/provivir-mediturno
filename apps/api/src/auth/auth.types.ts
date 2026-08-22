@@ -13,5 +13,6 @@ export interface UsuarioAutenticado {
   id: string;
   rol: Rol;
   sedeId: string;
+  permisos: string[];
   prestadorId?: string;
 }

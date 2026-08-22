@@ -3,8 +3,9 @@ import {
   api, token, type EstadoKiosko, type Pantalla, type RegistroAuditoria,
   type Servicio, type TrabajoCarga,
 } from '../api';
+import { Acceso } from './Acceso';
 
-type Seccion = 'carga' | 'auditoria' | 'pantallas' | 'kiosko' | 'configuracion';
+type Seccion = 'acceso' | 'carga' | 'auditoria' | 'pantallas' | 'kiosko' | 'configuracion';
 
 /**
  * En producción las tres apps comparten dominio y la TV vive en /tv.
@@ -13,6 +14,7 @@ type Seccion = 'carga' | 'auditoria' | 'pantallas' | 'kiosko' | 'configuracion';
 const URL_PANTALLAS = import.meta.env.DEV ? 'http://localhost:5175/' : '/tv/';
 
 const SECCIONES: Array<{ id: Seccion; etiqueta: string }> = [
+  { id: 'acceso', etiqueta: 'Perfiles y usuarios' },
   { id: 'carga', etiqueta: 'Carga masiva' },
   { id: 'auditoria', etiqueta: 'Auditoría' },
   { id: 'pantallas', etiqueta: 'Pantallas' },
@@ -21,7 +23,7 @@ const SECCIONES: Array<{ id: Seccion; etiqueta: string }> = [
 ];
 
 export function Administracion() {
-  const [seccion, setSeccion] = useState<Seccion>('carga');
+  const [seccion, setSeccion] = useState<Seccion>('acceso');
 
   return (
     <div className="vista">
@@ -34,6 +36,7 @@ export function Administracion() {
         ))}
       </div>
 
+      {seccion === 'acceso' && <Acceso />}
       {seccion === 'carga' && <CargaMasiva />}
       {seccion === 'auditoria' && <Auditoria />}
       {seccion === 'pantallas' && <Pantallas />}

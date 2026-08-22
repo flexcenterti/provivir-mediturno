@@ -77,9 +77,18 @@ recordatorios, hasta que dé su teléfono.
 - ⬜ Decidir si se agenda a quien no quiere dar teléfono, sabiendo que se queda sin
   recordatorio, o si el número es obligatorio para confirmar la cita.
 
-## Usuarios
+## Usuarios y perfiles
 
-No hay pantalla para gestionarlos todavía; se hace por CLI:
+Se gestionan desde **Administración → Perfiles y usuarios**: primero se define un
+perfil (qué puede ver y qué no, marcando permisos), después se crea la persona y se
+le asigna uno. Los cuatro perfiles base —Administración, Asistente, Médico, Pantalla
+de sala— se crean solos y reproducen lo que hacían los roles anteriores.
+
+Dos salvaguardas que conviene conocer antes de tocarlos: un perfil con usuarios no se
+puede eliminar, y el sistema rechaza cualquier cambio que dejara a nadie con el
+permiso «Usuarios y perfiles» — quedarse sin administrador solo se arregla por consola.
+
+También por CLI, para lo que haga falta antes de tener acceso:
 
     node apps/api/dist/cli/usuarios.js                    quién existe
     node apps/api/dist/cli/usuarios.js --perfiles-prueba  uno por cada rol

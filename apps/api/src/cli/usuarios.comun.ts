@@ -1,6 +1,9 @@
-import { randomBytes } from 'node:crypto';
+import { PERFILES_BASE } from '@provivir/shared';
 import type { PrismaClient, Rol } from '@prisma/client';
 import { hashearPassword } from '../auth/argon2.opciones';
+import { generarPassword } from '../auth/password';
+
+export { generarPassword };
 
 export const ROLES: readonly Rol[] = ['admin', 'asistente', 'prestador', 'pantalla'];
 
@@ -12,22 +15,29 @@ export const QUE_HACE: Record<Rol, string> = {
   pantalla: 'Únicamente el estado de las pantallas de sala.',
 };
 
+/** Qué perfil base corresponde a cada rol. */
+export const PERFIL_DE_ROL: Record<Rol, string> = {
+  admin: 'Administración',
+  asistente: 'Asistente',
+  prestador: 'Médico',
+  pantalla: 'Pantalla de sala',
+};
+
 /**
- * Contraseña generada, no elegida. Se excluyen los caracteres que se confunden al
- * dictarla por teléfono (O/0, l/1/I) porque alguien la va a dictar.
+ * Crea los perfiles base si faltan. Idempotente, y NO pisa sus permisos: puede que
+ * ya los hayan ajustado desde el backoffice.
  */
-export function generarPassword(): string {
-  const alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-  const simbolos = '!@#$%&*?';
-  const tomar = (fuente: string, n: number) =>
-    Array.from(randomBytes(n)).map((b) => fuente[b % fuente.length]).join('');
-  // Se baraja para que los símbolos no queden siempre al final.
-  const bruto = (tomar(alfabeto, 18) + tomar(simbolos, 3)).split('');
-  for (let i = bruto.length - 1; i > 0; i--) {
-    const j = randomBytes(1)[0]! % (i + 1);
-    [bruto[i], bruto[j]] = [bruto[j]!, bruto[i]!];
+export async function asegurarPerfilesBase(prisma: PrismaClient, sedeId: string): Promise<void> {
+  for (const base of PERFILES_BASE) {
+    await prisma.perfil.upsert({
+      where: { nombre: base.nombre },
+      update: { sistema: true },
+      create: {
+        nombre: base.nombre, descripcion: base.descripcion,
+        permisos: [...base.permisos], sistema: true, sedeId,
+      },
+    });
   }
-  return bruto.join('');
 }
 
 export interface AltaUsuario {
@@ -65,6 +75,11 @@ export async function crearUsuario(prisma: PrismaClient, alta: AltaUsuario): Pro
     }
   }
 
+  // Todo usuario nace con un perfil: sin él la autorización caería al equivalente
+  // de su rol, que es una red de seguridad, no el camino normal.
+  await asegurarPerfilesBase(prisma, alta.sedeId);
+  const perfil = await prisma.perfil.findUnique({ where: { nombre: PERFIL_DE_ROL[alta.rol] } });
+
   const password = generarPassword();
   const hashPassword = await hashearPassword(password);
 
@@ -77,6 +92,7 @@ export async function crearUsuario(prisma: PrismaClient, alta: AltaUsuario): Pro
     data: {
       email, nombre: alta.nombre, rol: alta.rol,
       prestadorId: alta.prestadorId ?? null,
+      perfilId: perfil?.id ?? null,
       hashPassword, sedeId: alta.sedeId,
     },
   });

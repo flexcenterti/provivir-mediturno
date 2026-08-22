@@ -6,6 +6,37 @@ export interface UsuarioSesion {
   prestadorId: string | null;
 }
 
+export interface DefinicionPermiso {
+  clave: string; area: string; etiqueta: string; descripcion: string;
+}
+
+export interface Perfil {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  permisos: string[];
+  sistema: boolean;
+  activo: boolean;
+  _count: { usuarios: number };
+}
+
+export interface UsuarioAdmin {
+  id: string;
+  email: string;
+  nombre: string;
+  rol: 'admin' | 'asistente' | 'prestador' | 'pantalla';
+  activo: boolean;
+  ultimoAcceso: string | null;
+  prestadorId: string | null;
+  perfil: { id: string; nombre: string; activo: boolean } | null;
+}
+
+/** La contraseña llega UNA vez, al crear o reiniciar. No se puede volver a pedir. */
+export interface ClaveEmitida {
+  email: string;
+  password: string;
+}
+
 export interface RespuestaLogin {
   accessToken: string;
   refreshToken: string;
@@ -118,6 +149,23 @@ export const api = {
   priorizar: (id: string, prioridad: string, nota: string) =>
     pedir<Turno>(`/turnos/${id}/priorizar`, { method: 'PATCH', body: JSON.stringify({ prioridad, nota }) }),
   finalizar: (id: string) => pedir<Turno>(`/turnos/${id}/finalizar`, { method: 'PATCH' }),
+  // ── Perfiles y usuarios ──
+  permisos: () => pedir<DefinicionPermiso[]>('/acceso/permisos'),
+  perfiles: () => pedir<Perfil[]>('/acceso/perfiles'),
+  crearPerfil: (p: { nombre: string; descripcion?: string; permisos: string[] }) =>
+    pedir<Perfil>('/acceso/perfiles', { method: 'POST', body: JSON.stringify(p) }),
+  actualizarPerfil: (id: string, p: Partial<{ nombre: string; descripcion: string; permisos: string[]; activo: boolean }>) =>
+    pedir<Perfil>(`/acceso/perfiles/${id}`, { method: 'PATCH', body: JSON.stringify(p) }),
+  eliminarPerfil: (id: string) =>
+    pedir<{ eliminado: boolean }>(`/acceso/perfiles/${id}`, { method: 'DELETE' }),
+
+  usuariosAdmin: () => pedir<UsuarioAdmin[]>('/acceso/usuarios'),
+  crearUsuarioAdmin: (u: { email: string; nombre: string; rol: string; perfilId: string; prestadorId?: string }) =>
+    pedir<ClaveEmitida>('/acceso/usuarios', { method: 'POST', body: JSON.stringify(u) }),
+  actualizarUsuarioAdmin: (id: string, u: Partial<{ nombre: string; perfilId: string; activo: boolean }>) =>
+    pedir<UsuarioAdmin>(`/acceso/usuarios/${id}`, { method: 'PATCH', body: JSON.stringify(u) }),
+  reiniciarClave: (id: string) =>
+    pedir<ClaveEmitida>(`/acceso/usuarios/${id}/clave`, { method: 'POST' }),
 };
 
 // ── Tipos de la API ──
