@@ -41,11 +41,13 @@ son credenciales, insumos del cliente o decisiones suyas.
 | 🟡 P3 | Ventana de control por prestador (7/10/30 días) | RN-01 | Editable desde Catálogo |
 | 🟡 P4 | Criterios de prioridad alta/media/baja | Bandeja | Opera con tiempo de espera mientras tanto |
 | 🟡 P5 | Métricas del "pantallazo único" | Tablero | No bloquea la primera entrega |
-| 🟡 P6 | Documentación comercial de servicios | Calidad de la IA | Sin ella el bot informa pero vende poco |
+| 🟡 P6 | Documentación comercial de servicios | Calidad de la IA · **RN-13 entera** | Hoy se carga como bloque de texto en `documentacion_comercial`. Con RN-13 pasa a artículos: un documento por servicio, o uno con un encabezado por servicio |
 | 🟡 P7 | Esquema de atención y horarios actuales | Parametrización | — |
 | 🟡 P8 | Dinámica definitiva del kiosko | Activación futura | Módulo apagado por bandera |
 | 🟡 P9 | CSV de contactos del celular (50.000+) | Migración del número | Importador listo y probado |
 | ⬜ P10 | Enlaces de YouTube (canal + videos) | Frame de pantallas | Configurable desde Administración |
+| ⬜ P12 | Lista aprobada **por escrito** de temas que el bot siempre escala | Salida a piloto (RN-13.4) | Propuesta base redactada en `docs/rn-13-base-conocimiento.md`; falta que el cliente la revise y confirme |
+| ⬜ P13 | Información operativa: horarios, dirección y cómo llegar, formas de pago, política de cancelación, qué traer | Primeras respuestas automáticas (RN-13) | Son las preguntas más repetidas del día; solo con esto el bot ya resuelve buena parte |
 
 ## Antes de conectar las claves de IA
 
@@ -129,6 +131,7 @@ Consecuencias asumidas, y cómo se acotan:
 | ⬜ D-a | **RN-01.5** · qué cuenta como "control consecutivo". Se implementó adyacencia real: un procedimiento entre dos controles rompe la cadena, porque sí factura. | `docs/changelog-fase2.md` |
 | ⬜ D-b | **RN-10.2** · el portal exige documento **+ últimos 4 del teléfono**, no solo documento, para impedir enumerar quién es paciente. Cuesta comodidad a quien cambió de número. | `docs/changelog-fase5.md` |
 | ⬜ D-c | **RN-09.2** · usar botones interactivos de WhatsApp en vez de solo texto. Implementado tras la bandera `whatsapp_botones_interactivos`. | `docs/rn-09-8-oferta-web.md` |
+| ⬜ D-d | **RN-09.9** · ¿el piloto arranca con el seguimiento comercial **encendido o apagado**? Recomendación del equipo: apagado, medir los primeros días y encenderlo después. Además hay que aprobar los textos de los tres mensajes y el horario de envío. | `docs/rn-09-9-seguimiento-comercial.md` |
 
 ## Antes del piloto
 
