@@ -54,6 +54,7 @@ describe('Herramientas de conocimiento (e2e)', () => {
   const TEL = '+573009992222';
   const SEDE = 'cdc-oriente';
   const creados: string[] = [];
+  const arranque = new Date();
   let enviados: string[] = [];
   let contador = 0;
 
@@ -109,9 +110,10 @@ describe('Herramientas de conocimiento (e2e)', () => {
   afterAll(async () => {
     for (const id of creados) await prisma.kbArticulo.deleteMany({ where: { id } });
     await prisma.mensaje.deleteMany({ where: { conversacion: { telefono: TEL } } });
-    await prisma.kbConsulta.deleteMany({ where: { conversacion: { telefono: TEL } } });
     await prisma.conversacion.deleteMany({ where: { telefono: TEL } });
-    await prisma.kbPendiente.deleteMany({ where: { preguntaEjemplo: { contains: 'parqueadero' } } });
+    // La consulta sobrevive al borrado de la conversación (SetNull): se limpia por fecha.
+    await prisma.kbConsulta.deleteMany({ where: { ts: { gte: arranque } } });
+    await prisma.kbPendiente.deleteMany({ where: { creadoEn: { gte: arranque } } });
     await app.close();
   });
 

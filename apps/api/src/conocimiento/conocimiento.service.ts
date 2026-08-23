@@ -5,6 +5,7 @@ import { AuditoriaService } from '../auditoria/auditoria.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { trocear } from './conocimiento.troceado';
 import { parsearTemas, temaProhibido } from './conocimiento.temas';
+import { categoriaDe, dividirDocumentacion, emparejarServicio } from './conocimiento.importacion';
 import {
   decidir,
   normalizarPregunta,
@@ -18,6 +19,7 @@ import type { ActualizarArticuloDto, CrearArticuloDto } from './dto/articulo.dto
 export const CLAVE_UMBRAL = 'kb_score_min';
 export const CLAVE_TOP_K = 'kb_top_k';
 export const CLAVE_TEMAS = 'kb_temas_prohibidos';
+export const CLAVE_DOC_COMERCIAL = 'documentacion_comercial';
 
 const UMBRAL_POR_DEFECTO = 62;
 const TOP_K_POR_DEFECTO = 5;
@@ -252,6 +254,82 @@ export class ConocimientoService {
       data: { requiereRevision: true },
     });
     return count;
+  }
+
+  // ─────────────────────── Importación (RN-13) ───────────────────────
+
+  /** ¿La base ya puede sostener al bot por sí sola? */
+  async hayContenidoPublicado(): Promise<boolean> {
+    return (await this.prisma.kbArticulo.count({ where: { estado: 'publicado' } })) > 0;
+  }
+
+  /**
+   * Convierte `configuracion.documentacion_comercial` en artículos publicados.
+   *
+   * Es idempotente por título: volver a correrla no duplica nada, así que se puede
+   * ejecutar tras cada entrega de contenido del cliente sin pensarlo dos veces.
+   *
+   * NO borra el parámetro. El prompt deja de inyectarlo solo cuando hay artículos
+   * publicados (RN-13), y conservarlo permite volver atrás archivando los artículos
+   * si algo sale mal.
+   */
+  async importarDocumentacionComercial(
+    usuarioId: string,
+    sedeId: string,
+  ): Promise<{
+    creados: Array<{ titulo: string; servicioId: string | null }>;
+    omitidos: string[];
+    sinServicio: string[];
+  }> {
+    const texto = this.configuracion.texto(CLAVE_DOC_COMERCIAL, '');
+    if (!texto.trim()) return { creados: [], omitidos: [], sinServicio: [] };
+
+    const servicios = await this.prisma.servicio.findMany({
+      where: { activo: true },
+      select: { id: true, nombre: true },
+    });
+
+    const creados: Array<{ titulo: string; servicioId: string | null }> = [];
+    const omitidos: string[] = [];
+    const sinServicio: string[] = [];
+
+    for (const bloque of dividirDocumentacion(texto)) {
+      const yaExiste = await this.prisma.kbArticulo.findFirst({
+        where: { titulo: bloque.titulo },
+        select: { id: true },
+      });
+      if (yaExiste) {
+        omitidos.push(bloque.titulo);
+        continue;
+      }
+
+      const servicioId = emparejarServicio(bloque.titulo, servicios);
+      if (!servicioId) sinServicio.push(bloque.titulo);
+
+      const articulo = await this.crear(
+        {
+          titulo: bloque.titulo,
+          categoria: categoriaDe(bloque.titulo, servicioId),
+          contenidoMd: `## ${bloque.titulo}\n\n${bloque.cuerpo}`,
+          ...(servicioId ? { servicioId } : {}),
+        },
+        usuarioId,
+        sedeId,
+      );
+      // Es contenido que el cliente ya aprobó y que el bot ya está usando desde el
+      // prompt: publicarlo no expone nada nuevo, solo cambia por dónde lo recupera.
+      await this.publicar(articulo.id, usuarioId);
+      creados.push({ titulo: bloque.titulo, servicioId });
+    }
+
+    await this.auditoria.registrar({
+      usuario: usuarioId,
+      accion: 'Documentación comercial importada',
+      entidad: 'kb_articulo',
+      detalle: `${creados.length} artículo(s) creados · ${omitidos.length} ya existían · ${sinServicio.length} sin servicio vinculado`,
+    });
+
+    return { creados, omitidos, sinServicio };
   }
 
   // ─────────────────────────── Recuperación ───────────────────────────

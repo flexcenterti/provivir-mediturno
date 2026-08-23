@@ -1,6 +1,6 @@
 # Changelog · FASE 7 — Base de conocimiento y seguimiento comercial
 
-**Estado:** en curso. Esquema migrado, módulo `conocimiento` operativo y el bot ya lo consulta; **195 unitarias y 140 e2e en verde**.
+**Estado:** en curso. Esquema migrado, módulo `conocimiento` operativo, el bot ya lo consulta y la documentación comercial se migra a artículos; **209 unitarias y 143 e2e en verde**.
 
 Fase posterior al alcance original. Convierte `configuracion.documentacion_comercial` —hoy un
 bloque de texto inyectado en el prompt de **todas** las conversaciones— en artículos versionados
@@ -171,10 +171,47 @@ que devuelve `encontrado: false` en vez de inventarlo.
 La prueba que fijaba el inventario en «8 herramientas» pasó a comparar la lista de nombres: si
 alguien agrega o quita una, el fallo dice cuál.
 
+## Migración de la documentación comercial
+
+`configuracion.documentacion_comercial` se parte en artículos publicados. El formato que ya
+entrega el cliente —bloques `**Título** — cuerpo` separados por línea en blanco— se reconoce tal
+cual, y también se aceptan encabezados markdown: el cliente manda lo que tenga.
+
+**Idempotente por título.** Se puede correr tras cada entrega de contenido sin duplicar nada.
+
+**Ante ambigüedad no se vincula el servicio.** «Medicina general» coincide con Consulta y con
+Control, que tienen duración y costo distintos; atarlo al equivocado haría que el bot cite cifras
+que no son y que RN-04.5.4 marque para revisión el artículo que no toca. El artículo se recupera
+igual —lo único que se pierde es el vínculo— y la importación lo reporta para que un humano lo
+resuelva en medio minuto. «Ecografía» tampoco se queda con el bloque de «Ecografía Doppler».
+
+**Lo que no encaja no se pierde:** un párrafo sin título reconocible se pega al bloque anterior, y
+el texto suelto anterior al primer título se conserva como «Información general».
+
+### El prompt cambia solo
+
+`documentacion_comercial` se inyecta **únicamente mientras la base esté vacía**. En cuanto hay
+artículos publicados, esa información se recupera por pregunta y repetirla entera en cada
+conversación sería pagar sus tokens para nada. El parámetro **no se borra**: si se archivaran todos
+los artículos, el bloque vuelve solo. Eso hace la migración reversible sin tocar código.
+
+El prompt tiene ahora tres variantes: sin documentación (P6 pendiente), con el bloque inyectado, y
+con la base de conocimiento disponible.
+
+### Se descartó el comando CLI
+
+Se escribió primero como comando de consola, siguiendo el patrón de `datos-demo`. Arrancar el
+contexto completo de Nest desde la consola cuelga el proceso —levanta colas, websockets y el
+cliente de Meta, nada de lo cual hace falta— y `tsx` además no emite `emitDecoratorMetadata`, del
+que depende la inyección de dependencias.
+
+Quedó como endpoint (`POST /conocimiento/importar`, permiso `conocimiento.editar`), que además es
+mejor sitio: la importación es una acción de administración con reporte visible, y queda auditada
+con el usuario real en vez de con la etiqueta `cli`.
+
 ## Pendiente en esta fase
 
-Migración del contenido de `documentacion_comercial` a artículos · extensión de la cola de RN-09.8
-a los tres pasos (RN-09.9) · `@Delete` de servicios con su restricción y los efectos en cadena
+Extensión de la cola de RN-09.8 a los tres pasos (RN-09.9) · `@Delete` de servicios con su restricción y los efectos en cadena
 (RN-04.5) · bloque de interesados en la bandeja · pantalla de conocimiento en el backoffice ·
 golden set y calibración del umbral.
 

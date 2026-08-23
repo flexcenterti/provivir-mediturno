@@ -20,6 +20,8 @@ describe('Base de conocimiento (integración)', () => {
   const USUARIO = 'test-conocimiento';
   const SEDE = 'cdc-oriente';
   const creados: string[] = [];
+  /** Para borrar la telemetría que genere la corrida y dejar la base como estaba. */
+  const arranque = new Date();
 
   const publicar = async (titulo: string, contenidoMd: string): Promise<string> => {
     const art = await kb.crear({ titulo, categoria: 'Prueba', contenidoMd }, USUARIO, SEDE);
@@ -55,7 +57,8 @@ describe('Base de conocimiento (integración)', () => {
     for (const id of creados) {
       await prisma.kbArticulo.deleteMany({ where: { id } });
     }
-    await prisma.kbConsulta.deleteMany({ where: { conversacionId: null, pregunta: { contains: '¿' } } });
+    await prisma.kbConsulta.deleteMany({ where: { ts: { gte: arranque } } });
+    await prisma.kbPendiente.deleteMany({ where: { creadoEn: { gte: arranque } } });
     await app.close();
   });
 
@@ -156,6 +159,37 @@ describe('Base de conocimiento (integración)', () => {
       const fragmentos = await prisma.kbFragmento.findMany({ where: { articuloId: id } });
       expect(fragmentos).toHaveLength(1);
       expect(fragmentos[0]!.texto).toContain('Norte');
+    });
+  });
+
+  describe('RN-13 · importación de la documentación comercial', () => {
+    // El parámetro trae el catálogo de demostración (P6 real sigue pendiente).
+    it('convierte el bloque del prompt en artículos publicados y vinculados', async () => {
+      const r = await kb.importarDocumentacionComercial(USUARIO, SEDE);
+      creados.push(...(await prisma.kbArticulo.findMany({ select: { id: true } })).map((a) => a.id));
+
+      expect(r.creados.length).toBeGreaterThan(5);
+      expect(r.creados.some((c) => c.servicioId === 'ecod')).toBe(true);
+
+      // «Medicina general» coincide con Consulta y con Control: no se vincula.
+      expect(r.sinServicio).toContain('Medicina general');
+
+      const publicados = await prisma.kbArticulo.count({ where: { estado: 'publicado' } });
+      expect(publicados).toBeGreaterThan(5);
+    });
+
+    it('es idempotente: repetirla no duplica artículos', async () => {
+      const antes = await prisma.kbArticulo.count();
+      const r = await kb.importarDocumentacionComercial(USUARIO, SEDE);
+
+      expect(r.creados).toHaveLength(0);
+      expect(r.omitidos.length).toBeGreaterThan(0);
+      expect(await prisma.kbArticulo.count()).toBe(antes);
+    });
+
+    it('lo importado se puede recuperar de inmediato', async () => {
+      const r = await kb.buscar('¿La ecografía Doppler necesita ayuno?', { registrar: false });
+      expect(r.tipo).toBe('respondida');
     });
   });
 

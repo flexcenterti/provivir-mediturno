@@ -55,10 +55,19 @@ export class IaService {
       };
     }
 
+    // RN-13 · el bloque de documentación comercial se inyecta SOLO mientras la base
+    // de conocimiento esté vacía. En cuanto hay artículos publicados, esa información
+    // se recupera por pregunta y repetirla entera en cada conversación sería pagar
+    // sus tokens para nada. Si se archivaran todos los artículos, vuelve solo.
+    const kbConContenido = await this.conocimiento.hayContenidoPublicado();
+
     const system = promptSistema({
       urlPortal: this.config.get<string>('PORTAL_URL') ?? '',
-      documentacionComercial: this.configuracion.texto('documentacion_comercial', ''),
+      documentacionComercial: kbConContenido
+        ? ''
+        : this.configuracion.texto('documentacion_comercial', ''),
       ofrecerWeb: !ctx.yaOfrecioWeb,
+      conocimientoDisponible: kbConContenido,
     });
 
     const mensajes: MensajeLlm[] = [

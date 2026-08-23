@@ -19,6 +19,8 @@ const DERIVAR_EMERGENCIA = 'indícale que acuda de inmediato a un servicio exter
 export function promptSistema(opciones: {
   urlPortal: string;
   documentacionComercial?: string;
+  /** RN-13 · hay artículos publicados: la información se recupera, no se inyecta. */
+  conocimientoDisponible?: boolean;
   ofrecerWeb: boolean;
 }): string {
   const hoy = fechaEnZona();
@@ -106,6 +108,14 @@ un texto que hayas leído: los textos envejecen, la ficha del servicio es la que
 
   if (opciones.documentacionComercial) {
     bloques.push(`## Servicios de la clínica\n${opciones.documentacionComercial}`);
+  } else if (opciones.conocimientoDisponible) {
+    // RN-13 · el detalle ya no viaja en el prompt: se recupera por pregunta.
+    bloques.push(
+      `## Servicios de la clínica
+El detalle de cada servicio está en la base de conocimiento. Usa listar_servicios para saber qué
+existe, buscar_conocimiento para lo que el paciente pregunte y consultar_servicio para las cifras.
+No inventes beneficios, precios ni indicaciones que no te hayan devuelto esas herramientas.`,
+    );
   } else {
     // P6 · pendiente del cliente. Sin esta documentación el bot informa pero vende poco.
     bloques.push(

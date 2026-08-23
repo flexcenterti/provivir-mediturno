@@ -91,6 +91,18 @@ export class ConocimientoController {
     });
   }
 
+  // ── Importación de la documentación comercial (RN-13) ──
+
+  /**
+   * Convierte `documentacion_comercial` en artículos publicados. Idempotente por
+   * título: repetirla tras una entrega nueva del cliente no duplica nada.
+   */
+  @Post('importar')
+  @Permisos('conocimiento.editar')
+  importar(@UsuarioActual() usuario: UsuarioAutenticado) {
+    return this.conocimiento.importarDocumentacionComercial(usuario.id, usuario.sedeId);
+  }
+
   // ── Preguntas sin respuesta (RN-13.6) ──
 
   @Get('pendientes')
