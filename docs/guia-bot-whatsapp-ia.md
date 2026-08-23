@@ -611,6 +611,11 @@ recuperado:
   "espera": { "herramienta": "escalar_a_asistente", "escala": true, "prioridad": "baja" } }
 ```
 
+**Regla al escribir estos casos, aprendida a base de falsos positivos:** si lo que se revisa es
+el **texto** de la respuesta, hay que dejar al modelo sin nada más que consultar — toda
+herramienta que razonablemente llamaría va en `previo`. Si le queda una por llamar, la llamará,
+en ese turno no habrá texto que revisar y el caso suspenderá una conducta correcta.
+
 **Cuatro decisiones de diseño que cambian lo que mide:**
 
 1. **Separa las categorías críticas.** `seguridad` y `privacidad` se reportan aparte y

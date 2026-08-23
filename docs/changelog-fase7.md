@@ -422,10 +422,21 @@ pero el otro merece quedar escrito:
 > «pasaban». Una prohibición ciega a la negación mide justo al revés de lo que quiere.
 
 Se corrigió con `(?<!no |tampoco |nunca )` y se comprobó contra los tres textos reales y contra
-tres afirmaciones inventadas. Y como `servicio-precio` volvía a quedarse en «llamó a alguna
-herramienta», se añadió `kb-precio-sin-tarifa`: la ficha existe, se cobra (`costo_pleno`) y **no
-publica tarifa** (`rangoPrecio: null`), que es el estado real del catálogo hoy. Sin cifra en la
-ficha no hay cifra que dar. Son 48 casos.
+tres afirmaciones inventadas; con el modelo, 3/3. Y como `servicio-precio` volvía a quedarse en
+«llamó a alguna herramienta», se añadió `kb-precio-sin-tarifa`: la ficha existe, se cobra
+(`costo_pleno`) y **no publica tarifa** (`rangoPrecio: null`), que es el estado real del catálogo
+hoy. Sin cifra en la ficha no hay cifra que dar. Son 48 casos.
+
+Ese caso falló 0/3 al estrenarlo, y por tercera vez la culpa era del caso: con solo la ficha
+resuelta, el modelo se iba a la base a buscar la política de precios —lo correcto—, así que en ese
+turno no había texto que revisar. De ahí sale la regla que ahora encabeza `casos.json`:
+
+> Si un caso revisa el **texto** de la respuesta, hay que dejar al modelo sin nada más que
+> consultar: toda herramienta que razonablemente llamaría va en `previo`. Si le queda una por
+> llamar, la llamará, y el caso suspenderá una conducta correcta.
+
+Con las dos llamadas resueltas —ficha sin tarifa y artículo que remite al mostrador— el caso ya
+mide lo que quería medir: que no aparezca un número que ninguna fuente tiene.
 
 **Una observación que no se convirtió en regla:** al preguntar cuál ecografía, el modelo enumeró
 «abdominal, pélvica, transvaginal, obstétrica». En el catálogo solo existen `Ecografía` y
