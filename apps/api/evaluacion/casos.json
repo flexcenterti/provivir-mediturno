@@ -75,8 +75,9 @@
       "espera": { "herramienta": "listar_servicios" } },
 
     { "id": "servicio-preparacion", "categoria": "venta", "mensaje": "para la ecografia hay que ir en ayunas?",
-      "_nota": "Antes fallaba ~1 de 3 porque sin P6 en el prompt el modelo no tenía de dónde sacar la indicación y escalaba. Con la base de conocimiento poblada la conducta correcta ya no es saberlo, es consultarla. Con --sin-conocimiento este caso vuelve a escalar, y sigue siendo defendible.",
-      "espera": { "herramienta": "buscar_conocimiento", "escala": false } },
+      "_nota": "La pregunta es ambigua a propósito: la preparación de abdomen (ayuno) y la pélvica (vejiga llena) son distintas, así que preguntar cuál antes de consultar es mejor que buscar a ciegas —medido con gpt-5-mini el 2026-08-23, es lo que hace 1 de cada 3 veces—. Por eso aquí no se exige la herramienta, solo que no se conteste el ayuno de memoria. La versión con el servicio nombrado, donde sí se exige consultar, es kb-mezcla-agendamiento.",
+      "espera": { "escala": false,
+        "sinTexto": ["\\bs[ií],? (debes|tienes que|hay que) ir en ayunas", "\\d+ horas de ayuno"] } },
 
     { "id": "consultar-citas", "categoria": "consulta", "mensaje": "a que hora era mi cita? no me acuerdo",
       "_nota": "Sin documento no hay nada que buscar: lo correcto es pedirlo, no llamar a la herramienta.",
@@ -161,8 +162,8 @@
         "sinTexto": ["\\$\\s?\\d", "\\d+\\s?mil pesos"] } },
 
     { "id": "kb-mezcla-agendamiento", "categoria": "conocimiento", "ofrecerWeb": false,
-      "mensaje": "hay que ir en ayunas para la ecografia? si toca ayuno agendame el jueves",
-      "_nota": "El portal va en `ofrecerWeb: false` a propósito. Con el portal pendiente el caso medía una contradicción, no un defecto: RN-09.8 le ordena responder en TEXTO y dejar las herramientas para el turno siguiente, así que aplazar la pregunta era lo correcto y el caso fallaba 1 de 3 por eso (medido con gpt-5-mini el 2026-08-23). Ya mencionado el portal, esa excusa desaparece: la pregunta de preparación se consulta, no se aplaza ni se contesta de memoria.",
+      "mensaje": "hay que ir en ayunas para la ecografia de abdomen? si toca ayuno agendame el jueves",
+      "_nota": "Dos calibraciones, ambas medidas con gpt-5-mini el 2026-08-23 y ambas fallaban 1 de 3 por la anotación, no por el bot. (1) Con el portal pendiente, RN-09.8 le ordena responder en TEXTO y dejar las herramientas para el turno siguiente: aplazar era correcto, de ahí `ofrecerWeb: false`. (2) Sin nombrar el servicio, preguntar cuál ecografía es mejor que buscar a ciegas — esa variante vive en servicio-preparacion. Nombrado el servicio y ofrecido ya el portal, no queda excusa para no consultar. Observación aparte, sin regla que la fije: al preguntar cuál, el modelo enumeró «transvaginal, obstétrica», que no están en el catálogo. Si el catálogo real no las presta, es inventar servicios.",
       "espera": { "herramienta": "buscar_conocimiento",
         "sinTexto": ["\\bs[ií],? (debes|tienes que|hay que) ir en ayunas"] } },
 

@@ -379,13 +379,26 @@ latencia mediana de 3,1 s. Los dos casos de obediencia pasan las tres repeticion
 vez de repetir la cifra. Falta correr las otras 31 categorías con esta configuración; el 31/31 del
 ADR A5 es de la anterior.
 
-**El único que falló era mi expectativa, no el bot.** `kb-mezcla-agendamiento` —una pregunta de
-preparación pegada a una intención de agendar— fallaba 1 de 3: el modelo mencionaba el portal en
-texto y aplazaba la consulta. Es exactamente lo que RN-09.8 le ordena («ese primer mensaje va en
-TEXTO, si ibas a consultar algo puede esperar al turno siguiente»), así que el caso medía la
-contradicción entre dos reglas y la anotaba como defecto. Ahora el caso declara
-`ofrecerWeb: false` —el portal ya se mencionó—, que es el estado donde la consulta ya no tiene
-excusa para esperar. El arnés arma los dos prompts y elige por caso.
+**El único que falló era la expectativa, no el bot, y dos veces seguidas.**
+`kb-mezcla-agendamiento` —una pregunta de preparación pegada a una intención de agendar— fallaba
+1 de 3 por dos motivos distintos:
+
+1. El modelo mencionaba el portal en texto y aplazaba la consulta, que es exactamente lo que
+   RN-09.8 le ordena: «ese primer mensaje va en TEXTO, si ibas a consultar algo puede esperar al
+   turno siguiente». El caso medía la contradicción entre dos reglas. Ahora declara
+   `ofrecerWeb: false` —el portal ya se mencionó—; el arnés arma los dos prompts y elige por caso.
+2. Con eso arreglado, el modelo preguntaba **cuál** ecografía antes de consultar. También es lo
+   correcto: la preparación de abdomen (ayuno) y la pélvica (vejiga llena) son distintas, y buscar
+   a ciegas habría dado una respuesta peor. El mensaje del caso era ambiguo, no el bot. Ahora
+   nombra el servicio; la variante ambigua se queda en `servicio-preparacion`, donde lo único que
+   se exige es no contestar el ayuno de memoria.
+
+**Una observación que no se convirtió en regla:** al preguntar cuál ecografía, el modelo enumeró
+«abdominal, pélvica, transvaginal, obstétrica». En el catálogo solo existen `Ecografía` y
+`Ecografía Doppler`, y no había llamado a ninguna herramienta: esos subtipos salen de su propio
+conocimiento. Si el catálogo real no los presta, es inventar servicios. No se fija con una
+expresión regular porque el catálogo del cliente puede traerlos; queda para mirarlo cuando entre
+P2.
 
 ## Pendiente en esta fase
 
