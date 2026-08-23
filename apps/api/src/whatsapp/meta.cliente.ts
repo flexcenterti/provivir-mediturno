@@ -91,6 +91,38 @@ export class MetaCliente {
     });
   }
 
+  /**
+   * Plantilla preaprobada. Es la ÚNICA forma de escribirle a alguien fuera de la
+   * ventana de 24 h (ver `ventana-meta.ts`): un recordatorio de cita o la
+   * confirmación de un agendamiento por el portal salen casi siempre así.
+   *
+   * Los parámetros son POSICIONALES y el orden lo fija la plantilla aprobada en
+   * Meta, no este código: `parametrosTicket()` en `whatsapp.plantillas.ts` es el
+   * contrato, y ahí está documentado qué variable es cada una.
+   */
+  async enviarPlantilla(
+    telefono: string,
+    nombre: string,
+    parametros: string[],
+    idioma = 'es',
+  ): Promise<string> {
+    const cuerpo = parametros.length
+      ? {
+          components: [
+            {
+              type: 'body',
+              parameters: parametros.map((texto) => ({ type: 'text', text: texto })),
+            },
+          ],
+        }
+      : {};
+
+    return this.enviar(telefono, {
+      type: 'template',
+      template: { name: nombre, language: { code: idioma }, ...cuerpo },
+    });
+  }
+
   private async enviar(telefono: string, carga: Record<string, unknown>): Promise<string> {
     if (!this.configurado) {
       const simulado = `simulado-${randomUUID()}`;

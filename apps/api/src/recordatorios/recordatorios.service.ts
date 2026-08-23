@@ -5,15 +5,39 @@ import { aHHMM, fechaEnZona } from '@provivir/shared';
 import { REDIS } from '../colas/colas.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { MetaCliente } from '../whatsapp/meta.cliente';
-import { ticketRecordatorio } from '../whatsapp/whatsapp.plantillas';
+import {
+  parametrosTicket, ticketConfirmacion, ticketRecordatorio,
+} from '../whatsapp/whatsapp.plantillas';
 import { AuditoriaService } from '../auditoria/auditoria.service';
+import { ConfiguracionService } from '../configuracion/configuracion.service';
+import { decidirEnvio } from './recordatorios.decision';
 
 export const COLA_RECORDATORIOS = 'recordatorios';
 
+/** `confirmacion` es RN-10.3: sale al agendar, no antes de la cita. */
+type Momento = '24h' | 'hoy' | 'confirmacion';
+
 interface TrabajoRecordatorio {
   citaId: string;
-  cuando: '24h' | 'hoy';
+  cuando: Momento;
 }
+
+/**
+ * Plantilla aprobada en Meta para cada envío, por configuración: los nombres los
+ * define el cliente en su Business Manager y pueden cambiar sin desplegar (P12).
+ * Vacío = no hay plantilla, y fuera de la ventana el envío se descarta con motivo.
+ */
+const CLAVE_PLANTILLA: Record<Momento, string> = {
+  '24h': 'plantilla_recordatorio_24h',
+  hoy: 'plantilla_recordatorio_hoy',
+  confirmacion: 'plantilla_confirmacion_cita',
+};
+
+const ETIQUETA: Record<Momento, string> = {
+  '24h': 'Recordatorio 24h',
+  hoy: 'Recordatorio del día',
+  confirmacion: 'Confirmación de cita',
+};
 
 /**
  * Recordatorios programados (Guía, FASE 4): 24 h antes y el mismo día.
@@ -32,6 +56,7 @@ export class RecordatoriosService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly meta: MetaCliente,
     private readonly auditoria: AuditoriaService,
+    private readonly configuracion: ConfiguracionService,
   ) {}
 
   onModuleInit(): void {
@@ -83,6 +108,28 @@ export class RecordatoriosService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * RN-10.3 · confirmación inmediata de una cita agendada por el portal.
+   *
+   * Va por la misma cola que los recordatorios para heredar sus reintentos y su
+   * política de ventana; lo único distinto es que no se difiere. El bot de
+   * WhatsApp NO la usa: cuando agenda él, ya responde con el ticket en la propia
+   * conversación, y mandarlo dos veces es peor que no mandarlo.
+   */
+  async programarConfirmacion(citaId: string): Promise<void> {
+    await this.cola.add(
+      'recordar',
+      { citaId, cuando: 'confirmacion' },
+      {
+        jobId: `confirmacion-${citaId}`,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 60_000 },
+        removeOnComplete: { count: 500 },
+        removeOnFail: { count: 200 },
+      },
+    );
+  }
+
   /** Al cancelar o reprogramar, los recordatorios viejos ya no aplican. */
   async cancelar(citaId: string): Promise<void> {
     for (const cuando of ['24h', 'hoy']) {
@@ -106,26 +153,66 @@ export class RecordatoriosService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const texto = ticketRecordatorio(
-      {
-        codigo: cita.codigo,
-        paciente: `${cita.paciente.nombres} ${cita.paciente.apellidos}`,
-        servicio: cita.servicio.nombre,
-        prestador: cita.prestador.nombre,
-        fecha: fechaEnZona(cita.fecha),
-        hora: aHHMM(cita.horaInicio),
-        consultorio: cita.prestador.consultorio,
-      },
-      trabajo.cuando,
-    );
+    const datos = {
+      codigo: cita.codigo,
+      paciente: `${cita.paciente.nombres} ${cita.paciente.apellidos}`,
+      servicio: cita.servicio.nombre,
+      prestador: cita.prestador.nombre,
+      fecha: fechaEnZona(cita.fecha),
+      hora: aHHMM(cita.horaInicio),
+      consultorio: cita.prestador.consultorio,
+      indicaciones: cita.servicio.requiereOrden
+        ? 'Recuerda traer tu orden médica el día de la cita.'
+        : undefined,
+    };
 
-    await this.meta.enviarTexto(destino, texto);
+    // La ventana de 24 h la abre el PACIENTE con su último mensaje entrante, en
+    // cualquier conversación de ese número. Un recordatorio sale 24 h o 3 h antes
+    // de la cita, así que lo normal es que ya esté cerrada.
+    const ultimoEntrante = await this.prisma.mensaje.findFirst({
+      where: { direccion: 'entrante', conversacion: { telefono: destino } },
+      orderBy: { ts: 'desc' },
+      select: { ts: true },
+    });
+
+    const etiqueta = ETIQUETA[trabajo.cuando];
+    const decision = decidirEnvio({
+      ultimoMensajePaciente: ultimoEntrante?.ts ?? null,
+      ahora: new Date(),
+      plantilla: this.configuracion.texto(CLAVE_PLANTILLA[trabajo.cuando], ''),
+    });
+
+    if (decision.modo === 'descartar') {
+      // Sin `throw`: Meta lo rechazaría con #131047 y reintentar no cambia el
+      // resultado. Lo que sí importa es que no se pierda en silencio.
+      this.log.warn(`${etiqueta} de la cita ${cita.codigo} no enviado: ${decision.motivo}`);
+      await this.auditoria.registrar({
+        usuario: 'sistema',
+        accion: `${etiqueta} no enviado`,
+        entidad: `cita/${cita.codigo}`,
+        detalle: decision.motivo,
+      });
+      return;
+    }
+
+    if (decision.modo === 'plantilla') {
+      await this.meta.enviarPlantilla(destino, decision.nombre, parametrosTicket(datos));
+    } else {
+      await this.meta.enviarTexto(
+        destino,
+        trabajo.cuando === 'confirmacion'
+          ? ticketConfirmacion(datos)
+          : ticketRecordatorio(datos, trabajo.cuando),
+      );
+    }
 
     await this.auditoria.registrar({
       usuario: 'sistema',
-      accion: `Recordatorio ${trabajo.cuando} enviado`,
+      accion: `${etiqueta} enviado`,
       entidad: `cita/${cita.codigo}`,
-      detalle: 'WhatsApp (texto formateado)',
+      detalle: decision.modo === 'plantilla'
+        ? `WhatsApp (plantilla ${decision.nombre})`
+        : 'WhatsApp (texto formateado)',
     });
   }
 }

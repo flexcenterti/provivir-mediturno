@@ -5,6 +5,7 @@ import { SEDE_ID } from '@provivir/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { CitasService } from '../citas/citas.service';
+import { RecordatoriosService } from '../recordatorios/recordatorios.service';
 import { enmascararDocumento } from '../comun/pii';
 import type { AgendarDto, CuposPortalDto, IdentificarDto, RegistrarPacienteDto } from './dto/portal.dto';
 
@@ -27,6 +28,7 @@ export class PortalService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly citas: CitasService,
+    private readonly recordatorios: RecordatoriosService,
     private readonly auditoria: AuditoriaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
@@ -139,7 +141,15 @@ export class PortalService {
       return { creada: false as const, motivo: r.motivo, alternativas: r.alternativas };
     }
 
-    // RN-10.3 · la confirmación por WhatsApp se encola en la Fase 4.
+    // RN-10.3 · la confirmación también sale por WhatsApp, no solo en pantalla:
+    // quien agenda desde el móvil cierra la pestaña y se queda sin el código. Se
+    // encola aparte para que un fallo de Meta no tumbe una cita ya creada; si el
+    // paciente nunca escribió por WhatsApp —lo habitual aquí— solo puede salir
+    // como plantilla aprobada, y si no la hay queda registrado en auditoría.
+    await this.recordatorios.programarConfirmacion(r.cita.id).catch((e: Error) => {
+      this.log.error(`No se pudo encolar la confirmación de ${r.cita.codigo}: ${e.message}`);
+    });
+
     return {
       creada: true as const,
       confirmacion: {

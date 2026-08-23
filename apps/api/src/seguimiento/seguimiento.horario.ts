@@ -12,7 +12,7 @@ import { ZONA_SEDE } from '@provivir/shared';
 export const RETRASOS_MIN = { seguimiento_1: 120, seguimiento_2: 300, cierre: 480 } as const;
 
 /** Ventana de atención al cliente de WhatsApp. Fuera de ella solo salen plantillas. */
-export const VENTANA_META_HORAS = 24;
+export { VENTANA_META_HORAS } from '../whatsapp/ventana-meta';
 
 export interface HorarioSede {
   /** Minutos desde medianoche. */
@@ -79,11 +79,11 @@ export function proximoHabil(momento: Date, horario = HORARIO_POR_DEFECTO, zona 
 
 /**
  * RN-09.9.6 · ¿el envío cabe en la ventana de 24 h que abrió el paciente?
- * Fuera de ella WhatsApp solo admite plantillas preaprobadas.
+ *
+ * Se reexporta desde `whatsapp/ventana-meta`: la restricción es de la plataforma
+ * y la comparten los recordatorios de cita, que también envían en frío.
  */
-export function dentroDeVentanaMeta(ultimoMensajePaciente: Date, envio: Date): boolean {
-  return envio.getTime() - ultimoMensajePaciente.getTime() < VENTANA_META_HORAS * 60 * 60_000;
-}
+export { dentroDeVentanaMeta } from '../whatsapp/ventana-meta';
 
 /** Momento de envío de un paso, ya diferido si cae fuera del horario. */
 export function momentoDeEnvio(

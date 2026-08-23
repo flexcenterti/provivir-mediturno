@@ -38,6 +38,22 @@ export function ticketConfirmacion(d: DatosTicket): string {
   return filas.join('\n');
 }
 
+/**
+ * Los mismos datos, en el orden que espera la plantilla aprobada de Meta.
+ *
+ * Fuera de la ventana de 24 h no se puede mandar el ticket como texto libre, así
+ * que la plantilla la crea el cliente en su Business Manager con **cuatro
+ * variables de cuerpo, en este orden**:
+ *
+ *   {{1}} código · {{2}} servicio · {{3}} fecha · {{4}} hora
+ *
+ * Cambiar el orden aquí sin cambiarlo allá manda los datos cruzados, y Meta no
+ * lo detecta: para la API son cuatro cadenas.
+ */
+export function parametrosTicket(d: DatosTicket): string[] {
+  return [d.codigo, d.servicio, d.fecha, d.hora];
+}
+
 export function ticketRecordatorio(d: DatosTicket, cuando: '24h' | 'hoy'): string {
   const encabezado = cuando === '24h'
     ? 'Te recordamos tu cita de mañana 🗓️'

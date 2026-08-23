@@ -26,6 +26,27 @@ export const CONFIGURACION_BASE = [
   { clave: 'seguimiento_hora_cierre', valor: '18', descripcion: 'RN-09.9.5 · Hora hasta la que pueden salir mensajes de seguimiento.' },
   { clave: 'seguimiento_comercial_dias_entre', valor: '30', descripcion: 'RN-09.9.7.2 · Días mínimos entre dos secuencias para el mismo paciente y servicio.' },
   {
+    clave: 'plantilla_recordatorio_24h',
+    valor: '',
+    descripcion:
+      'RN-05 · Plantilla aprobada en Meta para el recordatorio de 24 h antes. Fuera de la ventana ' +
+      'de 24 h que abre el paciente, WhatsApp solo admite plantillas: sin este nombre el ' +
+      'recordatorio no se envía y queda registrado en auditoría.',
+  },
+  {
+    clave: 'plantilla_recordatorio_hoy',
+    valor: '',
+    descripcion: 'RN-05 · Plantilla aprobada en Meta para el recordatorio del mismo día.',
+  },
+  {
+    clave: 'plantilla_confirmacion_cita',
+    valor: '',
+    descripcion:
+      'RN-10.3 · Plantilla aprobada en Meta para la confirmación de una cita agendada en el ' +
+      'portal. Quien agenda por web normalmente no ha escrito por WhatsApp, así que este envío ' +
+      'casi siempre necesita plantilla.',
+  },
+  {
     clave: 'mostrar_nombre_en_pantalla',
     valor: 'abreviado',
     descripcion:

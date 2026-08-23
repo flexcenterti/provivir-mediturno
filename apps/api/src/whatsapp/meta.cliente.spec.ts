@@ -43,4 +43,35 @@ describe('MetaCliente · a dónde se dirige la respuesta', () => {
     await cliente.enviarTexto('wa:CO.13491208655302741918', 'hola');
     expect(JSON.stringify(cuerpoEnviado)).not.toContain('wa:');
   });
+
+  /**
+   * Fuera de la ventana de 24 h esto es lo único que Meta acepta, así que la
+   * forma de la carga importa: un `components` mal armado se rechaza entero.
+   */
+  it('la plantilla viaja con sus parámetros posicionales, en orden', async () => {
+    await cliente.enviarPlantilla('+573001112222', 'recordatorio_24h', ['C-1', 'Ecografía', '2026-09-08', '09:20']);
+
+    expect(cuerpoEnviado).toMatchObject({
+      to: '+573001112222',
+      type: 'template',
+      template: {
+        name: 'recordatorio_24h',
+        language: { code: 'es' },
+        components: [{
+          type: 'body',
+          parameters: [
+            { type: 'text', text: 'C-1' },
+            { type: 'text', text: 'Ecografía' },
+            { type: 'text', text: '2026-09-08' },
+            { type: 'text', text: '09:20' },
+          ],
+        }],
+      },
+    });
+  });
+
+  it('una plantilla sin variables no manda `components` vacío', async () => {
+    await cliente.enviarPlantilla('+573001112222', 'aviso_simple', []);
+    expect(cuerpoEnviado.template).not.toHaveProperty('components');
+  });
 });
