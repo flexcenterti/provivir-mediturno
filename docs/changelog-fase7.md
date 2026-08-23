@@ -1,6 +1,6 @@
 # Changelog · FASE 7 — Base de conocimiento y seguimiento comercial
 
-**Estado:** en curso. Esquema de datos listo y migrado; 164 unitarias en verde.
+**Estado:** en curso. Esquema migrado y módulo `conocimiento` operativo; **195 unitarias y 134 e2e en verde**.
 
 Fase posterior al alcance original. Convierte `configuracion.documentacion_comercial` —hoy un
 bloque de texto inyectado en el prompt de **todas** las conversaciones— en artículos versionados
@@ -79,12 +79,71 @@ en una tarde es un riesgo de bloqueo del número (RN-09.9.7).
 - `migrate diff` sin diferencias.
 - Suite completa: 164 pruebas en verde.
 
+## Módulo `conocimiento`
+
+CRUD de artículos con su ciclo de vida completo (crear · publicar · archivar · reactivar ·
+eliminar borradores), troceado, recuperación léxica y la cola de preguntas sin respuesta.
+Dos permisos nuevos: `conocimiento.ver` —que también recibe el perfil Asistente— y
+`conocimiento.editar`, que cambia lo que el bot le responde a los pacientes.
+
+**Troceado** por encabezados de markdown primero, porque el cliente entrega la documentación
+con un título por servicio (P6) y ese corte respeta el sentido. Solo si una sección excede el
+máximo se parte por párrafos, con solape, para no cortar una indicación de preparación por la
+mitad. Las medidas van en palabras y no en tokens: no hay tokenizador en el backend y traer uno
+por esto no se justifica.
+
+**Cada fragmento se indexa con el título del artículo.** Un fragmento suelto de una sección
+larga pierde de qué habla, y el modelo recibe el texto sin saber de dónde salió.
+
+**Publicar reindexa en la misma transacción, sin cola.** Con la capa léxica no hay nada que
+encolar: trocear e insertar es trabajo síncrono de milisegundos y el `tsvector` lo pone el
+trigger. La cola vuelve a hacer falta cuando entre la capa semántica, que sí depende de un
+proveedor externo.
+
+### El puntaje es cobertura de términos, no `ts_rank`
+
+`ts_rank` devuelve un número sin unidades que nadie puede razonar. La cobertura —qué porcentaje
+de los lexemas de la pregunta aparece en el fragmento— se puede discutir con el cliente y
+calibrar: un umbral de 62 significa "el fragmento cubre al menos dos tercios de lo que preguntó
+el paciente".
+
+### Dos correcciones que solo aparecieron con la base delante
+
+**`plainto_tsquery` une los términos con AND.** La primera versión no recuperaba nada: bastaba
+con que faltara una palabra de la pregunta para descartar el fragmento. Los lexemas se unen
+ahora con OR y es la cobertura la que puntúa; el prefiltro solo tiene que traer candidatos.
+
+**El lematizador no unifica derivaciones entre categorías gramaticales.** `preparo` da `prepar`
+y `preparación` da `preparacion`. Se cubre comparando lexemas por trigramas por encima de 0,35
+—las variantes reales quedan entre 0,35 y 0,50, y las palabras sin relación no pasan de 0,25.
+Medidas y límites en `docs/adr-a8-recuperacion-conocimiento.md`.
+
+Ninguna de las dos la habrían detectado las pruebas unitarias: el SQL solo se ve con PostgreSQL
+delante. De ahí que la recuperación tenga e2e propias.
+
+### Límite conocido
+
+Los sinónimos quedan fuera de alcance: «abren» contra «atendemos» da 0,09 de similitud y «vale»
+contra «precio» da 0,00. Ningún ajuste del índice léxico los alcanza. El disparador para pasar a
+la capa semántica es concreto: que la cola de preguntas sin respuesta se llene de preguntas que
+**sí** están cubiertas por un artículo, pero con otras palabras.
+
+## Pruebas
+
+- **31 unitarias** sobre las piezas puras: troceado, temas prohibidos, umbral y agrupación de
+  preguntas sin respuesta.
+- **13 e2e contra PostgreSQL** sobre lo que solo se ve con la base delante: recuperación con y
+  sin tildes, escalamiento por falta de cobertura, tema prohibido que gana sobre el puntaje,
+  borrador que no se sirve, archivado que saca del índice en el acto conservando la ficha,
+  reactivación a borrador, borrado restringido y reindexado al editar.
+- Un tema prohibido **no** entra a la cola de mejora: no se resuelve escribiendo un artículo.
+
 ## Pendiente en esta fase
 
-Módulo `conocimiento` (CRUD, troceado, búsqueda híbrida, archivado transaccional) · herramientas
-`buscar_conocimiento` y `consultar_servicio` · migración del contenido de
-`documentacion_comercial` a artículos · extensión de la cola de RN-09.8 a los tres pasos ·
-`@Delete` de servicios con su restricción · bloque de interesados en la bandeja · golden set.
+Herramientas `buscar_conocimiento` y `consultar_servicio` en el orquestador · migración del
+contenido de `documentacion_comercial` a artículos · extensión de la cola de RN-09.8 a los tres
+pasos · `@Delete` de servicios con su restricción y los efectos en cadena · bloque de interesados
+en la bandeja · pantalla de conocimiento en el backoffice · golden set.
 
 ## Nota de operación
 

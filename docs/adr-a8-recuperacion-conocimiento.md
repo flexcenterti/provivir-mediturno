@@ -69,6 +69,39 @@ La interfaz de recuperación se diseña para admitir la segunda capa sin cambiar
 | Seguir inyectando todo el documento en el prompt | Es lo que hay hoy. Paga tokens por conversación, no tiene gobierno ni ciclo de mejora — el problema que RN-13 viene a resolver |
 | Solo semántica, sin capa léxica | Los nombres propios de exámenes se diluyen. "Doppler" tiene que recuperar exacto |
 
+## Medido al implementar (23 de agosto)
+
+La capa léxica quedó implementada y probada contra PostgreSQL. Dos hallazgos que
+acotan mejor cuándo hará falta la etapa 2:
+
+**El lematizador español unifica más de lo esperado.** `pago`/`pagar`, `sábado`/`sábados`
+y `ecografía`/`ecografías` dan el mismo lema, así que las variantes que más aparecen en
+las preguntas ya se resuelven solas.
+
+**No unifica la derivación entre categorías gramaticales.** `preparo` da `prepar` y
+`preparación` da `preparacion`. Se cubre comparando lexemas por trigramas: esas parejas
+quedan entre 0,35 y 0,50 de similitud, mientras que palabras sin relación no pasan de
+0,25. El umbral quedó en 0,35.
+
+**Los sinónimos siguen fuera de alcance, y no hay ajuste léxico que los alcance:**
+
+| Par | Similitud | |
+|---|---|---|
+| `preparo` / `preparación` | 0,46 | se cubre con trigramas |
+| `hora` / `horario` | 0,38 | se cubre con trigramas |
+| `abren` / `atendemos` | 0,09 | fuera de alcance |
+| `cuesta` / `costo` | 0,22 | fuera de alcance |
+| `vale` / `precio` | 0,00 | fuera de alcance |
+
+**Disparador concreto de la etapa 2:** que la cola de preguntas sin respuesta (RN-13.6) se
+llene de preguntas que **sí** están cubiertas por un artículo pero con otras palabras. Eso
+es exactamente lo que resuelven los embeddings y no resuelve ningún ajuste del índice
+léxico. Mientras la cola se llene de temas genuinamente ausentes, la respuesta correcta es
+escribir el artículo, no cambiar el motor.
+
+Mitigación disponible sin tocar el motor: redactar los artículos con las palabras que usa
+el paciente. El ciclo de mejora de RN-13.6 empuja justo en esa dirección.
+
 ## Consecuencias
 
 - **Ningún cambio de infraestructura.** No se toca la imagen de PostgreSQL ni el compose.
