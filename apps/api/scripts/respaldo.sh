@@ -13,8 +13,12 @@
 # Sin `pg_dump` en el host —el caso normal en este servidor, donde Postgres vive
 # en un contenedor— se usan las herramientas del propio contenedor:
 #
-#   PG_SERVICIO=postgres COMPOSE=/home/crivas/provivir/despliegue/docker-compose.prod.yml \
+#   PG_SERVICIO=postgres PG_BASE=provivir \
+#   COMPOSE=/home/crivas/provivir/despliegue/docker-compose.prod.yml \
 #   COMPOSE_ENV=/etc/provivir/.env RESPALDO_CLAVE='...' ./scripts/respaldo.sh
+#
+# Con PG_BASE no hace falta DATABASE_URL: dentro del contenedor se conecta por el
+# socket local y la contraseña no se copia a ningún otro archivo.
 #
 # `DIR_RESPALDOS` conviene apuntarlo FUERA del repositorio: su valor por defecto
 # escribe dentro, y así fue como un volcado terminó versionado en git.
@@ -60,14 +64,27 @@ if [ -z "$PG_SERVICIO" ] && ! command -v "$PG_BIN/pg_dump" >/dev/null 2>&1 && [ 
   exit 1
 fi
 
-if [ -z "${DATABASE_URL:-}" ]; then
-  # shellcheck disable=SC1091
-  [ -f "$RAIZ/.env" ] && set -a && . "$RAIZ/.env" && set +a
-fi
+# Con el volcado corriendo DENTRO del contenedor basta con el usuario y la base:
+# se conecta por el socket local, que la imagen oficial confía, y así la contraseña
+# NO se duplica en un segundo archivo donde puede quedar desincronizada.
+PG_BASE="${PG_BASE:-}"
+PG_USUARIO="${PG_USUARIO:-provivir}"
 
-if [ -z "${DATABASE_URL:-}" ]; then
-  echo "Falta DATABASE_URL" >&2
-  exit 1
+if [ -z "$PG_BASE" ]; then
+  # El .env del repositorio es el de DESARROLLO. Se acepta como comodidad al correr
+  # el script a mano en local, pero NUNCA con PG_SERVICIO: si respaldo.env viniera
+  # mal configurado, esto volcaría la base de desarrollo y dejaría un archivo con
+  # buen aspecto y sin un solo dato de producción. Un respaldo así es peor que ninguno.
+  if [ -z "${DATABASE_URL:-}" ] && [ -z "$PG_SERVICIO" ]; then
+    # shellcheck disable=SC1091
+    [ -f "$RAIZ/.env" ] && set -a && . "$RAIZ/.env" && set +a
+  fi
+
+  if [ -z "${DATABASE_URL:-}" ]; then
+    echo "Falta PG_BASE o DATABASE_URL." >&2
+    [ -n "$PG_SERVICIO" ] && echo "Con PG_SERVICIO no se hereda el .env del repositorio, que es el de desarrollo." >&2
+    exit 1
+  fi
 fi
 
 # Prisma agrega parámetros propios a la URL (`schema`, `connection_limit`) que
@@ -88,7 +105,11 @@ limpiar_url() {
   [ -n "$conservados" ] && echo "$base?$conservados" || echo "$base"
 }
 
-URL_PG="$(limpiar_url "$DATABASE_URL")"
+if [ -n "$PG_BASE" ]; then
+  CONEXION=(-U "$PG_USUARIO" -d "$PG_BASE")
+else
+  CONEXION=(--dbname "$(limpiar_url "$DATABASE_URL")")
+fi
 
 if [ -z "${RESPALDO_CLAVE:-}" ]; then
   echo "Falta RESPALDO_CLAVE. El respaldo trae datos de 400.000 pacientes: no se genera sin cifrar." >&2
@@ -104,7 +125,7 @@ restaurar() {
   # que indique DATABASE_URL, que en una prueba debe ser una base desechable.
   openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:RESPALDO_CLAVE -in "$archivo" \
     | gunzip \
-    | herramienta pg_restore --dbname "$URL_PG" --clean --if-exists --no-owner --no-privileges
+    | herramienta pg_restore "${CONEXION[@]}" --clean --if-exists --no-owner --no-privileges
 
   echo "Restauración completa."
 }
@@ -118,13 +139,22 @@ mkdir -p "$DIR_RESPALDOS"
 FECHA="$(date +%Y-%m-%d-%H%M)"
 DESTINO="$DIR_RESPALDOS/provivir-$FECHA.dump.gz.enc"
 
+# Decir SIEMPRE qué base se está volcando: es la comprobación que evita descubrir
+# dentro de un año que se respaldaba la base equivocada.
+if [ -n "$PG_BASE" ]; then
+  ORIGEN="$PG_USUARIO@${PG_SERVICIO:-local}/$PG_BASE"
+else
+  ORIGEN="$(echo "${CONEXION[1]}" | sed -E 's#//[^@]*@#//#')"
+fi
+
+echo "Origen: $ORIGEN"
 echo "Generando respaldo $DESTINO"
 
 # Un respaldo a medias es peor que ninguno: si algo falla, no queda el archivo roto.
 trap 'rm -f "$DESTINO"' ERR
 
 # El formato custom (-Fc) permite restauración selectiva y es más compacto que SQL plano.
-herramienta pg_dump --dbname "$URL_PG" --format=custom --no-owner --no-privileges \
+herramienta pg_dump "${CONEXION[@]}" --format=custom --no-owner --no-privileges \
   | gzip -9 \
   | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:RESPALDO_CLAVE -out "$DESTINO"
 
