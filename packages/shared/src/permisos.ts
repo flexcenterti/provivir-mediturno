@@ -88,6 +88,13 @@ export const PERFILES_BASE = [
     nombre: 'Administración',
     descripcion: 'Acceso completo. Equivale al antiguo rol admin.',
     permisos: CLAVES_PERMISO,
+    /**
+     * Su contrato es "todo": al agregar un permiso al catálogo, este perfil lo
+     * recibe también en instalaciones que ya existen. Sin esto, una función nueva
+     * se despliega y nadie puede usarla, porque la fila del perfil se creó con la
+     * lista de permisos de aquel día.
+     */
+    accesoCompleto: true,
   },
   {
     nombre: 'Asistente',

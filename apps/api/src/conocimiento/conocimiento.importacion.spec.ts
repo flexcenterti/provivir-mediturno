@@ -88,6 +88,13 @@ describe('RN-13 · categoría del artículo', () => {
     expect(categoriaDe('Importante', null)).toBe('Información general');
   });
 
+  it('«Medicina general» no es información general: la palabra suelta no clasifica', () => {
+    // Con un comodín sobre «general», un servicio terminaba etiquetado como
+    // información de la clínica. Se vio en pantalla, no en las pruebas.
+    expect(categoriaDe('Medicina general', null)).not.toBe('Información general');
+    expect(categoriaDe('Medicina general', 'mg')).toBe('Servicios');
+  });
+
   it('lo demás cae en preguntas frecuentes', () => {
     expect(categoriaDe('¿Puedo llevar acompañante?', null)).toBe('Preguntas frecuentes');
   });

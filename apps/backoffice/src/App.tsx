@@ -9,10 +9,11 @@ import { Pacientes } from './vistas/Pacientes';
 import { Catalogo } from './vistas/Catalogo';
 import { Agendas } from './vistas/Agendas';
 import { Administracion } from './vistas/Administracion';
+import { Conocimiento } from './vistas/Conocimiento';
 
 type Vista =
   | 'dashboard' | 'consolidada' | 'bandeja' | 'mostrador' | 'prestador'
-  | 'pacientes' | 'catalogo' | 'agendas' | 'administracion';
+  | 'pacientes' | 'catalogo' | 'agendas' | 'conocimiento' | 'administracion';
 
 /** D1 · sin selector de sede: la capacidad multi-sede vive en el modelo, no en la UI. */
 const MENU: Array<{ id: Vista; etiqueta: string; roles: UsuarioSesion['rol'][] }> = [
@@ -24,6 +25,7 @@ const MENU: Array<{ id: Vista; etiqueta: string; roles: UsuarioSesion['rol'][] }
   { id: 'pacientes', etiqueta: 'Pacientes', roles: ['admin', 'asistente'] },
   { id: 'agendas', etiqueta: 'Agendas', roles: ['admin', 'asistente'] },
   { id: 'catalogo', etiqueta: 'Catálogo', roles: ['admin'] },
+  { id: 'conocimiento', etiqueta: 'Conocimiento', roles: ['admin', 'asistente'] },
   { id: 'administracion', etiqueta: 'Administración', roles: ['admin'] },
 ];
 
@@ -96,6 +98,7 @@ function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => 
         {vista === 'pacientes' && <Pacientes />}
         {vista === 'agendas' && <Agendas />}
         {vista === 'catalogo' && <Catalogo />}
+        {vista === 'conocimiento' && <Conocimiento />}
         {vista === 'administracion' && <Administracion />}
         {vista === 'prestador' && (
           usuario.prestadorId

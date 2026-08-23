@@ -30,3 +30,4 @@ tmp/
 test-results/
 playwright-report/
 dist-esm/
+e2e/capturas/

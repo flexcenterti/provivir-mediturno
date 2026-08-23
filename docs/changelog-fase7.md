@@ -1,6 +1,6 @@
 # Changelog · FASE 7 — Base de conocimiento y seguimiento comercial
 
-**Estado:** backend completo. RN-13, RN-09.9 y RN-04.5 implementadas; falta el frontend. **231 unitarias y 171 e2e en verde**.
+**Estado:** completa salvo el golden set. **232 unitarias, 173 e2e de API y 9 de navegador en verde**.
 
 Fase posterior al alcance original. Convierte `configuracion.documentacion_comercial` —hoy un
 bloque de texto inyectado en el prompt de **todas** las conversaciones— en artículos versionados
@@ -291,11 +291,49 @@ y sin citas sí, desactivar conserva las citas y cancela seguimientos y marca ar
 ocurre también desde el PATCH del formulario, el impacto se consulta sin cambiar nada, y un servicio
 desactivado desaparece de la oferta del bot pero sigue existiendo para el historial.
 
+## Frontend
+
+Pantalla **Conocimiento** (artículos con su ciclo de vida, probador de preguntas, cola de preguntas
+sin respuesta e importación), bloque **Interesados sin agendar** bajo las conversaciones escaladas
+de la bandeja, y la **ficha comercial** en el formulario del catálogo con las advertencias de
+impacto.
+
+El probador va arriba del listado a propósito: es la pantalla donde se decide qué le responde la
+plataforma a los pacientes, y lo primero que debe ofrecer es ver qué contestaría **antes** de que
+la pregunta la haga alguien de verdad.
+
+### Lo que encontraron las pruebas de navegador
+
+Se escribieron 5 pruebas con Playwright sobre Chromium. Ninguno de estos fallos lo habrían
+detectado el typecheck ni las pruebas de API, y dos son bugs de producto, no de las pruebas:
+
+**El paquete compartido compilado estaba obsoleto.** `packages/shared/dist` era de dos días antes,
+y la API resuelve `@provivir/shared` contra ese `dist`, no contra el código. Los dos permisos
+nuevos **nunca llegaron a nada que se ejecute**: la pantalla cargaba y devolvía «No tiene permisos
+para esta operación». Las suites pasaban igual porque jest sí mapea al fuente — es decir, **las
+pruebas y lo que corre no coincidían**. El `Dockerfile.api` de producción sí compila `shared`
+primero; el hueco era solo local, y el arranque de las pruebas de navegador ahora lo compila antes
+del seed.
+
+**Un permiso nuevo del catálogo no llegaba a instalaciones ya desplegadas.** `asegurarPerfilesBase`
+no pisa los permisos de perfiles existentes —correcto, pueden haberlos ajustado— pero eso significa
+que una función se despliega y nadie puede usarla, porque la fila del perfil se creó con la lista
+de aquel día. Ahora el perfil de **acceso completo** se reconcilia: solo se **agregan** los que
+falten, nunca se quita ninguno, y se avisa por log de los permisos que no tiene ningún perfil.
+Había además **dos implementaciones** de esa función y ya habían divergido; `acceso.service.ts`
+ahora delega en la del alta inicial.
+
+**Detalles de interfaz que solo se ven mirando:** el informe de la importación —cuántos entraron y
+cuáles quedaron sin servicio vinculado— lo pisaba un mensaje genérico; el `##` del markdown se
+filtraba al mostrar un fragmento; `.p-check` se usaba sin estilo, así que las casillas del
+formulario de servicios quedaban pegadas en la misma línea; y «Medicina general» se clasificaba
+como *Información general* porque la regla de categoría hacía match con la palabra suelta
+«general».
+
 ## Pendiente en esta fase
 
-Solo frontend y calibración: pantalla de conocimiento en el backoffice, bloque de interesados en la
-bandeja (el endpoint `GET /bandeja/interesados` ya existe), edición de la ficha comercial en el
-formulario del catálogo, y el golden set con la calibración del umbral.
+Golden set de 40-50 preguntas anotadas y calibración de `kb_score_min`. Necesita preguntas reales
+del número de prueba: el 62 actual es una hipótesis, no un valor medido.
 
 **Requieren decisión:** fusionar a `main` y desplegar —hasta entonces ningún paciente recibe nada—,
 la aprobación de los textos por el cliente (D-d) y su contenido (P6 real, P12 aprobado, P13). El

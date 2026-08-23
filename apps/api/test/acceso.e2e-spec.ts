@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { AccesoService } from '../src/acceso/acceso.service';
 
 /**
  * Perfiles de acceso y usuarios.
@@ -260,6 +261,42 @@ describe('Acceso · perfiles y usuarios (e2e)', () => {
 
       expect(r.body.password).toHaveLength(21);
       expect(despues.hashPassword).not.toBe(antes.hashPassword);
+    });
+  });
+
+  describe('un permiso nuevo del catálogo llega a instalaciones ya desplegadas', () => {
+    /**
+     * El perfil de acceso completo se creó con la lista de permisos del día de la
+     * instalación. Sin reconciliarlo, una función nueva se despliega y nadie puede
+     * usarla: la pantalla existe y devuelve 403.
+     */
+    it('el perfil de acceso completo recupera los permisos que le falten', async () => {
+      const acceso = app.get(AccesoService);
+
+      // Se simula una instalación vieja: al perfil le faltan los permisos nuevos.
+      const antes = await prisma.perfil.findUniqueOrThrow({ where: { nombre: 'Administración' } });
+      const recortados = antes.permisos.filter((p) => !p.startsWith('conocimiento'));
+      await prisma.perfil.update({ where: { nombre: 'Administración' }, data: { permisos: recortados } });
+
+      await acceso.asegurarPerfilesBase();
+
+      const despues = await prisma.perfil.findUniqueOrThrow({ where: { nombre: 'Administración' } });
+      expect(despues.permisos).toEqual(expect.arrayContaining(['conocimiento.ver', 'conocimiento.editar']));
+    });
+
+    it('a los demás perfiles NO se les tocan los permisos: pueden haberlos ajustado', async () => {
+      const acceso = app.get(AccesoService);
+
+      const antes = await prisma.perfil.findUniqueOrThrow({ where: { nombre: 'Asistente' } });
+      const recortados = antes.permisos.filter((p) => p !== 'mostrador.operar');
+      await prisma.perfil.update({ where: { nombre: 'Asistente' }, data: { permisos: recortados } });
+
+      await acceso.asegurarPerfilesBase();
+
+      const despues = await prisma.perfil.findUniqueOrThrow({ where: { nombre: 'Asistente' } });
+      expect(despues.permisos).not.toContain('mostrador.operar');
+
+      await prisma.perfil.update({ where: { nombre: 'Asistente' }, data: { permisos: antes.permisos } });
     });
   });
 });

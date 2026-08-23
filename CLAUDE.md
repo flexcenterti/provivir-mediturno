@@ -48,6 +48,9 @@ Precedencia si algo se contradice: Lógica de Negocio > Especificación > Arquit
   Borrado físico solo de borradores.
 - **RN-09.9 · Antes de cada envío de seguimiento se revalida todo**, no al encolarlo. El paciente
   pudo agendar por otro canal entretanto. Las condiciones que cancelan ganan sobre las que difieren.
+- **`packages/shared` se compila antes que la API.** La API resuelve `@provivir/shared` contra su
+  `dist`, no contra el código; jest sí mapea al fuente. Si no se recompila, una constante nueva del
+  paquete compartido pasa las pruebas y no llega a lo que corre.
 - **El motor es el único que calcula reglas.** `citas.reglas.ts` tiene las funciones puras;
   `citas.service.ts` las orquesta en transacciones. Ningún otro módulo replica lógica de agendamiento.
 
@@ -104,7 +107,7 @@ Borrar migraciones · cambiar el esquema de auditoría · tocar la verificación
 | 5 · Autoagendamiento web + kiosko apagado | **Completa** — `docs/changelog-fase5.md` |
 | 4 · WhatsApp + IA + bandeja | **Completa** (incluye RN-09.8) — `docs/changelog-fase4.md` |
 | 6 · Métricas, endurecimiento y piloto | **Completa** — `docs/changelog-fase6.md` |
-| 7 · Base de conocimiento + seguimiento comercial | **En curso** (esquema migrado) — `docs/changelog-fase7.md` |
+| 7 · Base de conocimiento + seguimiento comercial | **Completa** salvo el golden set — `docs/changelog-fase7.md` |
 
 **Las seis primeras fases están completas.** Lo que falta para producción son credenciales e insumos
 del cliente, no código: ver `docs/checklist-piloto.md` y `despliegue/GUIA-DESPLIEGUE.md`.

@@ -96,6 +96,10 @@ export function emparejarServicio(
 export function categoriaDe(titulo: string, servicioId: string | null): string {
   if (servicioId) return 'Servicios';
   const t = normalizar(titulo);
-  if (/horario|ubicacion|direccion|pago|importante|general/.test(t)) return 'Información general';
+  // Palabras completas y sin el comodín «general»: con él, «Medicina general»
+  // —que es un servicio— terminaba clasificada como información de la clínica.
+  if (/\b(horarios?|ubicacion|direccion|pagos?|importante|contacto|parqueadero)\b/.test(t)) {
+    return 'Información general';
+  }
   return 'Preguntas frecuentes';
 }
