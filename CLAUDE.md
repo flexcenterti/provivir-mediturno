@@ -46,6 +46,12 @@ Precedencia si algo se contradice: Lógica de Negocio > Especificación > Arquit
 - **RN-13 · Los artículos se archivan, no se borran.** Archivar los saca del índice en la misma
   transacción; la ficha se conserva porque la auditoría debe poder explicar respuestas ya dadas.
   Borrado físico solo de borradores.
+- **Ventana de 24 h de Meta: todo envío proactivo la respeta.** WhatsApp solo admite texto libre
+  dentro de las 24 h que abre el ÚLTIMO mensaje del paciente. Fuera de ellas solo sale una
+  **plantilla aprobada**; un texto libre se rechaza con `#131047` y el paciente no recibe nada.
+  Se comprueba con `dentroDeVentanaMeta()` de `whatsapp/ventana-meta.ts` — la usan recordatorios,
+  confirmación del portal y seguimiento comercial. Sin plantilla configurada **no se intenta**: se
+  descarta con motivo en auditoría, porque un reintento no cambia el resultado y un fallo mudo sí.
 - **RN-09.9 · Antes de cada envío de seguimiento se revalida todo**, no al encolarlo. El paciente
   pudo agendar por otro canal entretanto. Las condiciones que cancelan ganan sobre las que difieren.
 - **`packages/shared` se compila antes que la API.** La API resuelve `@provivir/shared` contra su
@@ -103,11 +109,12 @@ Borrar migraciones · cambiar el esquema de auditoría · tocar la verificación
 | 0 · Fundaciones | **Completa** — `docs/changelog-fase0.md` |
 | 1 · Núcleo de datos + carga masiva | **Completa** — `docs/changelog-fase1.md` |
 | 2 · Motor de agendamiento | **Completa** — `docs/changelog-fase2.md` |
-| 3 · Operación en sede | **Completa** (backend; frontend parcial) — `docs/changelog-fase3.md` |
+| 3 · Operación en sede | **Completa** — `docs/changelog-fase3.md`. Las vistas que su changelog daba por ausentes (carga masiva, auditoría navegable, programación mensual) están en `Administracion.tsx` y `Agendas.tsx` |
 | 5 · Autoagendamiento web + kiosko apagado | **Completa** — `docs/changelog-fase5.md` |
 | 4 · WhatsApp + IA + bandeja | **Completa** (incluye RN-09.8) — `docs/changelog-fase4.md` |
 | 6 · Métricas, endurecimiento y piloto | **Completa** — `docs/changelog-fase6.md` |
 | 7 · Base de conocimiento + seguimiento comercial | **Completa** salvo el golden set — `docs/changelog-fase7.md` |
+| 8 · Envíos proactivos y ventana de Meta | **Completa** salvo las plantillas del cliente — `docs/changelog-fase8.md` |
 
 **Las seis primeras fases están completas.** Lo que falta para producción son credenciales e insumos
 del cliente, no código: ver `docs/checklist-piloto.md` y `despliegue/GUIA-DESPLIEGUE.md`.

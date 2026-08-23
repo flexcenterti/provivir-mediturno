@@ -46,6 +46,7 @@ son credenciales, insumos del cliente o decisiones suyas.
 | 🟡 P8 | Dinámica definitiva del kiosko | Activación futura | Módulo apagado por bandera |
 | 🟡 P9 | CSV de contactos del celular (50.000+) | Migración del número | Importador listo y probado |
 | ⬜ P10 | Enlaces de YouTube (canal + videos) | Frame de pantallas | Configurable desde Administración |
+| ⬜ P14 | **Plantillas de WhatsApp aprobadas por Meta**: recordatorio 24 h, recordatorio del día y confirmación de cita del portal. Cuerpo con cuatro variables en orden: código, servicio, fecha, hora | Recordatorios y confirmación del portal (RN-05, RN-10.3) | Sin ellas, el envío fuera de la ventana de 24 h no sale y queda anotado en auditoría. Los nombres se cargan en Administración → Reglas, sin desplegar. Ver `docs/changelog-fase8.md` |
 | ⬜ P12 | Lista aprobada **por escrito** de temas que el bot siempre escala | Salida a piloto (RN-13.4) | Propuesta base redactada en `docs/rn-13-base-conocimiento.md`; falta que el cliente la revise y confirme |
 | ⬜ P13 | Información operativa: horarios, dirección y cómo llegar, formas de pago, política de cancelación, qué traer | Primeras respuestas automáticas (RN-13) | Son las preguntas más repetidas del día; solo con esto el bot ya resuelve buena parte |
 
