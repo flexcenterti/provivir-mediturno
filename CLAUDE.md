@@ -104,7 +104,7 @@ Borrar migraciones · cambiar el esquema de auditoría · tocar la verificación
 | 5 · Autoagendamiento web + kiosko apagado | **Completa** — `docs/changelog-fase5.md` |
 | 4 · WhatsApp + IA + bandeja | **Completa** (incluye RN-09.8) — `docs/changelog-fase4.md` |
 | 6 · Métricas, endurecimiento y piloto | **Completa** — `docs/changelog-fase6.md` |
-| 7 · Base de conocimiento + seguimiento comercial | **En curso** — rama `fase-7-conocimiento` |
+| 7 · Base de conocimiento + seguimiento comercial | **En curso** (esquema migrado) — `docs/changelog-fase7.md` |
 
 **Las seis primeras fases están completas.** Lo que falta para producción son credenciales e insumos
 del cliente, no código: ver `docs/checklist-piloto.md` y `despliegue/GUIA-DESPLIEGUE.md`.
