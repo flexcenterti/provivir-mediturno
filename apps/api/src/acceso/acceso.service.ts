@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, type OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
@@ -16,8 +16,27 @@ import { asegurarPerfilesBase } from '../cli/usuarios.comun';
  *   · siempre debe quedar alguien que pueda gestionar usuarios
  */
 @Injectable()
-export class AccesoService {
+export class AccesoService implements OnModuleInit {
   private readonly log = new Logger(AccesoService.name);
+
+  /**
+   * Reconcilia los perfiles al arrancar, no solo al abrir su pantalla.
+   *
+   * Un permiso nuevo del catálogo llega con el despliegue, pero la fila del perfil
+   * se creó con la lista de aquel día: sin esto, la función se despliega y la
+   * pantalla devuelve 403 hasta que alguien pase por Administración → Perfiles.
+   * Nadie va a adivinar que ese es el paso que falta.
+   *
+   * Si falla no se tumba el arranque: quedarse sin API es peor que quedarse sin un
+   * permiso, y la pantalla de perfiles lo vuelve a intentar.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.asegurarPerfilesBase();
+    } catch (e) {
+      this.log.error('No se pudieron reconciliar los perfiles base al arrancar', e as Error);
+    }
+  }
 
   constructor(
     private readonly prisma: PrismaService,

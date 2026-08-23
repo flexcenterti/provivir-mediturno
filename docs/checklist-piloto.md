@@ -133,6 +133,27 @@ Consecuencias asumidas, y cómo se acotan:
 | ⬜ D-c | **RN-09.2** · usar botones interactivos de WhatsApp en vez de solo texto. Implementado tras la bandera `whatsapp_botones_interactivos`. | `docs/rn-09-8-oferta-web.md` |
 | ⬜ D-d | **RN-09.9** · seguimiento comercial **encendido** por decisión del equipo (`seguimiento_comercial_activo = true`), contra la recomendación de arrancar apagado. **Falta que el cliente apruebe los textos de los tres mensajes**; son deterministas justamente para poder mostrárselos tal cual. Se apaga desde Administración → Reglas sin desplegar. | `docs/rn-09-9-seguimiento-comercial.md` |
 
+## Despliegue de la fase 7 · base de conocimiento y seguimiento comercial
+
+Fusionada a `main`. Procedimiento completo en `despliegue/GUIA-DESPLIEGUE.md` §8.
+
+- ⬜ **Respaldo antes de migrar.** La migración añade tablas y no borra nada, pero es el momento
+  de tenerlo.
+- ⬜ **Decidir el estado del seguimiento comercial ANTES de desplegar.** Queda **encendido** por
+  defecto: basta con desplegar para que empiece a escribirle a pacientes reales. Si los textos aún
+  no están aprobados (D-d), apagarlo primero — comando en la guía, o Administración → Reglas.
+- ⬜ Comprobar que el usuario de PostgreSQL es superusuario: la migración crea `unaccent` y
+  `pg_trgm`. Con la imagen oficial lo es, pero se verifica en un comando.
+- ⬜ Tras desplegar: **Conocimiento → Importar documentación comercial**. Hasta entonces el bot
+  sigue usando el bloque de texto de siempre; la importación es idempotente y reversible.
+- ⬜ Revisar los artículos que queden **sin servicio vinculado** y atarlos a mano. La importación
+  los lista: los ambiguos no se vinculan solos a propósito.
+- ⬜ Calibrar `kb_score_min`. El **62** de arranque es una hipótesis, no un valor medido: pide
+  preguntas reales del número de prueba. Mientras tanto conviene dejarlo alto — escalar de más
+  cuesta menos que responder de más.
+- ⬜ Ampliar `apps/api/evaluacion/casos.json` con casos de la base de conocimiento: preguntas
+  cubiertas, sin cobertura y de escalamiento obligatorio. El arnés ya existe y corre.
+
 ## Antes del piloto
 
 - ⬜ Carga real del archivo del cliente (P1) en staging y revisión del reporte de errores.
@@ -151,6 +172,8 @@ Consecuencias asumidas, y cómo se acotan:
   wifi en salas, impresora de tickets.
 - ⬜ Capacitación: asistentes (bandeja y mostrador), John (dashboard), médicos (vista prestador, 10 min).
 - ⬜ Respaldos copiados **fuera del servidor**.
+- ⬜ Revisar la **tasa de opt-out** del seguimiento comercial en los primeros días: es la señal
+  temprana de que la cadencia molesta, y llega antes que cualquier queja.
 
 ## Dominio temporal
 

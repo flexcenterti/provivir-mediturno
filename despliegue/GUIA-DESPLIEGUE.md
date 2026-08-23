@@ -174,6 +174,13 @@ y a `https://provivir.exagos.co/citas`, que llevan políticas distintas.
 
 ## 8. Actualizaciones
 
+**Respalda antes de migrar.** Es un minuto y es la diferencia entre un susto y una pérdida:
+
+```bash
+docker compose -f despliegue/docker-compose.prod.yml exec postgres \
+  pg_dump -U provivir provivir | gzip > ~/respaldo-$(date +%F-%H%M).sql.gz
+```
+
 ```bash
 cd /opt/provivir && git pull
 npm ci && npm run build && cp -r apps/backoffice/dist/. despliegue/web/ && cp -r apps/portal/dist despliegue/web/citas && cp -r apps/tv/dist despliegue/web/tv
@@ -182,6 +189,58 @@ docker compose -f despliegue/docker-compose.prod.yml exec api npx prisma migrate
 ```
 
 Las migraciones son versionadas y se aplican con `migrate deploy`, que **nunca** borra datos.
+
+`npm run build` compila los workspaces en orden y `packages/shared` va primero. Importa: la API
+resuelve `@provivir/shared` contra su `dist`, no contra el código, así que un `shared` sin
+recompilar despliega constantes viejas sin que falle nada visible.
+
+### Despliegue de la fase 7 · base de conocimiento y seguimiento comercial
+
+Lo que trae de distinto respecto de una actualización normal:
+
+**1 · La migración crea dos extensiones de PostgreSQL** (`unaccent` y `pg_trgm`). Son contrib
+estándar, ya vienen en la imagen `postgres:16-alpine`, pero `CREATE EXTENSION` exige privilegios:
+el `POSTGRES_USER` de la imagen oficial se crea como superusuario, así que funciona. Para
+comprobarlo antes:
+
+```bash
+docker compose -f despliegue/docker-compose.prod.yml exec postgres \
+  psql -U provivir -d provivir -c "SELECT rolsuper FROM pg_roles WHERE rolname = current_user;"
+```
+
+**2 · El seguimiento comercial queda ENCENDIDO.** El parámetro `seguimiento_comercial_activo` vale
+`true` por defecto **en el código**, así que basta con desplegar para que empiece a escribirle a
+pacientes que preguntaron y no agendaron. Si los textos todavía no están aprobados por el cliente
+(decisión D-d), apágalo **antes** de que entre la primera conversación:
+
+```bash
+docker compose -f despliegue/docker-compose.prod.yml exec postgres psql -U provivir -d provivir -c \
+  "INSERT INTO configuracion (clave, valor, descripcion, actualizado_en)
+   VALUES ('seguimiento_comercial_activo', 'false',
+           'RN-09.9 · apagado hasta aprobar los textos con el cliente', now())
+   ON CONFLICT (clave) DO UPDATE SET valor = 'false', actualizado_en = now();"
+```
+
+También se puede desde **Administración → Reglas**, sin desplegar.
+
+**3 · Los permisos nuevos se reconcilian solos al arrancar.** `conocimiento.ver` y
+`conocimiento.editar` se agregan al perfil de acceso completo en el arranque de la API. Si algún
+perfil a medida necesita verlos, se conceden desde Administración → Perfiles.
+
+**4 · El bot sigue con el bloque de documentación comercial** hasta que alguien importe los
+artículos desde **Conocimiento → Importar documentación comercial**. Esa importación es
+idempotente y reversible: archivando los artículos, el bloque vuelve solo.
+
+**5 · El umbral `kb_score_min` vale 62 y es una hipótesis**, no un valor medido. Calibrarlo pide
+preguntas reales del número de prueba; hasta entonces conviene dejarlo alto (escalar de más es
+más barato que responder de más).
+
+### Reversa de esta fase
+
+El código se revierte con `git revert` del merge y un redespliegue. **Las migraciones no se
+revierten**: las tablas `kb_*` y `seguimiento` quedan, vacías y sin uso, sin afectar a nada. Para
+apagar el comportamiento sin tocar código basta con archivar los artículos y poner
+`seguimiento_comercial_activo` en `false`.
 
 ## 9. Reversa
 
