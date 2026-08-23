@@ -20,8 +20,16 @@ export default tseslint.config(
   {
     // El seed, los scripts de arranque y los CLI reportan por consola a propósito:
     // su salida ES la interfaz, no un rastro de depuración olvidado.
-    files: ['apps/api/prisma/seed.ts', 'apps/api/scripts/**/*.ts', 'apps/api/src/cli/**/*.ts'],
+    files: [
+      'apps/api/prisma/seed.ts', 'apps/api/scripts/**/*.ts', 'apps/api/scripts/**/*.mjs',
+      'apps/api/src/cli/**/*.ts',
+    ],
     rules: { 'no-console': 'off' },
+  },
+  {
+    // Los scripts sueltos corren en Node a pelo: nadie les declara las globales.
+    files: ['apps/api/scripts/**/*.mjs'],
+    languageOptions: { globals: { process: 'readonly', console: 'readonly' } },
   },
   {
     // El script de carga corre dentro de k6, no en Node: tiene sus propias globales.

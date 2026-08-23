@@ -20,7 +20,7 @@
     "carga:limpiar": "tsx scripts/limpiar-carga.ts",
     "webhook:probar": "bash scripts/probar-webhook.sh",
     "postinstall": "test ! -f prisma/schema.prisma || prisma generate",
-    "evaluar": "ts-node scripts/evaluar-ia.ts"
+    "evaluar": "tsx scripts/evaluar-ia.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -4,19 +4,22 @@
  * Pasa cada caso de evaluacion/casos.json por el adaptador y el prompt REALES, con
  * las herramientas reales del motor, y compara lo que el modelo hizo contra lo
  * anotado. No toca la base de datos: mide el primer turno —la detección de
- * intención—, que es lo que decide si la conversación arranca bien o mal.
+ * intención—, que es lo que decide si la conversación arranca bien o mal, y el
+ * segundo cuando el caso trae resultados de herramienta ya resueltos (ver `previo`).
  *
  * Sirve para dos cosas distintas:
  *   · elegir modelo con datos en vez de intuición (--modelos a,b,c)
  *   · detectar regresiones al tocar el prompt o las herramientas
  *
  * Uso:
- *   OPENAI_API_KEY=... npx ts-node scripts/evaluar-ia.ts
- *   OPENAI_API_KEY=... npx ts-node scripts/evaluar-ia.ts --modelos gpt-5-mini,gpt-5-nano
+ *   OPENAI_API_KEY=... npm run evaluar -w @provivir/api
+ *   OPENAI_API_KEY=... npm run evaluar -w @provivir/api -- --modelos gpt-5-mini,gpt-5-nano
  *   ... --categoria seguridad     limita a una categoría
  *   ... --json informe.json       vuelca el detalle para revisarlo caso por caso
  *   ... --concurrencia 8          cuántos casos en vuelo a la vez (por defecto 4)
  *   ... --repeticiones 3          cada caso N veces (por defecto 1)
+ *   ... --sin-conocimiento        mide la instalación recién montada: sin artículos
+ *                                 publicados, con la documentación comercial en el prompt
  *
  * Sobre las repeticiones: el modelo no es determinista. Dos pasadas seguidas del
  * mismo conjunto dieron 27/30 y 28/30, y el caso que falló fue distinto en cada
@@ -24,8 +27,15 @@
  * y en las categorías críticas esa diferencia es justamente la que importa. Un
  * caso solo cuenta como correcto si acierta en TODAS sus repeticiones.
  *
+ * Un caso puede declarar `previo`: llamadas a herramienta ya resueltas, con el
+ * resultado que devolvería el motor. Entonces lo que se mide es el turno SIGUIENTE,
+ * que es donde viven las reglas de la base de conocimiento: obedecer un
+ * `accion: "escalar"` en vez de contestar de memoria, y sacar las cifras del catálogo
+ * y no del texto recuperado.
+ *
  * Los fallos de `seguridad` y `privacidad` no son estadística: uno solo basta para
- * no salir a producción. Por eso se reportan aparte del porcentaje global.
+ * no salir a producción. Por eso se reportan aparte del porcentaje global. Un caso
+ * suelto puede declararse `critico` sin arrastrar a toda su categoría.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -34,13 +44,22 @@ import { OpenAiAdaptador } from '../src/ia/adaptadores/openai.adaptador';
 import { HERRAMIENTAS } from '../src/ia/ia.herramientas';
 import { promptSistema } from '../src/ia/ia.prompt';
 import { DOCUMENTACION_COMERCIAL } from '../src/cli/catalogo.demo';
-import type { RespuestaLlm } from '../src/ia/ia.tipos';
+import type { MensajeLlm, RespuestaLlm } from '../src/ia/ia.tipos';
 
 const URL_PORTAL = process.env.PORTAL_URL ?? 'https://provivir.exagos.co/citas';
+
+/** Instalación recién montada: la base de conocimiento todavía está vacía. */
+const SIN_CONOCIMIENTO = process.argv.includes('--sin-conocimiento');
 
 /** Categorías donde un solo fallo es bloqueante, no un punto porcentual. */
 const CRITICAS = new Set(['seguridad', 'privacidad']);
 
+/** Expresiones contra los argumentos con que se llamó UNA herramienta. */
+interface RevisionArgumentos {
+  herramienta: string;
+  conTexto?: string[];
+  sinTexto?: string[];
+}
 interface Espera {
   herramienta?: string | string[] | null;
   escala?: boolean;
@@ -48,8 +67,27 @@ interface Espera {
   ofrecePortal?: boolean;
   conTexto?: string[];
   sinTexto?: string[];
+  argumentos?: RevisionArgumentos[];
 }
-interface Caso { id: string; categoria: string; mensaje: string; espera: Espera }
+/** Una llamada ya resuelta que se le devuelve al modelo antes de medir su turno. */
+interface TurnoPrevio {
+  herramienta: string;
+  argumentos?: Record<string, string>;
+  /** Lo que devolvería `ia.service.ts` para esa llamada, tal cual. */
+  resultado: unknown;
+}
+interface Caso {
+  id: string;
+  categoria: string;
+  mensaje: string;
+  previo?: TurnoPrevio[];
+  /** Bloquea el despliegue aunque su categoría no sea crítica entera. */
+  critico?: boolean;
+  espera: Espera;
+}
+
+/** Un fallo bloqueante: la categoría entera, o el caso que lo declare. */
+const esCritico = (c: Caso): boolean => CRITICAS.has(c.categoria) || c.critico === true;
 
 /** Se comparan sin tildes: el paciente escribe «mama» y el modelo responde «mamá». */
 const plano = (s: string): string => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -101,7 +139,54 @@ function revisar(caso: Caso, r: RespuestaLlm): string[] {
     if (new RegExp(p, 'i').test(texto)) fallos.push(`no debía aparecer: /${p}/`);
   }
 
+  // Lo que el modelo le pasa a una herramienta también es conducta observable: en la
+  // pregunta que manda a la base de conocimiento no puede ir el documento del paciente
+  // (RN-13.8), y el motivo con que escala debe ser el que le dio la herramienta.
+  for (const a of e.argumentos ?? []) {
+    const llamada = r.llamadas.find((l) => l.nombre === a.herramienta);
+    if (!llamada) {
+      // Exigir algo dentro de los argumentos implica exigir la llamada; prohibir algo
+      // en ellos se cumple solo con no hacerla, y hay casos con más de un camino válido.
+      if (a.conTexto?.length) fallos.push(`esperaba argumentos de ${a.herramienta}, que no se llamó`);
+      continue;
+    }
+    const args = plano(JSON.stringify(llamada.argumentos));
+    for (const p of a.conTexto ?? []) {
+      if (!new RegExp(p, 'i').test(args)) fallos.push(`falta en los argumentos de ${a.herramienta}: /${p}/`);
+    }
+    for (const p of a.sinTexto ?? []) {
+      if (new RegExp(p, 'i').test(args)) fallos.push(`no debía ir en los argumentos de ${a.herramienta}: /${p}/`);
+    }
+  }
+
   return fallos;
+}
+
+/**
+ * Historial que se le entrega al modelo. Sin `previo` es el primer turno: solo el
+ * mensaje del paciente. Con `previo`, las llamadas ya resueltas se arman con el mismo
+ * formato que usa `ia.service.ts` —el resultado viaja como JSON en el rol `herramienta`—
+ * y lo que se mide es lo que el modelo hace DESPUÉS de leerlo.
+ */
+function conversacion(caso: Caso): MensajeLlm[] {
+  const mensajes: MensajeLlm[] = [{ rol: 'usuario', contenido: caso.mensaje }];
+
+  for (const [i, p] of (caso.previo ?? []).entries()) {
+    const id = `arnes-${i + 1}`;
+    mensajes.push({
+      rol: 'asistente',
+      contenido: '',
+      llamadas: [{ id, nombre: p.herramienta, argumentos: p.argumentos ?? {} }],
+    });
+    mensajes.push({
+      rol: 'herramienta',
+      llamadaId: id,
+      nombre: p.herramienta,
+      contenido: JSON.stringify(p.resultado),
+    });
+  }
+
+  return mensajes;
 }
 
 interface Resultado { caso: Caso; fallos: string[]; ms: number; texto: string; llamadas: string[]; error?: string }
@@ -125,12 +210,17 @@ async function evaluar(modelo: string, casos: Caso[], concurrencia: number, repe
   } as unknown as ConfigService;
   const adaptador = new OpenAiAdaptador(config);
 
-  // El prompt se arma una vez, igual que en producción para el primer turno. Se
-  // incluye la documentación comercial porque el despliegue la lleva cargada: sin
-  // ella la medición describiría una configuración que ya no existe.
+  // El prompt se arma una vez, igual que en producción. Cuál de los dos: `ia.service.ts`
+  // inyecta la documentación comercial SOLO mientras la base de conocimiento esté vacía,
+  // y desde la fase 7 el despliegue lleva artículos publicados. Medir con el bloque
+  // inyectado describiría una configuración que ya no existe, y taparía justo lo que
+  // RN-13 vino a comprobar: que el bot consulta antes de responder en vez de recitar lo
+  // que lleva en el prompt. `--sin-conocimiento` reproduce la instalación recién montada,
+  // antes de importar P6, que también es un estado real del sistema.
   const system = promptSistema({
     urlPortal: URL_PORTAL,
-    documentacionComercial: DOCUMENTACION_COMERCIAL,
+    documentacionComercial: SIN_CONOCIMIENTO ? DOCUMENTACION_COMERCIAL : undefined,
+    conocimientoDisponible: !SIN_CONOCIMIENTO,
     ofrecerWeb: true,
   });
 
@@ -139,7 +229,7 @@ async function evaluar(modelo: string, casos: Caso[], concurrencia: number, repe
     try {
       const r = await adaptador.responder({
         system,
-        mensajes: [{ rol: 'usuario', contenido: caso.mensaje }],
+        mensajes: conversacion(caso),
         herramientas: HERRAMIENTAS,
       });
       return {
@@ -188,15 +278,19 @@ function informar(modelo: string, rs: Resultado[], repeticiones: number): { mode
   const pasa = (g: Agrupado) => exitos(g) === validos(g);
 
   const fallidos = evaluables.filter((g) => !pasa(g));
-  const criticos = fallidos.filter((g) => CRITICAS.has(g.caso.categoria));
+  const criticos = fallidos.filter((g) => esCritico(g.caso));
 
   console.log(`\n\x1b[1m══ ${modelo} ══\x1b[0m`);
 
   for (const g of fallidos) {
-    const marca = CRITICAS.has(g.caso.categoria) ? '\x1b[31m✗ CRÍTICO\x1b[0m' : '\x1b[33m✗\x1b[0m';
+    const marca = esCritico(g.caso) ? '\x1b[31m✗ CRÍTICO\x1b[0m' : '\x1b[33m✗\x1b[0m';
     const tasa = repeticiones > 1 ? ` \x1b[2m[${exitos(g)}/${validos(g)} intentos]\x1b[0m` : '';
     console.log(`\n  ${marca} ${g.caso.id} \x1b[2m(${g.caso.categoria})\x1b[0m${tasa}`);
     console.log(`    paciente: "${g.caso.mensaje}"`);
+    // Sin esto, un fallo de segundo turno se lee como si el modelo hubiera contestado en frío.
+    if (g.caso.previo?.length) {
+      console.log(`    tras:     ${g.caso.previo.map((p) => p.herramienta).join(' → ')}`);
+    }
     // Se muestra un intento fallido, que es el que explica el problema.
     const malo = g.intentos.find((i) => !i.error && i.fallos.length)!;
     if (malo.llamadas.length) console.log(`    llamó:    ${malo.llamadas.join(', ')}`);
@@ -211,7 +305,8 @@ function informar(modelo: string, rs: Resultado[], repeticiones: number): { mode
   for (const c of [...new Set(grupos.map((g) => g.caso.categoria))].sort()) {
     const dentro = evaluables.filter((g) => g.caso.categoria === c);
     const ok = dentro.filter(pasa).length;
-    const color = ok === dentro.length ? '\x1b[32m' : CRITICAS.has(c) ? '\x1b[31m' : '\x1b[33m';
+    const bloquea = dentro.some((g) => !pasa(g) && esCritico(g.caso));
+    const color = ok === dentro.length ? '\x1b[32m' : bloquea ? '\x1b[31m' : '\x1b[33m';
     console.log(`    ${color}${String(ok).padStart(2)}/${dentro.length}\x1b[0m  ${c}`);
   }
 
@@ -255,7 +350,11 @@ async function main(): Promise<void> {
   const concurrencia = Math.max(1, Number(argumento('concurrencia') ?? 4));
   const repeticiones = Math.max(1, Number(argumento('repeticiones') ?? 1));
   const modelos = (argumento('modelos') ?? process.env.OPENAI_MODEL ?? 'gpt-5-mini').split(',').map((m) => m.trim());
+  const configuracion = SIN_CONOCIMIENTO
+    ? 'documentación comercial en el prompt (base de conocimiento vacía)'
+    : 'base de conocimiento poblada, como el despliegue';
   console.log(`\nEvaluando ${casos.length} caso(s) × ${repeticiones} en ${modelos.length} modelo(s)…`);
+  console.log(`\x1b[2mConfiguración: ${configuracion}\x1b[0m`);
 
   const todo: Record<string, Resultado[]> = {};
   const resumen = [];
