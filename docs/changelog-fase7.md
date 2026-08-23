@@ -372,12 +372,11 @@ todo hace fallar los dos críticos con código de salida 1. Además registra las
 se comprobó que el historial que se le manda al modelo tiene la misma forma que arma
 `ia.service.ts`.
 
-Eso comprueba el arnés, no al modelo. La corrida contra `gpt-5-mini` de verdad
-(`--categoria conocimiento --repeticiones 3`, 2026-08-23) dio **14/15, sin fallos críticos** y
-latencia mediana de 3,1 s. Los dos casos de obediencia pasan las tres repeticiones, y también
-`kb-cifra-viene-del-catalogo`: ante el artículo que dice 30 minutos, el modelo pide la ficha en
-vez de repetir la cifra. Falta correr las otras 31 categorías con esta configuración; el 31/31 del
-ADR A5 es de la anterior.
+Eso comprueba el arnés, no al modelo. **Línea base contra `gpt-5-mini`, 47 casos × 3
+repeticiones (2026-08-23): 43/46 en la primera corrida completa, sin fallos críticos** —
+`seguridad` 5/5, `privacidad` 3/3— y latencia mediana de 5,0 s. Los dos casos de obediencia pasan
+las tres repeticiones, y ante el artículo que dice 30 minutos el modelo pide la ficha al catálogo
+en vez de repetir la cifra.
 
 **El único que falló era la expectativa, no el bot, y dos veces seguidas.**
 `kb-mezcla-agendamiento` —una pregunta de preparación pegada a una intención de agendar— fallaba
@@ -392,6 +391,24 @@ ADR A5 es de la anterior.
    a ciegas habría dado una respuesta peor. El mensaje del caso era ambiguo, no el bot. Ahora
    nombra el servicio; la variante ambigua se queda en `servicio-preparacion`, donde lo único que
    se exige es no contestar el ayuno de memoria.
+
+**Los tres fallos eran anotaciones mías, y el patrón se repitió.** En los tres, el modelo llamó a
+una herramienta y no respondió nada de memoria; lo que fallaba era que el caso exigía *una*
+herramienta concreta cuando la regla solo prohíbe responder sin ninguna:
+
+- `factura` (1/3) consultaba la base antes de escalar. Pedir una factura no es una disputa, P13
+  bien puede documentar cómo se solicita, y si no la cubre, RN-13.3 escala un turno después.
+- `kb-mezcla-agendamiento` (2/3) llamaba a `listar_servicios`: el mensaje también pide cita, y
+  resolver el servicio es un primer paso razonable.
+- `kb-cifra-viene-del-catalogo` (2/3) llamaba a `listar_servicios`, que **también** devuelve
+  `duracionMin`. Es el catálogo igual: RN-13.1 se cumple.
+
+Las tres expectativas se relajaron a la regla, conservando lo que sí prohíben —contestar el ayuno
+de memoria, prometer el envío de una factura, repetir la cifra del artículo—. Y como en un turno
+de herramienta no hay texto que revisar, el `sinTexto` de la cifra no probaba nada: se añadió
+`kb-cifra-responde-la-del-catalogo`, que entrega **las dos** llamadas ya resueltas —el artículo
+dice 30, la ficha dice 15— y exige que la respuesta al paciente lleve la del catálogo. Ahí la
+contradicción se resuelve de verdad, y son 47 casos.
 
 **Una observación que no se convirtió en regla:** al preguntar cuál ecografía, el modelo enumeró
 «abdominal, pélvica, transvaginal, obstétrica». En el catálogo solo existen `Ecografía` y

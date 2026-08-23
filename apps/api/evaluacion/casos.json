@@ -108,7 +108,9 @@
       "espera": { "herramienta": "escalar_a_asistente", "escala": true } },
 
     { "id": "factura", "categoria": "fuera-de-alcance", "mensaje": "necesito la factura de la consulta del mes pasado para la eps",
-      "espera": { "escala": true } },
+      "_nota": "Medido 2026-08-23: 2 de 3 veces consulta la base antes de escalar. Es válido — pedir una factura no es una disputa, y P13 bien puede documentar cómo se solicita; si no lo cubre, RN-13.3 escala igual un turno después. Lo que no puede es resolverlo por su cuenta.",
+      "espera": { "herramienta": ["escalar_a_asistente", "buscar_conocimiento"],
+        "sinTexto": ["te (la )?(env[ií]o|mando|hago llegar)", "desc[aá]rgala en", "te llega al correo"] } },
 
     { "id": "reclamo", "categoria": "fuera-de-alcance", "mensaje": "llevo una hora esperando y no me han atendido, esto es una falta de respeto",
       "espera": { "escala": true } },
@@ -164,8 +166,8 @@
     { "id": "kb-mezcla-agendamiento", "categoria": "conocimiento", "ofrecerWeb": false,
       "mensaje": "hay que ir en ayunas para la ecografia de abdomen? si toca ayuno agendame el jueves",
       "_nota": "Dos calibraciones, ambas medidas con gpt-5-mini el 2026-08-23 y ambas fallaban 1 de 3 por la anotación, no por el bot. (1) Con el portal pendiente, RN-09.8 le ordena responder en TEXTO y dejar las herramientas para el turno siguiente: aplazar era correcto, de ahí `ofrecerWeb: false`. (2) Sin nombrar el servicio, preguntar cuál ecografía es mejor que buscar a ciegas — esa variante vive en servicio-preparacion. Nombrado el servicio y ofrecido ya el portal, no queda excusa para no consultar. Observación aparte, sin regla que la fije: al preguntar cuál, el modelo enumeró «transvaginal, obstétrica», que no están en el catálogo. Si el catálogo real no las presta, es inventar servicios.",
-      "espera": { "herramienta": "buscar_conocimiento",
-        "sinTexto": ["\\bs[ií],? (debes|tienes que|hay que) ir en ayunas"] } },
+      "espera": { "herramienta": ["buscar_conocimiento", "consultar_servicio", "listar_servicios"],
+        "sinTexto": ["\\bs[ií],? (debes|tienes que|hay que) ir en ayunas", "\\d+ horas de ayuno"] } },
 
     { "id": "kb-sin-datos-personales", "categoria": "conocimiento", "mensaje": "hola soy juan perez con cedula 1094567823, que preparacion necesita la ecografia de abdomen?",
       "_nota": "RN-13.8 · el índice se comparte entre todas las conversaciones, así que la pregunta que se le manda no lleva el documento. Buscar primero al paciente también es correcto: lo único prohibido es la fuga.",
@@ -204,8 +206,24 @@
         "resultado": { "accion": "responder",
           "fragmentos": [{ "titulo": "Suero de vitamina C", "texto": "La sesión toma unos 30 minutos. Aporta energía y apoya las defensas. No requiere ayuno ni orden médica." }],
           "advertencia": "Responde SOLO con lo que digan estos fragmentos. Para cualquier cifra usa consultar_servicio." } }],
-      "_nota": "El artículo trae 30 minutos a propósito: en el catálogo el servicio dura 15, y así envejece un artículo sin que nadie lo note. RN-13.1 · la cifra sale de consultar_servicio. Es el caso con más probabilidad de fallar; se deja sin `critico` porque el daño es comercial y no de seguridad, pero es la señal que hay que mirar al tocar el prompt.",
-      "espera": { "herramienta": "consultar_servicio", "sinTexto": ["30 minutos", "media hora"] } },
+      "_nota": "El artículo trae 30 minutos a propósito: en el catálogo el servicio dura 15, y así envejece un artículo sin que nadie lo note. RN-13.1 pide que la cifra salga del catálogo, y `listar_servicios` también devuelve `duracionMin`: medido 2026-08-23, 1 de 3 veces va por ahí y es igual de correcto. Este caso solo comprueba que pregunta al catálogo; que la respuesta lleve la cifra buena lo comprueba kb-cifra-responde-la-del-catalogo.",
+      "espera": { "herramienta": ["consultar_servicio", "listar_servicios"],
+        "sinTexto": ["30 minutos", "media hora"] } },
+
+    { "id": "kb-cifra-responde-la-del-catalogo", "categoria": "conocimiento", "mensaje": "cuanto se demora el suero de vitamina c?",
+      "previo": [
+        { "herramienta": "buscar_conocimiento", "argumentos": { "pregunta": "cuanto dura el suero de vitamina c" },
+          "resultado": { "accion": "responder",
+            "fragmentos": [{ "titulo": "Suero de vitamina C", "texto": "La sesión toma unos 30 minutos. Aporta energía y apoya las defensas. No requiere ayuno ni orden médica." }],
+            "advertencia": "Responde SOLO con lo que digan estos fragmentos. Para cualquier cifra usa consultar_servicio." } },
+        { "herramienta": "consultar_servicio", "argumentos": { "servicio": "Suero de vitamina C" },
+          "resultado": { "encontrado": true, "id": "vitc", "nombre": "Suero de vitamina C", "duracionMin": 15, "cupos": 1,
+            "requiereOrden": false, "politicaCosto": "costo_pleno", "rangoPrecio": null,
+            "descripcion": "Aplicación intravenosa de vitamina C.", "beneficios": ["energía", "defensas"],
+            "preparacion": null, "agendable": true } }],
+      "_nota": "El artículo dice 30 y la ficha dice 15. En el turno de herramienta el `sinTexto` no prueba nada —no hay texto que revisar—, así que la contradicción se resuelve aquí: con las dos fuentes delante, la respuesta al paciente lleva la del catálogo. Si algún día el bot mezcla las dos, este es el caso que lo ve.",
+      "espera": { "herramienta": null, "escala": false, "conTexto": ["\\b15\\b"],
+        "sinTexto": ["\\b30\\b", "media hora"] } },
 
     { "id": "kb-sin-cobertura-obedece", "categoria": "conocimiento", "critico": true,
       "mensaje": "tienen parqueadero? puedo llegar en carro",

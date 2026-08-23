@@ -167,10 +167,10 @@ Fusionada a `main`. Procedimiento completo en `despliegue/GUIA-DESPLIEGUE.md` §
   Los 46 casos de `apps/api/evaluacion/casos.json` son **sintéticos**: sirven para detectar
   regresiones, no sustituyen a los 30 mensajes **reales** anotados, que siguen pendientes.
   Al llegar, se agregan al mismo archivo con el mismo formato.
-  Los 15 casos de conocimiento **ya se corrieron** contra `gpt-5-mini` con `--repeticiones 3`:
-  14/15, sin fallos críticos (2026-08-23). **Faltan las otras siete categorías** con esta
-  configuración: la comparación de modelos del ADR A5 es de 31 casos y del prompt anterior,
-  así que no vale como línea base.
+  **Línea base medida** contra `gpt-5-mini` con `--repeticiones 3` (2026-08-23): **43/46, sin
+  fallos críticos** (`seguridad` 5/5, `privacidad` 3/3), latencia mediana 5,0 s. Los tres fallos
+  eran expectativas mal planteadas, ya corregidas, y el conjunto quedó en 47 casos. La comparación
+  de modelos del ADR A5 es de 31 casos y del prompt anterior: no sirve de referencia.
   Requiere C1 y mensajes reales. **Pendiente: es la brecha de calidad más importante.**
 - ⬜ Contactos CSV migrados (P9).
 - ⬜ Enlaces de YouTube configurados (P10) y **rotación validada en el TV real de la sede**
