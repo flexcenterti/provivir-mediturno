@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CONFIGURACION_BASE } from '../cli/configuracion.base';
 
 /**
  * Parámetros de reglas fuera del código (Arquitectura §9): hueco_max, ventanas,
@@ -24,6 +25,7 @@ export class ConfiguracionService implements OnModuleInit {
    */
   async onModuleInit(): Promise<void> {
     try {
+      await this.asegurarBase();
       await this.recargar();
       this.cargada = true;
     } catch (e) {
@@ -38,6 +40,24 @@ export class ConfiguracionService implements OnModuleInit {
       }
       this.log.warn('La API arranca con los valores por defecto de las reglas, en modo degradado.');
     }
+  }
+
+  /**
+   * Los parámetros nuevos de una versión tienen que llegar a las instalaciones ya
+   * desplegadas: si solo se crean en el alta inicial, se despliega una función y
+   * nadie puede configurarla porque su clave no existe en la tabla y no aparece en
+   * Administración → Reglas. Ya pasó con un permiso del catálogo en la fase 7.
+   *
+   * Solo **agrega lo que falta**. Un valor ajustado desde el backoffice es una
+   * decisión operativa y esto no tiene por qué revertirla.
+   */
+  private async asegurarBase(): Promise<void> {
+    let nuevas = 0;
+    for (const c of CONFIGURACION_BASE) {
+      const r = await this.prisma.configuracion.createMany({ data: c, skipDuplicates: true });
+      nuevas += r.count;
+    }
+    if (nuevas) this.log.log(`Configuración: ${nuevas} parámetro(s) nuevo(s) de esta versión`);
   }
 
   /** Si es false, la API responde pero opera con valores por defecto. */

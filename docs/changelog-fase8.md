@@ -52,13 +52,26 @@ la conversación, y mandarlo dos veces es peor que no mandarlo.
 `plantilla_recordatorio_hoy`, `plantilla_confirmacion_cita`. Los nombres los define el cliente en
 su Business Manager y cambian sin desplegar.
 
+## Y un segundo hueco, del mismo tipo que ya mordió en la fase 7
+
+Las tres claves nuevas no habrían llegado a producción. `CONFIGURACION_BASE` solo se aplica en el
+alta inicial y en el seed, así que en una instalación ya desplegada la fila no existe: la función
+se despliega y **nadie puede configurarla porque su clave no aparece en Administración → Reglas**.
+Es exactamente lo que pasó en la fase 7 con un permiso del catálogo.
+
+`ConfiguracionService` ahora reconcilia al arrancar, con la misma regla que allí: **solo agrega lo
+que falta**, nunca pisa un valor ajustado desde el backoffice, y un fallo de base no tumba el
+arranque —degrada a los valores por defecto, como ya hacía.
+
 ## Pruebas
 
 - 7 unitarias sobre la decisión, con el borde de las 24 h exactas y los dos motivos de descarte
   (`RN-05`, `RN-10.3`).
 - 2 sobre la carga de la plantilla: parámetros posicionales en orden, y sin `components` vacío
   cuando la plantilla no lleva variables.
-- Suite completa en verde: 241 unitarias y las 19 e2e del portal, que son las que comprueban que
+- 3 sobre la reconciliación de la configuración al arrancar, incluida la degradación si la base
+  no responde.
+- Suite completa en verde: 244 unitarias y las 19 e2e del portal, que son las que comprueban que
   el agendamiento sigue funcionando con la confirmación encolada.
 
 ## Pendiente, y no es código
