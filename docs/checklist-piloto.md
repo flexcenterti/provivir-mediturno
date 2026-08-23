@@ -137,17 +137,25 @@ Consecuencias asumidas, y cómo se acotan:
 
 Fusionada a `main`. Procedimiento completo en `despliegue/GUIA-DESPLIEGUE.md` §8.
 
-- ⬜ **Respaldo antes de migrar.** La migración añade tablas y no borra nada, pero es el momento
-  de tenerlo.
+- ✅ **Desplegada el 2026-08-23.** Imagen construida con el árbol en `17dc255`, migraciones
+  `fase7_conocimiento_y_seguimiento` y `kb_fragmento_tsv_por_trigger` aplicadas desde un contenedor
+  efímero antes del relevo, API relevada y los tres frontends copiados. Verificado por HTTP:
+  `/api/conocimiento/*` pasó de 404 a 401 y el bundle servido del backoffice trae las pantallas
+  nuevas.
+- ✅ **Respaldo antes de migrar.** `~/respaldo-pre-fase7-2026-08-23-1551.sql.gz`, verificado: 111 KB
+  sin comprimir, cierra con `PostgreSQL database dump complete`, 19 tablas con datos. Los dos
+  intentos anteriores del día habían salido **vacíos** por falta de `-T` en `compose exec`; la guía
+  ya lo advierte.
 - ✅ **Estado del seguimiento comercial decidido: arranca ENCENDIDO** (Carlos Rivas, 2026-08-23),
   sabiendo que los textos de los tres mensajes siguen sin aprobación formal del cliente (D-d) y
   que empieza a escribir en cuanto entre la primera conversación. Se apaga desde Administración →
   Reglas sin desplegar. **Vigilar la tasa de opt-out desde el primer día**: es la señal temprana
   de que la cadencia molesta, y llega antes que cualquier queja.
-- ⬜ Comprobar que el usuario de PostgreSQL es superusuario: la migración crea `unaccent` y
-  `pg_trgm`. Con la imagen oficial lo es, pero se verifica en un comando.
-- ⬜ Tras desplegar: **Conocimiento → Importar documentación comercial**. Hasta entonces el bot
-  sigue usando el bloque de texto de siempre; la importación es idempotente y reversible.
+- ✅ Comprobado que el usuario de PostgreSQL es superusuario (`rolsuper = t`): la migración crea
+  `unaccent` y `pg_trgm`.
+- ⬜ **Siguiente paso, desde el backoffice: Conocimiento → Importar documentación comercial.**
+  Hasta entonces el bot sigue usando el bloque de texto de siempre —que es el modo seguro de
+  esperar—; la importación es idempotente y reversible archivando los artículos.
 - ⬜ Revisar los artículos que queden **sin servicio vinculado** y atarlos a mano. La importación
   los lista: los ambiguos no se vinculan solos a propósito.
 - ⬜ Calibrar `kb_score_min`. El **62** de arranque es una hipótesis, no un valor medido: pide
