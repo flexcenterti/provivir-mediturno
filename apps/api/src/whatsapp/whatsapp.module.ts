@@ -4,9 +4,10 @@ import { WhatsappCola } from './whatsapp.cola';
 import { ConversacionService } from './conversacion.service';
 import { IaModule } from '../ia/ia.module';
 import { TurnosModule } from '../turnos/turnos.module';
+import { SeguimientoModule } from '../seguimiento/seguimiento.module';
 
 @Module({
-  imports: [IaModule, TurnosModule],
+  imports: [IaModule, TurnosModule, SeguimientoModule],
   controllers: [WhatsappController],
   providers: [WhatsappCola, ConversacionService],
   exports: [ConversacionService],

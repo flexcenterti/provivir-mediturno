@@ -78,4 +78,7 @@ export interface ResultadoIA {
   /** RN-13.7.3 · Artículos que sustentaron la respuesta, y su puntaje. */
   kbArticulos?: string[];
   kbScore?: number;
+  /** RN-09.9.1 · Servicio sobre el que el paciente mostró interés. */
+  interesServicioId?: string;
+  interesComercial?: 'alto' | 'medio' | 'nulo';
 }

@@ -1,6 +1,6 @@
 # Changelog · FASE 7 — Base de conocimiento y seguimiento comercial
 
-**Estado:** en curso. Esquema migrado, módulo `conocimiento` operativo, el bot ya lo consulta y la documentación comercial se migra a artículos; **209 unitarias y 143 e2e en verde**.
+**Estado:** en curso. RN-13 cerrada de punta a punta y RN-09.9 implementada y **activa**; **231 unitarias y 157 e2e en verde**.
 
 Fase posterior al alcance original. Convierte `configuracion.documentacion_comercial` —hoy un
 bloque de texto inyectado en el prompt de **todas** las conversaciones— en artículos versionados
@@ -209,16 +209,68 @@ Quedó como endpoint (`POST /conocimiento/importar`, permiso `conocimiento.edita
 mejor sitio: la importación es una acción de administración con reporte visible, y queda auditada
 con el usuario real en vez de con la etiqueta `cli`.
 
+## Seguimiento comercial (RN-09.9)
+
+Tres mensajes a las 2 h, 5 h y 8 h desde el último mensaje de la conversación, para el paciente que
+preguntó por un servicio, recibió el ofrecimiento y no agendó. **Activo por defecto**
+(`seguimiento_comercial_activo = true`), por decisión del equipo.
+
+### Los textos son plantillas, no los compone el modelo
+
+La regla original decía que el orquestador los compondría con las herramientas de RN-13. No se
+sostiene: **el cliente tiene que aprobar estos textos** (D-d), y un texto distinto cada vez no se
+puede aprobar. Un mensaje comercial que sale solo hacia un paciente real no es el lugar para
+descubrir qué se le ocurrió al modelo. Las cifras siguen saliendo del catálogo.
+
+### Revalidación completa antes de cada envío
+
+El worker solo despierta y pregunta; la decisión de enviar la toma el servicio, que vuelve a
+comprobarlo todo. **Las condiciones que cancelan se evalúan antes que las que difieren:** no tiene
+sentido reprogramar un envío que de todos modos no debía salir.
+
+Dos correcciones que salieron al probar contra la base:
+
+- **La ventana de 24 h se cuenta desde el último mensaje del paciente**, que es donde Meta la abre,
+  no desde que se armó la secuencia. En producción se parecen; de la diferencia depende que el
+  mensaje pueda salir como texto libre.
+- **La pregunta correcta es si la persona ya tiene su cita**, no si la sacó después de armarse la
+  secuencia. A quien ya la tenía tampoco hay que escribirle. La comprobación faltaba además al
+  armar: se podía perseguir a alguien que ya tenía cita de antes de la conversación.
+
+### Diferir es mover la fecha, no cambiar de estado
+
+La fila sigue en `programado` cuando se difiere por horario, porque el índice único parcial que
+limita la insistencia cuenta ese estado; sacarla de ahí abriría hueco para una segunda secuencia.
+El valor `diferido` del enum quedó sin uso por esa razón.
+
+### La tabla es la fuente de verdad, no Redis
+
+Al arrancar, el módulo vuelve a encolar lo que quedó programado. Si se pierde la cola —reinicio,
+purga, cambio de instancia— los envíos no se evaporan y nadie queda a medias de una secuencia.
+
+### Pruebas
+
+**22 unitarias** de horario y textos: la zona de la sede manda sobre la del servidor, un envío
+nocturno se difiere, el domingo salta al lunes, un horario sin días hábiles no cuelga, el cierre no
+lleva pregunta y cada mensaje tiene un solo llamado a la acción.
+
+**14 e2e** con el envío ya programado, que es el estado en el que se descubre el problema en
+producción: respondió, ya tiene cita **creada desde el portal**, opt-out posterior al armado,
+conversación tomada por una asistente, servicio desactivado, fuera de horario (difiere), fuera de la
+ventana de 24 h (descarta), y una condición de corte que gana sobre el diferimiento.
+
+Una prueba obligó a corregir el primer mensaje: hacía **dos** preguntas y la regla pide un solo
+llamado a la acción.
+
 ## Pendiente en esta fase
 
-Extensión de la cola de RN-09.8 a los tres pasos (RN-09.9) · `@Delete` de servicios con su restricción y los efectos en cadena
-(RN-04.5) · bloque de interesados en la bandeja · pantalla de conocimiento en el backoffice ·
-golden set y calibración del umbral.
+`@Delete` de servicios con su restricción y los efectos en cadena (RN-04.5) · pantalla de
+conocimiento y bloque de interesados en el backoffice (el endpoint `GET /bandeja/interesados` ya
+existe) · golden set y calibración del umbral.
 
-**Fuera de mi alcance, requieren decisión:** encender el seguimiento comercial (manda mensajes a
-pacientes reales), fusionar a `main` y desplegar, los textos de los tres mensajes, y el contenido
-del cliente (P6 real, P12 aprobado, P13). El umbral de 62 es **una hipótesis**: calibrarlo necesita
-preguntas reales del número de prueba.
+**Requieren decisión:** fusionar a `main` y desplegar —hasta entonces ningún paciente recibe nada—,
+la aprobación de los textos por el cliente (D-d) y su contenido (P6 real, P12 aprobado, P13). El
+umbral de 62 es **una hipótesis**: calibrarlo necesita preguntas reales del número de prueba.
 
 ## Nota de operación
 

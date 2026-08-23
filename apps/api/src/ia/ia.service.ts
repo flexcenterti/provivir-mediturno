@@ -265,6 +265,11 @@ export class IaService {
           resultado.kbArticulos = [...new Set(r.fragmentos.map((f) => f.articuloId))];
           resultado.kbScore = r.mejorPuntaje;
 
+          if (args.servicioId) {
+            resultado.interesServicioId = args.servicioId;
+            resultado.interesComercial ??= 'medio';
+          }
+
           return {
             accion: 'responder',
             fragmentos: r.fragmentos.map((f) => ({ titulo: f.titulo, texto: f.texto })),
@@ -286,6 +291,13 @@ export class IaService {
 
           if (!servicio) return { encontrado: false };
 
+          // Preguntar por la ficha de un servicio agendable es interés comercial
+          // (RN-09.9.1). Si además pide cupos, sube a alto más abajo.
+          if (servicio.agendable) {
+            resultado.interesServicioId = servicio.id;
+            resultado.interesComercial ??= 'medio';
+          }
+
           return {
             encontrado: true,
             id: servicio.id,
@@ -306,6 +318,9 @@ export class IaService {
         case 'ofrecer_cupos': {
           // RN-09.8 - pedir cupos ES la intencion de agendar.
           resultado.ofrecioWeb = true;
+          // RN-09.9.1 · y es el interés más claro que puede haber.
+          resultado.interesServicioId = String(args.servicioId);
+          resultado.interesComercial = 'alto';
 
           const cupos = await this.citas.cupos({
             servicioId: String(args.servicioId),

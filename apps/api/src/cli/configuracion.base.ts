@@ -13,6 +13,18 @@ export const CONFIGURACION_BASE = [
   { clave: 'intervalo_institucional_min', valor: '10', descripcion: 'RN-11.2 · Cada cuántos minutos se interrumpe el canal para el video institucional.' },
   { clave: 'anticipacion_llegada_min', valor: '15', descripcion: 'Minutos de anticipación con que se permite registrar llegada.' },
   { clave: 'tolerancia_retraso_min', valor: '10', descripcion: 'Tolerancia de retraso antes de degradar la prioridad en cola.' },
+  { clave: 'kb_score_min', valor: '62', descripcion: 'RN-13.3 · Cobertura mínima de la pregunta para que el bot responda en vez de escalar. Calibrar contra el golden set.' },
+  { clave: 'kb_top_k', valor: '5', descripcion: 'RN-13 · Fragmentos que se le entregan al modelo por consulta.' },
+  {
+    clave: 'seguimiento_comercial_activo',
+    valor: 'true',
+    descripcion:
+      'RN-09.9 · Secuencia de tres mensajes al paciente que preguntó por un servicio y no agendó ' +
+      '(2 h, 5 h y cierre a las 8 h). Se detiene sola si responde, agenda o pide no ser contactado.',
+  },
+  { clave: 'seguimiento_hora_apertura', valor: '7', descripcion: 'RN-09.9.5 · Hora desde la que pueden salir mensajes de seguimiento.' },
+  { clave: 'seguimiento_hora_cierre', valor: '18', descripcion: 'RN-09.9.5 · Hora hasta la que pueden salir mensajes de seguimiento.' },
+  { clave: 'seguimiento_comercial_dias_entre', valor: '30', descripcion: 'RN-09.9.7.2 · Días mínimos entre dos secuencias para el mismo paciente y servicio.' },
   {
     clave: 'mostrar_nombre_en_pantalla',
     valor: 'abreviado',

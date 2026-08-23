@@ -131,7 +131,7 @@ Consecuencias asumidas, y cómo se acotan:
 | ⬜ D-a | **RN-01.5** · qué cuenta como "control consecutivo". Se implementó adyacencia real: un procedimiento entre dos controles rompe la cadena, porque sí factura. | `docs/changelog-fase2.md` |
 | ⬜ D-b | **RN-10.2** · el portal exige documento **+ últimos 4 del teléfono**, no solo documento, para impedir enumerar quién es paciente. Cuesta comodidad a quien cambió de número. | `docs/changelog-fase5.md` |
 | ⬜ D-c | **RN-09.2** · usar botones interactivos de WhatsApp en vez de solo texto. Implementado tras la bandera `whatsapp_botones_interactivos`. | `docs/rn-09-8-oferta-web.md` |
-| ⬜ D-d | **RN-09.9** · ¿el piloto arranca con el seguimiento comercial **encendido o apagado**? Recomendación del equipo: apagado, medir los primeros días y encenderlo después. Además hay que aprobar los textos de los tres mensajes y el horario de envío. | `docs/rn-09-9-seguimiento-comercial.md` |
+| ⬜ D-d | **RN-09.9** · seguimiento comercial **encendido** por decisión del equipo (`seguimiento_comercial_activo = true`), contra la recomendación de arrancar apagado. **Falta que el cliente apruebe los textos de los tres mensajes**; son deterministas justamente para poder mostrárselos tal cual. Se apaga desde Administración → Reglas sin desplegar. | `docs/rn-09-9-seguimiento-comercial.md` |
 
 ## Antes del piloto
 

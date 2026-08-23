@@ -3,7 +3,8 @@
 **Origen:** solicitud posterior a la Especificación v2.0. No está en la Lógica de Negocio v2.0;
 se registra aquí para mantener la trazabilidad del resto de reglas.
 
-**Estado:** especificada. Pendiente de implementación (fase 7).
+**Estado:** implementada en la fase 7. Activa por defecto (`seguimiento_comercial_activo`).
+Los textos siguen pendientes de aprobación del cliente (decisión D-d).
 
 **Extiende:** `docs/rn-09-8-oferta-web.md` §4, que ya implementa un seguimiento diferido con
 verificación previa de cita. Esta regla generaliza esa mecánica a una secuencia comercial.
@@ -47,9 +48,16 @@ escribe encima a alguien que todavía está conversando.
 
 ### RN-09.9.3 · Contenido
 
-1. Cada mensaje se construye con las herramientas de RN-13 (`consultar_servicio` para toda cifra,
-   `buscar_conocimiento` para el resto). Aplica íntegra la prohibición de `ia.prompt.ts`: nada que
-   no haya devuelto una herramienta.
+1. Cada mensaje es una **plantilla determinista alimentada por la ficha comercial del servicio**,
+   no texto que el modelo componga en cada envío.
+
+   *Corregido al implementar.* La versión original de esta regla decía que el orquestador compondría
+   los mensajes con las herramientas de RN-13. No se sostiene: **el cliente tiene que aprobar estos
+   textos** (decisión D-d), y un texto distinto cada vez no se puede aprobar. Un mensaje comercial
+   que sale solo hacia un paciente real no es el lugar para descubrir qué se le ocurrió al modelo.
+   De paso evita coste y latencia de una llamada al modelo dentro de un trabajo de fondo.
+
+   Las cifras siguen saliendo del catálogo, igual que en RN-13.1.
 2. **Cada mensaje debe aportar información nueva.** Repetir el mismo argumento tres veces es lo que
    convierte un seguimiento en spam y degrada la calidad del número.
 3. **Un solo llamado a la acción por mensaje.**
@@ -62,7 +70,9 @@ que ya existe en `conversacion.service.ts`. El paciente pudo agendar por teléfo
 
 **Cancelan la secuencia completa:**
 - el paciente responde cualquier cosa;
-- se crea la cita por **cualquier** canal (WhatsApp, portal o mostrador);
+- **la persona ya tiene su cita** de ese servicio, por **cualquier** canal (WhatsApp, portal o
+  mostrador) y sin importar cuándo la sacó. La pregunta no es si agendó *después* de armarse la
+  secuencia: a quien ya la tenía tampoco hay que escribirle. Se comprueba también al armar;
 - el paciente pide no ser contactado → además marca `Paciente.noContactar` de forma permanente
   (Ley 1581/2012);
 - el servicio se desactiva (RN-04.5.4).
@@ -83,6 +93,10 @@ El horario se calcula con `hoyEnSede()` / `fechaEnZona()` de `@provivir/shared`.
 Cali (UTC−5) y el servidor puede estar en otra zona.
 
 ### RN-09.9.6 · Ventana de 24 horas de Meta
+
+La ventana se cuenta desde el **último mensaje del paciente**, que es donde Meta la abre — no desde
+que se armó la secuencia. En producción se parecen, pero no son lo mismo, y de esa diferencia
+depende que el mensaje pueda salir como texto libre.
 
 La secuencia completa termina en `T0 + 8 h` precisamente para caber en la **ventana de atención al
 cliente de 24 horas** que abre el mensaje del paciente. Dentro de ella son mensajes de formato libre
@@ -123,12 +137,18 @@ poder ajustar o apagar la secuencia con datos y no por impresión.
 
 ---
 
-## Decisión pendiente del cliente
+## Estado de la decisión D-d
 
-**¿El piloto arranca con la secuencia encendida o apagada?** Se controla por parámetro y se activa
-después sin tocar código. Recomendación del equipo: **arrancar apagada**, medir cómo responde la
-gente al bot en los primeros días y encenderla después. También hay que aprobar los textos de los
-tres mensajes y el horario de envío.
+**Encendida.** `seguimiento_comercial_activo` arranca en `true` por decisión del equipo, contra la
+recomendación inicial de arrancar apagada y medir primero. Se puede apagar desde
+Administración → Reglas sin desplegar.
+
+Sigue pendiente la **aprobación de los textos por parte del cliente**. Están en
+`seguimiento.mensajes.ts` y son deterministas justamente para poder mostrárselos y que los apruebe
+tal cual.
+
+Revisar la **tasa de opt-out** en los primeros días del piloto: es la señal temprana de que la
+cadencia molesta.
 
 ## Pruebas mínimas
 
