@@ -158,6 +158,7 @@ tr.clickable:hover{background:#F7FAFA;cursor:pointer}
 .wa-input{display:flex;gap:.5rem;padding:.7rem;background:#F2EFE9;border-top:1px solid var(--line)}
 .wa-input input{flex:1;padding:.6rem .8rem;border-radius:999px;border:1px solid var(--line)}
 .ia-panel .row{display:flex;justify-content:space-between;gap:.6rem;padding:.4rem 0;border-bottom:1px dashed var(--line);font-size:.84rem}
+.kb-row{display:flex;justify-content:space-between;gap:.6rem;padding:.4rem 0;border-bottom:1px dashed var(--line);font-size:.84rem}
 .ia-panel .row:last-child{border-bottom:none}
 .conf-bar{height:7px;border-radius:99px;background:#EDF1F2;overflow:hidden;margin-top:.3rem}
 .conf-bar i{display:block;height:100%;background:var(--teal)}
@@ -388,20 +389,143 @@ const PACIENTES = [
 ];
 
 /* Tipos de cita: general | control | procedimiento | examen (RN-01, RN-04) */
+/* Ficha comercial del servicio (RN-13.1): desc/benef/prep alimentan la venta del bot.
+   REGLA DURA: toda cifra que el bot comunique (duración, cupos, costo) sale de AQUÍ,
+   nunca de un fragmento de texto de la base de conocimiento. */
 const SERVICIOS = [
-  {id:'mg',   nombre:'Medicina general · Consulta', cat:'Medicina general', tipo:'general',       dur:15, cupos:1, orden:false},
-  {id:'ctrl', nombre:'Medicina general · Control',  cat:'Medicina general', tipo:'control',       dur:10, cupos:1, orden:false, costo:'Sin costo'},
-  {id:'gin',  nombre:'Ginecología',                 cat:'Especialista',     tipo:'general',       dur:20, cupos:1, orden:false},
-  {id:'der',  nombre:'Dermatología · Consulta',     cat:'Especialista',     tipo:'general',       dur:20, cupos:1, orden:false},
-  {id:'derp', nombre:'Procedimiento dermatológico', cat:'Procedimiento',    tipo:'procedimiento', dur:120,cupos:1, orden:false},
-  {id:'nut',  nombre:'Nutrición',                   cat:'Especialista',     tipo:'general',       dur:30, cupos:1, orden:false},
-  {id:'vitc', nombre:'Suero de vitamina C',         cat:'Procedimiento',    tipo:'procedimiento', dur:15, cupos:1, orden:false},
-  {id:'eco',  nombre:'Ecografía',                   cat:'Diagnóstico',      tipo:'examen',        dur:20, cupos:1, orden:true},
-  {id:'ecod', nombre:'Ecografía Doppler',           cat:'Diagnóstico',      tipo:'examen',        dur:40, cupos:2, orden:true},
-  {id:'lab',  nombre:'Laboratorio clínico',         cat:'Laboratorio',      tipo:'examen',        dur:10, cupos:1, orden:true},
+  {id:'mg',   nombre:'Medicina general · Consulta', cat:'Medicina general', tipo:'general',       dur:15, cupos:1, orden:false, agendable:true, estado:'Activo',
+   desc:'Consulta con médico general para valoración, fórmula y remisión a especialista cuando se requiere.',
+   benef:['Atención el mismo día según disponibilidad','Remisión a especialista de la sede','Incluye control sin costo dentro de la ventana del médico'], prep:'No requiere preparación. Trae tu documento de identidad.'},
+  {id:'ctrl', nombre:'Medicina general · Control',  cat:'Medicina general', tipo:'control',       dur:10, cupos:1, orden:false, costo:'Sin costo', agendable:true, estado:'Activo',
+   desc:'Revisión corta posterior a la consulta: lectura de exámenes, continuidad de tratamiento o fórmula adicional.',
+   benef:['Sin costo para el paciente','Cupo intercalado entre consultas, no desplaza tu turno'], prep:'Trae los exámenes que te ordenaron en la consulta.'},
+  {id:'gin',  nombre:'Ginecología',                 cat:'Especialista',     tipo:'general',       dur:20, cupos:1, orden:false, agendable:true, estado:'Activo',
+   desc:'Consulta ginecológica con especialista, disponible todos los días en la sede.',
+   benef:['Atención diaria, sin lista de espera larga','Toma de citología en la misma consulta'], prep:'Evita duchas vaginales y relaciones 48 horas antes si vienes por citología.'},
+  {id:'der',  nombre:'Dermatología · Consulta',     cat:'Especialista',     tipo:'general',       dur:20, cupos:1, orden:false, agendable:true, estado:'Activo',
+   desc:'Valoración dermatológica de piel, cabello y uñas.',
+   benef:['Diagnóstico y plan de tratamiento en la misma cita','Los procedimientos se programan de una vez'], prep:'Asiste sin maquillaje ni esmalte en la zona a valorar.'},
+  {id:'derp', nombre:'Procedimiento dermatológico', cat:'Procedimiento',    tipo:'procedimiento', dur:120,cupos:1, orden:false, agendable:true, estado:'Activo',
+   desc:'Procedimiento en consultorio con la dermatóloga, con su propio espacio reservado en agenda.',
+   benef:['Bloque exclusivo de 2 horas: sin afanes ni reprogramaciones','Lo realiza la especialista que te valoró'], prep:'Asiste con ropa cómoda. Sigue las indicaciones que te dio la dermatóloga en la consulta.'},
+  {id:'nut',  nombre:'Nutrición',                   cat:'Especialista',     tipo:'general',       dur:30, cupos:1, orden:false, agendable:true, estado:'Activo',
+   desc:'Consulta nutricional con plan de alimentación personalizado.',
+   benef:['Media hora completa de acompañamiento','Plan escrito ajustado a tu rutina y presupuesto'], prep:'Trae exámenes recientes si los tienes.'},
+  {id:'vitc', nombre:'Suero de vitamina C',         cat:'Procedimiento',    tipo:'procedimiento', dur:15, cupos:1, orden:false, agendable:true, estado:'Activo',
+   desc:'Aplicación intravenosa de vitamina C realizada por nuestro equipo médico en la sede.',
+   benef:['Refuerza las defensas','Mejora energía y aspecto de la piel','Procedimiento corto: 15 minutos y sigues con tu día'], prep:'Ven hidratado y habiendo comido algo liviano.'},
+  {id:'eco',  nombre:'Ecografía',                   cat:'Diagnóstico',      tipo:'examen',        dur:20, cupos:1, orden:true,  agendable:true, estado:'Activo',
+   desc:'Ecografía diagnóstica realizada en la sala de imágenes de la sede.',
+   benef:['Resultado entregado el mismo día','No requiere desplazarte a otra institución'], prep:'Abdominal: ayuno de 6 horas. Pélvica: vejiga llena (2 vasos de agua 1 hora antes, sin ir al baño).'},
+  {id:'ecod', nombre:'Ecografía Doppler',           cat:'Diagnóstico',      tipo:'examen',        dur:40, cupos:2, orden:true,  agendable:true, estado:'Activo',
+   desc:'Ecografía Doppler para estudio de flujo vascular. Ocupa dos espacios seguidos de la agenda.',
+   benef:['Estudio vascular completo sin remisión externa','Bloque doble reservado: nadie te apura'], prep:'Ayuno de 6 horas para Doppler abdominal. Asiste con ropa cómoda y trae tu orden médica.'},
+  {id:'lab',  nombre:'Laboratorio clínico',         cat:'Laboratorio',      tipo:'examen',        dur:10, cupos:1, orden:true,  agendable:true, estado:'Activo',
+   desc:'Toma de muestras para exámenes de laboratorio en la sede.',
+   benef:['Toma rápida, 10 minutos','Resultados disponibles para tu cita de control'], prep:'Ayuno de 8 a 12 horas según el examen. Puedes tomar agua.'},
 ];
 
 const EXAMENES = ['Hemograma','Glicemia','Perfil lipídico','Creatinina','Uroanálisis','TSH','Pruebas hepáticas','Prueba de embarazo','Coprológico','PCR'];
+
+/* =====================================================================
+   BASE DE CONOCIMIENTO DEL BOT (RN-13)
+   Contenido institucional aprobado. Sin datos de pacientes (RN-13.8).
+   Los borradores NO se sirven al bot (RN-13.7.1).
+   ===================================================================== */
+const KB_CFG = { umbral:62, topk:3 };
+
+/* Temas que escalan SIEMPRE, sin importar el puntaje (RN-13.4 · aprobados por el cliente, P12) */
+const KB_TEMAS_PROHIBIDOS = {
+  'Consejo o diagnóstico clínico'          : ['que tengo','qué tengo','es grave','me duele','sintoma','síntoma','diagnostico','diagnóstico','que me recomienda','qué me recomienda'],
+  'Interpretación de exámenes o fórmulas'  : ['que significa','qué significa','mi resultado','salio alto','salió alto','esta alterado','está alterado','interpretar'],
+  'Medicamentos y dosis'                   : ['dosis','cuantas pastillas','cuántas pastillas','puedo tomar','me sirve el','miligramos'],
+  'Quejas y reclamos'                      : ['queja','reclamo','pesimo','pésimo','denuncia','devolucion','devolución','me atendieron mal'],
+  'Asuntos legales o de facturación'       : ['demanda','abogado','tutela','me cobraron mal','factura errada'],
+  'Negociación de precios o descuentos'    : ['descuento','rebaja','me lo deja en','promocion especial','promoción especial'],
+};
+
+const KB_ARTICULOS = [
+  {id:'kb1', titulo:'Preparación para ecografías', cat:'Preparación', servId:'eco', estado:'Publicado', ver:2, act:'12-ago-2026',
+   keys:['ecografia','eco','doppler','preparo','preparacion','ayuno','vejiga','agua antes'],
+   extracto:'Ecografía abdominal: ayuno de 6 horas. Ecografía pélvica: vejiga llena, dos vasos de agua una hora antes sin ir al baño. Doppler abdominal: ayuno de 6 horas. En todos los casos asiste con ropa cómoda y trae tu orden médica impresa.',
+   respuesta:'Para la ecografía la preparación depende del tipo: <b>abdominal</b> requiere ayuno de 6 horas y <b>pélvica</b> requiere vejiga llena (dos vasos de agua una hora antes, sin ir al baño). Asiste con ropa cómoda y trae tu orden médica.'},
+  {id:'kb2', titulo:'Preparación para exámenes de laboratorio', cat:'Preparación', servId:'lab', estado:'Publicado', ver:3, act:'14-ago-2026',
+   keys:['laboratorio','examenes','sangre','ayunas','ayuno','hemograma','glicemia','perfil lipidico'],
+   extracto:'Los exámenes de sangre requieren entre 8 y 12 horas de ayuno según el perfil solicitado. Se puede tomar agua. La toma de muestras se realiza de 7:00 a 10:00 a.m.',
+   respuesta:'Los exámenes de sangre requieren entre <b>8 y 12 horas de ayuno</b> según el perfil que te ordenaron. Puedes tomar agua. La toma de muestras es de <b>7:00 a 10:00 a.m.</b>'},
+  {id:'kb3', titulo:'Suero de vitamina C: qué es y para quién', cat:'Servicios', servId:'vitc', estado:'Publicado', ver:1, act:'10-ago-2026',
+   keys:['vitamina c','suero','defensas','energia','vitaminas'],
+   extracto:'Aplicación intravenosa de vitamina C realizada por el equipo médico de la sede. Refuerza las defensas y mejora energía y aspecto de la piel. Procedimiento de 15 minutos.',
+   respuesta:'¡Sí los manejamos! 💛 Es una aplicación intravenosa que hace nuestro equipo médico en la sede: <b>refuerza las defensas</b> y mejora la energía y el aspecto de la piel. Ven hidratado y habiendo comido algo liviano.'},
+  {id:'kb4', titulo:'Horarios de atención y cómo llegar', cat:'Información general', servId:null, estado:'Publicado', ver:2, act:'08-ago-2026',
+   keys:['horario','a que hora','abren','cierran','sabado','domingo','direccion','como llego','donde quedan','ubicacion'],
+   extracto:'CDC Oriente atiende de lunes a viernes de 7:00 a.m. a 6:00 p.m. y sábados de 8:00 a.m. a 12:00 m. Domingos y festivos no hay atención.',
+   respuesta:'Atendemos de <b>lunes a viernes de 7:00 a.m. a 6:00 p.m.</b> y <b>sábados de 8:00 a.m. a 12:00 m.</b> Domingos y festivos no tenemos atención.'},
+  {id:'kb5', titulo:'Formas de pago aceptadas', cat:'Información general', servId:null, estado:'Publicado', ver:1, act:'08-ago-2026',
+   keys:['pago','pagar','efectivo','tarjeta','nequi','daviplata','transferencia','cuanto vale'],
+   extracto:'Se recibe efectivo, tarjeta débito y crédito, y transferencia. El pago se realiza en recepción al llegar, antes de pasar a sala de espera.',
+   respuesta:'Recibimos <b>efectivo, tarjeta débito y crédito y transferencia</b>. El pago se hace en recepción al llegar, antes de pasar a la sala de espera.'},
+  {id:'kb6', titulo:'La cita de control: cómo funciona y por qué no tiene costo', cat:'Servicios', servId:'ctrl', estado:'Publicado', ver:2, act:'13-ago-2026',
+   keys:['control','sin costo','gratis','revision','me dejaron control','resultados con el medico'],
+   extracto:'El control es una revisión corta posterior a la consulta, sin costo, que se agenda dentro de la ventana de días que define cada médico. Sirve para revisar exámenes, continuar tratamiento o entregar fórmula adicional.',
+   respuesta:'El control es una revisión corta después de tu consulta y <b>no tiene costo</b>. Se agenda dentro de la ventana de días que define tu médico y sirve para revisar exámenes, continuar el tratamiento o darte fórmula adicional.'},
+  {id:'kb7', titulo:'Qué debes traer el día de tu cita', cat:'Información general', servId:null, estado:'Publicado', ver:1, act:'08-ago-2026',
+   keys:['que llevo','que traigo','documento','cedula','necesito llevar','requisitos'],
+   extracto:'Documento de identidad, la orden médica si tu servicio la requiere, y los exámenes previos si vienes a control. Llega 15 minutos antes para el pago en recepción.',
+   respuesta:'Trae tu <b>documento de identidad</b>, la <b>orden médica</b> si tu servicio la requiere y los exámenes previos si vienes a control. Llega 15 minutos antes para el pago en recepción.'},
+  {id:'kb8', titulo:'Cancelación y reprogramación de citas', cat:'Políticas', servId:null, estado:'Publicado', ver:1, act:'09-ago-2026',
+   keys:['cancelar','cancelacion','reprogramar','cambiar la cita','mover la cita','no puedo ir','aplazar'],
+   extracto:'La cita puede cancelarse o reprogramarse por este mismo chat hasta 4 horas antes. Al reprogramar cambia el código de atención si cambia el día.',
+   respuesta:'Puedes cancelar o reprogramar por este mismo chat hasta <b>4 horas antes</b> de tu cita. Si cambias de día, tu código de atención se actualiza y te lo reenvío.'},
+  {id:'kb9', titulo:'Entrega de resultados de laboratorio', cat:'Políticas', servId:null, estado:'Borrador', ver:1, act:'hoy',
+   keys:['resultados','entrega de resultados','recoger resultados','cuando salen'],
+   extracto:'BORRADOR — pendiente de confirmar con el cliente los tiempos de entrega por tipo de examen y el canal de entrega.',
+   respuesta:'—'},
+];
+
+/* Preguntas que escalaron por falta de cobertura (RN-13.3) → se convierten en artículos (RN-13.6) */
+const KB_PENDIENTES = [
+  {id:'kp1', pregunta:'¿Tienen convenio con Sura para medicina laboral?', ocurrencias:9,  estado:'Abierta', servId:null},
+  {id:'kp2', pregunta:'¿Atienden niños en medicina general?',             ocurrencias:6,  estado:'Abierta', servId:'mg'},
+  {id:'kp3', pregunta:'¿Hacen exámenes para licencia de conducción?',     ocurrencias:4,  estado:'Abierta', servId:null},
+  {id:'kp4', pregunta:'¿Tienen parqueadero para pacientes?',              ocurrencias:3,  estado:'Abierta', servId:null},
+];
+
+/* =====================================================================
+   SEGUIMIENTO COMERCIAL DE INTERESADOS SIN AGENDAR (RN-09.9)
+   Secuencia de 3 mensajes desde T0 (último mensaje de la conversación):
+   2 h → 5 h → 8 h (cierre). Cabe dentro de la ventana de 24 h de Meta.
+   ===================================================================== */
+const SEG_CFG = { p1:120, p2:300, cierre:480, horaIni:'7:00 a.m.', horaFin:'6:00 p.m.', maxDias:30 };
+const SEG_PASOS = [
+  {k:1,       lb:'Seguimiento 1', min:SEG_CFG.p1,     desc:'Pregunta abierta con un beneficio aún no mencionado'},
+  {k:2,       lb:'Seguimiento 2', min:SEG_CFG.p2,     desc:'Algo nuevo y concreto: horarios reales o la barrera detectada'},
+  {k:'cierre',lb:'Cierre',        min:SEG_CFG.cierre, desc:'Cierre cordial, sin pregunta y sin volver a insistir'},
+];
+
+/* t0Min = minutos transcurridos desde el último mensaje de la conversación */
+let SEGUIMIENTOS = [
+  {id:'sg1', tel:'+57 300 777 7777', pacId:null, nombre:'Contacto nuevo',   servId:'vitc', t0Min:75,  estado:'Activa',
+   nota:'Preguntó por el suero, quedó de confirmar'},
+  {id:'sg2', tel:'+57 301 888 8888', pacId:null, nombre:'Contacto nuevo',   servId:'nut',  t0Min:200, estado:'Activa',
+   nota:'Pidió horarios de la tarde'},
+  {id:'sg3', tel:'+57 302 999 9999', pacId:6,    nombre:null,               servId:'derp', t0Min:400, estado:'Activa',
+   nota:'Interesada, quería hablar antes con la dermatóloga'},
+  {id:'sg4', tel:'+57 303 444 4444', pacId:null, nombre:'Contacto nuevo',   servId:'ecod', t0Min:530, estado:'Terminada',
+   nota:'No respondió a ninguno de los tres mensajes'},
+  {id:'sg5', tel:'+57 304 555 5555', pacId:2,    nombre:null,               servId:'gin',  t0Min:95,  estado:'Cancelada',
+   motivoCancel:'Agendó por el portal web · secuencia detenida antes del envío', nota:'Convirtió sin intervención humana'},
+];
+
+/* Paso en el que va cada secuencia. Todo se deriva de t0Min: no hay estados
+   escritos a mano que puedan contradecirse entre sí. */
+function segEstado(sg){
+  if(sg.estado !== 'Activa') return { enviados: sg.estado==='Terminada' ? SEG_PASOS.length : 0, prox:null, terminada:true };
+  const enviados = SEG_PASOS.filter(x => sg.t0Min >= x.min).length;
+  const prox = SEG_PASOS.find(x => sg.t0Min < x.min) || null;
+  return { enviados, prox, minutos: prox ? prox.min - sg.t0Min : 0, terminada: !prox };
+}
+const segMin = m => m >= 60 ? `${Math.floor(m/60)} h ${m%60?String(m%60)+' min':''}`.trim() : `${m} min`;
 
 /* balanceo:true → grupo de medicina general (RN-02) */
 const PRESTADORES = [
@@ -442,6 +566,8 @@ let CONVERSACIONES = [
     msgs:[{f:'p',t:'Necesito una cita con la dermatóloga, tengo la orden del médico'},{f:'ia',t:'Con gusto. Envíame por favor la foto de tu orden médica.'},{f:'p',t:'📷 [Foto de orden médica manuscrita]',img:true},{f:'ia',t:'Recibí tu orden. Para este tipo de solicitudes te va a atender directamente una de nuestras asistentes con la imagen como soporte. En un momento te contactamos. 🙌'},{f:'sys',t:'Escalamiento inmediato · Orden médica en foto (RN-08) · La IA no interpreta órdenes manuscritas'}]},
   {id:3, sede:SEDE, pacId:2, tel:'+57 300 222 2222', estado:'Escalada', intencion:'Reprogramar cita', conf:55, escalada:true, motivo:'Paciente solicita hablar con una persona', prioridad:'Baja', tomada:false, escTs:Date.now()-12*60000,
     msgs:[{f:'p',t:'Necesito cambiar mi cita pero prefiero hablar con alguien'},{f:'ia',t:'Con gusto. Voy a transferir tu conversación a una de nuestras asistentes.'},{f:'sys',t:'Conversación escalada a asistente · Solicitud explícita'}]},
+  {id:5, sede:SEDE, pacId:6, tel:'+57 300 666 6666', estado:'Escalada', intencion:'Consulta de servicio', conf:34, escalada:true, motivo:'Sin cobertura en base de conocimiento (RN-13.3)', prioridad:'Baja', tomada:false, escTs:Date.now()-6*60000,
+    msgs:[{f:'p',t:'¿Ustedes hacen exámenes para licencia de conducción?'},{f:'ia',t:'Déjame confirmarlo con una de nuestras asistentes para no darte un dato equivocado. Te responde por este mismo chat en unos minutos. 🙌'},{f:'sys',t:'Sin fragmento sobre el umbral (mejor puntaje 38 < 62) · pregunta registrada en “Preguntas sin respuesta”'}]},
   {id:4, sede:SEDE, pacId:4, tel:'+57 300 444 4444', estado:'Resuelta', intencion:'Consultar cita', conf:96, escalada:false,
     msgs:[{f:'p',t:'¿A qué hora es mi cita de ginecología?'},{f:'ia',t:'Tu cita de Ginecología es hoy a las 9:00 a.m. con la Dra. Marcela Duarte. Tu código de atención es G0110.'}]},
 ];
@@ -484,9 +610,10 @@ const S = {
   kiosk:{step:'welcome', found:null, msg:null},
   portal:{step:'home', tipo:null, pac:null, serv:null, hora:null, cod:null},
   live:{ia:0, kiosko:0, mostrador:0, atendidos:2},
-  demoCitaCreada:false,
+  demoCitaCreada:false, demoDopplerCreada:false, demoSegArmado:false, demoNutCreada:false,
   rango:'hoy', dashQ:'', consTab:'dia', consQ:'', consPres:['ao','pr','jo','md'],
   agTab:'semanal', mesSel:[], mediaVideo:false,
+  kbRes:null,
 };
 
 const ROLE_META = {
@@ -547,12 +674,12 @@ const NAV = {
   admin:[
     ['Operación',[['dashboard','📊','Dashboard'],['consolidada','🗓️','Agenda consolidada'],['whatsapp','💬','WhatsApp IA'],['bandeja','📥','Bandeja asistente'],['mostrador','🛎️','Mostrador'],['prestadorView','🩺','Vista prestador']]],
     ['Gestión',[['pacientes','👥','Pacientes'],['prestadores','🧑‍⚕️','Prestadores'],['servicios','🧾','Servicios y exámenes'],['agendas','⏱️','Gestión de agendas'],['carga','📤','Carga masiva']]],
-    ['Configuración',[['metricas','📈','Métricas'],['pantallasCfg','🖥️','Pantallas de sala'],['prioridad','⚖️','Reglas de prioridad'],['portalCfg','🌐','Autoagendamiento web'],['auditoria','🔍','Auditoría']]],
+    ['Configuración',[['conocimiento','🧠','Base de conocimiento'],['metricas','📈','Métricas'],['pantallasCfg','🖥️','Pantallas de sala'],['prioridad','⚖️','Reglas de prioridad'],['portalCfg','🌐','Autoagendamiento web'],['auditoria','🔍','Auditoría']]],
   ],
   asistente:[
     ['Operación',[['dashboard','📊','Dashboard'],['consolidada','🗓️','Agenda consolidada'],['whatsapp','💬','WhatsApp IA'],['bandeja','📥','Bandeja asistente'],['mostrador','🛎️','Mostrador'],['prestadorView','🩺','Vista prestador']]],
     ['Gestión',[['pacientes','👥','Pacientes'],['agendas','⏱️','Gestión de agendas'],['carga','📤','Carga masiva']]],
-    ['Reportes',[['metricas','📈','Métricas'],['pantallasCfg','🖥️','Pantallas de sala']]],
+    ['Reportes',[['conocimiento','🧠','Base de conocimiento'],['metricas','📈','Métricas'],['pantallasCfg','🖥️','Pantallas de sala']]],
   ],
   prestador:[
     ['Mi consulta',[['prestadorView','🩺','Pacientes del día'],['agendas','📄','Información de agenda']]],
@@ -570,6 +697,7 @@ const TITLES = {
   servicios:['Servicios y exámenes','Tipos de cita, procedimientos y servicios de doble cupo'],
   agendas:['Gestión de agendas','Semanal · por calendario · programación mensual (solo administración)'],
   carga:['Carga masiva de pacientes','Plantilla del cliente · filtro último año · historial de servicios'],
+  conocimiento:['Base de conocimiento del bot','Lo que la IA responde antes de escalar · contenido aprobado y trazable (RN-13)'],
   metricas:['Métricas operativas','Indicadores del MVP · tablero definitivo pendiente del cliente'],
   pantallasCfg:['Pantallas de sala','Turnos + frame de noticias y videos institucionales (YouTube)'],
   prioridad:['Reglas de prioridad','Parámetros de llegada · criterios de casos pendientes del cliente'],
@@ -765,18 +893,433 @@ V.prestadores = () => `
   </div>`;
 
 /* ===== Servicios ===== */
-V.servicios = () => `
-  <div class="grid g2">
-    <div class="card"><div class="hd"><h3>Servicios, tipos de cita y procedimientos</h3><div class="spacer"></div><button class="btn btn-primary btn-sm" onclick="toast('➕ Alta de servicio (conceptual)')">➕ Crear</button></div>
-      <table><thead><tr><th>Servicio</th><th>Tipo</th><th>Duración</th><th>Cupos</th><th>Costo</th></tr></thead><tbody>
-      ${SERVICIOS.map(s=>`<tr><td><b>${s.nombre}</b></td><td>${tipoTag(s.tipo==='control'?'Control':s.tipo==='procedimiento'?'Procedimiento':s.tipo==='examen'?'Examen':'General')}</td><td>${s.dur} min</td><td>${s.cupos>1?`<span class="tag t-blue">${s.cupos} cupos</span>`:'1'}</td><td class="small">${s.costo||'Tarifa normal'}</td></tr>`).join('')}
-      </tbody></table>
-      <div class="bd small muted">La cita de control no tiene costo y solo se agenda dentro de la ventana de días del prestador. La ecografía Doppler ocupa el espacio de dos citas (RN-04).</div></div>
-    <div class="card"><div class="hd"><h3>Catálogo de exámenes de laboratorio</h3></div>
-      <div class="bd"><p class="small muted" style="margin-bottom:.7rem">Referencia para órdenes de laboratorio legibles. Las órdenes en foto de especialistas escalan directo a la asistente (RN-08).</p>
-      <div class="chips">${EXAMENES.map(e=>`<span class="tag t-teal" style="font-size:.82rem">${e}</span>`).join('')}</div>
+/* ===== Catálogo de servicios · alta, modificación y baja (RN-04.5) ===== */
+const citasDe        = id => CITAS.filter(c => c.servId === id);
+const citasVigentesDe= id => citasDe(id).filter(c => !['Atendida','Cancelada','No asistió'].includes(c.estado));
+const tieneFicha     = sv => !!(sv.desc && (sv.benef||[]).length);
+
+V.servicios = () => {
+  const admin = S.role === 'admin';
+  return `
+  <div class="card" style="margin-bottom:1rem"><div class="bd searchbar">
+    <span class="tag t-blue">RN-04.5</span>
+    <span class="small muted">El catálogo es a la vez configuración del motor de agendamiento (duración, cupos, orden) y guion de venta del bot. Los cambios de duración y cupos <b>no son retroactivos</b>, y un servicio con citas <b>se desactiva, no se elimina</b>.</span>
+  </div></div>
+  <div class="card" style="margin-bottom:1rem">
+    <div class="hd"><h3>Servicios, tipos de cita y procedimientos</h3><div class="spacer"></div>
+      ${admin ? `<button class="btn btn-primary btn-sm" onclick="servModal(null)">➕ Crear servicio</button>`
+              : '<span class="tag t-gray">Solo lectura · administra el catálogo administración (RN-04.5.1)</span>'}</div>
+    <table><thead><tr><th>Servicio</th><th>Tipo</th><th class="center">Duración</th><th class="center">Cupos</th><th>Costo</th><th>Estado</th><th class="right">Acciones</th></tr></thead><tbody>
+    ${SERVICIOS.map(sv => {
+      const n = citasDe(sv.id).length;
+      return `<tr style="${sv.estado==='Inactivo'?'opacity:.55':''}">
+      <td><b>${sv.nombre}</b>
+        <div class="small muted">${sv.desc ? sv.desc.slice(0,90)+(sv.desc.length>90?'…':'') : ''}</div>
+        ${tieneFicha(sv) ? '' : '<span class="tag t-amber" style="margin-top:.25rem">Sin ficha comercial · el bot no lo ofrece</span>'}</td>
+      <td>${tipoTag(sv.tipo==='control'?'Control':sv.tipo==='procedimiento'?'Procedimiento':sv.tipo==='examen'?'Examen':'General')}</td>
+      <td class="center">${sv.dur} min</td>
+      <td class="center">${sv.cupos>1?`<span class="tag t-blue">${sv.cupos}</span>`:'1'}</td>
+      <td class="small">${sv.costo||'Tarifa normal'}</td>
+      <td>${sv.estado==='Inactivo'?'<span class="tag t-gray">Inactivo</span>':'<span class="tag t-green">Activo</span>'}</td>
+      <td class="right">${!admin ? '<span class="small muted">—</span>' : `
+        <button class="btn btn-ghost btn-sm" onclick="servModal('${sv.id}')">✏️ Editar</button>
+        ${sv.estado==='Inactivo'
+          ? `<button class="btn btn-green btn-sm" onclick="servActivar('${sv.id}')">Activar</button>`
+          : `<button class="btn btn-amber btn-sm" onclick="servDesactivar('${sv.id}')">Desactivar</button>`}
+        <button class="btn btn-danger btn-sm" onclick="servEliminar('${sv.id}')" ${n?'title="Tiene citas asociadas"':''}>🗑</button>`}
+      </td></tr>`;}).join('')}
+    </tbody></table>
+    <div class="bd small muted">La cita de control no tiene costo y solo se agenda dentro de la ventana de días del prestador. La ecografía Doppler ocupa el espacio de dos citas (RN-04). Desactivar un servicio lo retira del bot y del portal, cancela sus seguimientos comerciales y marca sus artículos de conocimiento para revisión (RN-04.5.4).</div>
+  </div>
+  <div class="card"><div class="hd"><h3>Catálogo de exámenes de laboratorio</h3></div>
+    <div class="bd"><p class="small muted" style="margin-bottom:.7rem">Referencia para órdenes de laboratorio legibles. Las órdenes en foto de especialistas escalan directo a la asistente (RN-08).</p>
+    <div class="chips">${EXAMENES.map(e=>`<span class="tag t-teal" style="font-size:.82rem">${e}</span>`).join('')}</div>
+    </div></div>`;
+};
+
+function servModal(id){
+  const sv = id ? serv(id) : null;
+  const n  = id ? citasDe(id).length : 0;
+  const cats = ['Medicina general','Especialista','Procedimiento','Diagnóstico','Laboratorio'];
+  const tipos= [['general','Consulta general'],['control','Control'],['procedimiento','Procedimiento'],['examen','Examen']];
+  openModal(sv ? 'Editar servicio · '+sv.nombre : 'Crear servicio', `
+    <div class="grid g2">
+      <div>
+        <div style="font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">Datos operativos · alimentan el motor de agendamiento</div>
+        <div class="field"><label>Nombre</label><input id="sv-nombre" value="${sv?esc(sv.nombre):''}" placeholder="Ej.: Ecografía de tiroides"></div>
+        <div class="field"><label>Categoría</label><select id="sv-cat">${cats.map(c=>`<option ${sv&&sv.cat===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div class="field"><label>Tipo de cita</label><select id="sv-tipo">${tipos.map(([v,l])=>`<option value="${v}" ${sv&&sv.tipo===v?'selected':''}>${l}</option>`).join('')}</select></div>
+        <div class="field"><label>Duración (minutos)</label><input id="sv-dur" type="number" min="5" step="5" value="${sv?sv.dur:15}"></div>
+        <div class="field"><label>Cupos que ocupa en agenda</label><input id="sv-cupos" type="number" min="1" max="8" value="${sv?sv.cupos:1}"></div>
+        <div class="field"><label>Costo</label><input id="sv-costo" value="${sv&&sv.costo?esc(sv.costo):''}" placeholder="Tarifa normal / Sin costo"></div>
+        <div class="field"><label><input type="checkbox" id="sv-orden" ${sv&&sv.orden?'checked':''} style="width:auto;margin-right:.4rem">Requiere orden médica</label></div>
+        <div class="field"><label><input type="checkbox" id="sv-agendable" ${!sv||sv.agendable?'checked':''} style="width:auto;margin-right:.4rem">Agendable por WhatsApp y portal</label></div>
+      </div>
+      <div>
+        <div style="font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">Ficha comercial · es lo que el bot usa para vender</div>
+        <div class="field"><label>Descripción</label><textarea id="sv-desc" rows="3" placeholder="Qué es y para qué sirve, en lenguaje de paciente">${sv&&sv.desc?esc(sv.desc):''}</textarea></div>
+        <div class="field"><label>Beneficios (uno por línea)</label><textarea id="sv-benef" rows="4" placeholder="Resultado el mismo día&#10;No requiere remisión externa">${sv&&sv.benef?esc(sv.benef.join('\n')):''}</textarea></div>
+        <div class="field"><label>Preparación</label><textarea id="sv-prep" rows="3" placeholder="Ayuno de 6 horas, ropa cómoda…">${sv&&sv.prep?esc(sv.prep):''}</textarea></div>
+        <div class="small muted">Sin descripción ni beneficios el servicio <b>no se ofrece</b> por WhatsApp ni por el portal: el bot no puede venderlo si no sabe qué decir de él (RN-04.5.1).</div>
+      </div>
+    </div>
+    ${n?`<div class="small" style="margin-top:.8rem;padding:.6rem;background:var(--amber-soft);border-radius:8px;color:#8A5510">⚠️ Este servicio tiene <b>${n} cita${n>1?'s':''}</b> registrada${n>1?'s':''}. Cambiar duración o cupos <b>solo afecta a las citas que se creen de ahora en adelante</b>; las existentes conservan su configuración (RN-04.5.2).</div>`:''}
+    <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1rem">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="servGuardar(${id?"'"+id+"'":'null'})">${sv?'Guardar cambios':'Crear servicio'}</button>
+    </div>`);
+}
+
+function servGuardar(id){
+  const nombre = ($('#sv-nombre').value||'').trim();
+  const dur    = parseInt($('#sv-dur').value,10);
+  if(!nombre){ toast('⚠️ El nombre del servicio es obligatorio'); return; }
+  if(!dur || dur < 5){ toast('⚠️ La duración debe ser de al menos 5 minutos'); return; }
+  const datos = {
+    nombre, cat:$('#sv-cat').value, tipo:$('#sv-tipo').value, dur,
+    cupos: Math.max(1, parseInt($('#sv-cupos').value,10)||1),
+    costo: ($('#sv-costo').value||'').trim() || undefined,
+    orden: $('#sv-orden').checked, agendable: $('#sv-agendable').checked,
+    desc:  ($('#sv-desc').value||'').trim(),
+    benef: ($('#sv-benef').value||'').split('\n').map(x=>x.trim()).filter(Boolean),
+    prep:  ($('#sv-prep').value||'').trim(),
+  };
+  if(id){
+    const sv = serv(id);
+    const antes = `${sv.dur} min · ${sv.cupos} cupo(s)`;
+    Object.assign(sv, datos);
+    audit(ROLE_META[S.role].nombre,'Servicio modificado','Servicio '+sv.nombre,
+          `Duración/cupos: ${antes} → ${sv.dur} min · ${sv.cupos} cupo(s) · no retroactivo (RN-04.5.2)`, antes, `${sv.dur} min · ${sv.cupos} cupo(s)`);
+    toast(`✅ <b>${sv.nombre}</b> actualizado. Los cambios aplican a las citas nuevas; las ya agendadas conservan su duración.`);
+  } else {
+    const nid = 'sv'+(SERVICIOS.length+1);
+    SERVICIOS.push(Object.assign({id:nid, estado:'Activo'}, datos));
+    audit(ROLE_META[S.role].nombre,'Servicio creado','Servicio '+nombre,
+          `${datos.dur} min · ${datos.cupos} cupo(s) · ${datos.orden?'requiere orden':'sin orden'}`,'—','Activo');
+    toast(tieneFicha(datos)
+      ? `✅ Servicio <b>${nombre}</b> creado y disponible para agendar.`
+      : `✅ Servicio <b>${nombre}</b> creado, pero <b>sin ficha comercial</b>: el bot no lo ofrecerá hasta que la completes.`);
+  }
+  closeModal(); render();
+}
+
+function servDesactivar(id){
+  const sv = serv(id);
+  const vig = citasVigentesDe(id).length;
+  const segs= SEGUIMIENTOS.filter(x => x.servId===id && x.estado==='Activa').length;
+  const arts= KB_ARTICULOS.filter(a => a.servId===id && a.estado==='Publicado').length;
+  openModal('Desactivar · '+sv.nombre, `
+    <p class="small">El servicio deja de ofrecerse por WhatsApp, el portal y el backoffice de inmediato. <b>Las citas ya agendadas se atienden normalmente</b> y el historial de los pacientes conserva el nombre del servicio (RN-04.5.3).</p>
+    <div style="margin:.9rem 0">
+      <div class="kb-row"><span class="muted">Citas vigentes afectadas</span><b>${vig}</b></div>
+      <div class="kb-row"><span class="muted">Seguimientos comerciales que se cancelan</span><b>${segs}</b></div>
+      <div class="kb-row"><span class="muted">Artículos de conocimiento a revisar</span><b>${arts}</b></div>
+    </div>
+    ${vig?`<div class="small" style="padding:.6rem;background:var(--amber-soft);border-radius:8px;color:#8A5510">⚠️ Las <b>${vig} citas vigentes</b> quedan listadas para que la asistente reprograme o cancele con aviso al paciente, igual que en un bloqueo de agenda (RN-06.3).</div>`:''}
+    <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1rem">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-amber" onclick="servDesactivarOk('${id}')">Desactivar servicio</button>
+    </div>`);
+}
+function servDesactivarOk(id){
+  const sv = serv(id);
+  sv.estado = 'Inactivo';
+  const segs = SEGUIMIENTOS.filter(x => x.servId===id && x.estado==='Activa');
+  segs.forEach(x => { x.estado='Cancelada'; x.motivoCancel='Servicio desactivado · no se persigue a nadie por algo que ya no se presta (RN-04.5.4)'; });
+  const arts = KB_ARTICULOS.filter(a => a.servId===id && a.estado==='Publicado');
+  arts.forEach(a => a.revisar = true);
+  audit(ROLE_META[S.role].nombre,'Servicio desactivado','Servicio '+sv.nombre,
+        `${citasVigentesDe(id).length} citas vigentes · ${segs.length} seguimientos cancelados · ${arts.length} artículos marcados para revisión`,'Activo','Inactivo');
+  toast(`🚫 <b>${sv.nombre}</b> desactivado. ${segs.length} seguimiento(s) cancelado(s) y ${arts.length} artículo(s) marcado(s) para revisión.`);
+  closeModal(); render();
+}
+function servActivar(id){
+  const sv = serv(id); sv.estado='Activo';
+  audit(ROLE_META[S.role].nombre,'Servicio activado','Servicio '+sv.nombre,'Vuelve a ofrecerse por WhatsApp y portal','Inactivo','Activo');
+  toast(`✅ <b>${sv.nombre}</b> activado nuevamente.`); render();
+}
+
+function servEliminar(id){
+  const sv = serv(id);
+  const n = citasDe(id).length;
+  if(n){
+    openModal('No se puede eliminar · '+sv.nombre, `
+      <p class="small">Este servicio tiene <b>${n} cita${n>1?'s':''} asociada${n>1?'s':''}</b>. Eliminarlo borraría el nombre del servicio del historial de esos pacientes y de la auditoría.</p>
+      <p class="small" style="margin-top:.6rem">La acción correcta es <b>desactivarlo</b>: deja de ofrecerse de inmediato y las citas existentes se conservan (RN-04.5.3).</p>
+      <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1rem">
+        <button class="btn btn-ghost" onclick="closeModal()">Entendido</button>
+        <button class="btn btn-amber" onclick="closeModal();servDesactivar('${id}')">Desactivar en su lugar</button>
+      </div>`);
+    return;
+  }
+  openModal('Eliminar servicio · '+sv.nombre, `
+    <p class="small">Este servicio <b>no tiene ninguna cita asociada</b>, así que puede eliminarse definitivamente. La acción no se puede deshacer.</p>
+    <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1rem">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="servEliminarOk('${id}')">Eliminar definitivamente</button>
+    </div>`);
+}
+function servEliminarOk(id){
+  const sv = serv(id);
+  SERVICIOS.splice(SERVICIOS.findIndex(x=>x.id===id), 1);
+  audit(ROLE_META[S.role].nombre,'Servicio eliminado','Servicio '+sv.nombre,'Sin citas asociadas · borrado definitivo (RN-04.5.3.2)','Activo','Eliminado');
+  toast(`🗑 Servicio <b>${sv.nombre}</b> eliminado.`);
+  closeModal(); render();
+}
+
+/* =====================================================================
+   BASE DE CONOCIMIENTO DEL BOT (RN-13)
+   Responder antes de escalar · sin cobertura → escala, nunca improvisa
+   ===================================================================== */
+const kbNorm = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+
+/* Recuperación simulada: en producción es léxica (tsvector español + unaccent + pg_trgm),
+   con capa semántica opcional en memoria. Sin pgvector — ver docs/adr-a8-recuperacion-conocimiento.md.
+   Aquí se aproxima por coincidencia de términos para poder demostrar el comportamiento. */
+function kbBuscar(q){
+  const n = kbNorm(q);
+  const tema = Object.entries(KB_TEMAS_PROHIBIDOS).find(([t,keys]) => keys.some(k => n.includes(kbNorm(k))));
+  const hits = KB_ARTICULOS
+    .filter(a => a.estado === 'Publicado')
+    .map(a => {
+      const m = a.keys.filter(k => n.includes(kbNorm(k))).length;
+      return { a, score: m ? Math.min(96, 46 + 17*m) : 0 };
+    })
+    .filter(x => x.score > 0)
+    .sort((x,y) => y.score - x.score)
+    .slice(0, KB_CFG.topk);
+  return { tema: tema ? tema[0] : null, hits };
+}
+/* Detección de interés → ofrecimiento de cita (RN-09.6). El CTA depende de la FICHA del
+   servicio, no del texto del artículo: por eso la cifra y la orden médica siempre son correctas. */
+function kbCta(a){
+  const sv = a.servId ? serv(a.servId) : null;
+  if(!sv || !sv.agendable) return null;
+  return sv.orden
+    ? `¿Te lo agendo? Para reservar <b>${sv.nombre}</b> (${sv.dur} min${sv.cupos>1?' · ocupa dos espacios de agenda':''}) necesito tu orden médica. 📎`
+    : `¿Te agendo <b>${sv.nombre}</b>? Son ${sv.dur} minutos${sv.costo?' y '+sv.costo.toLowerCase():''} y tengo cupos esta semana. 😊`;
+}
+function kbProbar(q){
+  const texto = (q !== undefined) ? q : (($('#kb-q')||{}).value || '');
+  if(!texto.trim()){ toast('Escribe una pregunta para probarla contra la base de conocimiento'); return; }
+  const r = kbBuscar(texto);
+  S.kbRes = { q: texto, tema: r.tema, hits: r.hits };
+  render();
+}
+function kbPublicar(id){
+  const a = KB_ARTICULOS.find(x => x.id === id); if(!a) return;
+  a.estado = 'Publicado'; a.ver = (a.ver||1) + 1; a.act = 'hoy';
+  audit(ROLE_META[S.role].nombre, 'Artículo publicado', 'KB · '+a.titulo, 'Reindexado encolado · disponible para el bot', 'Borrador', 'Publicado');
+  toast(`✅ <b>${a.titulo}</b> publicado (v${a.ver}). Reindexado en cola: el bot ya lo puede citar.`);
+  render();
+}
+function kbArchivar(id){
+  const a = KB_ARTICULOS.find(x => x.id === id); if(!a) return;
+  openModal('Archivar · '+a.titulo, `
+    <p class="small">Archivar <b>retira el artículo del índice en el acto</b>: el bot deja de recuperarlo desde este mismo momento, sin ventana en la que siga respondiendo con información vieja.</p>
+    <p class="small" style="margin-top:.6rem">El artículo <b>no se borra</b>. Se conserva porque la auditoría debe poder explicar las respuestas que el bot ya dio con él — que es justo lo que se necesita cuando un paciente reclama una respuesta incorrecta (RN-13.5).</p>
+    <p class="small" style="margin-top:.6rem">Si más adelante vuelve a aplicar, reactivarlo lo devuelve a <b>borrador</b> para obligar a revisarlo antes de que circule otra vez.</p>
+    <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1rem">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-amber" onclick="kbArchivarOk('${id}')">📥 Archivar artículo</button>
+    </div>`);
+}
+function kbArchivarOk(id){
+  const a = KB_ARTICULOS.find(x => x.id === id); if(!a) return;
+  a.estado = 'Archivado'; a.act = 'hoy'; a.revisar = false;
+  audit(ROLE_META[S.role].nombre,'Artículo archivado','KB · '+a.titulo,'Fragmentos retirados del índice en la misma transacción · artículo conservado para auditoría (RN-13.5)','Publicado','Archivado');
+  toast(`📥 <b>${a.titulo}</b> archivado. Salió del índice: el bot ya no lo cita. La ficha se conserva para la auditoría.`);
+  closeModal(); render();
+}
+function kbReactivar(id){
+  const a = KB_ARTICULOS.find(x => x.id === id); if(!a) return;
+  a.estado = 'Borrador'; a.act = 'hoy';
+  audit(ROLE_META[S.role].nombre,'Artículo reactivado','KB · '+a.titulo,'Vuelve a borrador para revisión antes de publicarse (RN-13.5.3)','Archivado','Borrador');
+  toast(`↺ <b>${a.titulo}</b> volvió a <b>borrador</b>. Revísalo y publícalo para que el bot lo use.`);
+  render();
+}
+function kbEliminar(id){
+  const a = KB_ARTICULOS.find(x => x.id === id); if(!a) return;
+  if(a.estado !== 'Borrador'){
+    openModal('No se puede eliminar · '+a.titulo, `
+      <p class="small">Solo se eliminan definitivamente los <b>borradores</b>, porque nunca sustentaron una respuesta del bot.</p>
+      <p class="small" style="margin-top:.6rem">Este artículo ${a.estado==='Publicado'?'está publicado':'estuvo publicado'}: borrarlo rompería la trazabilidad de las respuestas que ya se dieron con él. ${a.estado==='Publicado'?'Archívalo en su lugar':'Ya está archivado, que es el estado correcto'} (RN-13.5.4).</p>
+      <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1rem">
+        <button class="btn btn-ghost" onclick="closeModal()">Entendido</button>
+        ${a.estado==='Publicado'?`<button class="btn btn-amber" onclick="closeModal();kbArchivar('${id}')">Archivar en su lugar</button>`:''}
+      </div>`);
+    return;
+  }
+  openModal('Eliminar borrador · '+a.titulo, `
+    <p class="small">Este borrador <b>nunca se publicó</b>, así que no sustenta ninguna respuesta del bot y puede eliminarse definitivamente. La acción no se puede deshacer.</p>
+    <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1rem">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="kbEliminarOk('${id}')">Eliminar definitivamente</button>
+    </div>`);
+}
+function kbEliminarOk(id){
+  const a = KB_ARTICULOS.find(x => x.id === id); if(!a) return;
+  KB_ARTICULOS.splice(KB_ARTICULOS.findIndex(x => x.id === id), 1);
+  audit(ROLE_META[S.role].nombre,'Borrador eliminado','KB · '+a.titulo,'Nunca publicado · borrado definitivo permitido (RN-13.5.4)','Borrador','Eliminado');
+  toast(`🗑 Borrador <b>${a.titulo}</b> eliminado.`);
+  closeModal(); render();
+}
+function kbCrearArticulo(id){
+  const pd = KB_PENDIENTES.find(x => x.id === id); if(!pd) return;
+  pd.estado = 'Artículo creado';
+  KB_ARTICULOS.push({
+    id:'kb'+(KB_ARTICULOS.length+1), titulo: pd.pregunta.replace(/[¿?]/g,''), cat:'Preguntas frecuentes',
+    servId: pd.servId || null, estado:'Borrador', ver:1, act:'hoy',
+    keys: kbNorm(pd.pregunta).split(/\s+/).filter(w => w.length > 4),
+    extracto:'BORRADOR generado desde una pregunta sin respuesta. Completar con la información oficial de la clínica y publicar.',
+    respuesta:'—'
+  });
+  audit(ROLE_META[S.role].nombre, 'Artículo creado desde pregunta sin respuesta', 'KB · '+pd.pregunta, pd.ocurrencias+' pacientes preguntaron lo mismo', 'Sin cobertura', 'Borrador');
+  toast(`📝 Borrador creado desde la pregunta (${pd.ocurrencias} ocurrencias). Complétalo y publícalo para que el bot lo use.`);
+  render();
+}
+
+V.conocimiento = () => {
+  const pub  = KB_ARTICULOS.filter(a => a.estado === 'Publicado');
+  const bor  = KB_ARTICULOS.filter(a => a.estado === 'Borrador');
+  const arch = KB_ARTICULOS.filter(a => a.estado === 'Archivado');
+  const rev  = KB_ARTICULOS.filter(a => a.revisar);
+  const pend = KB_PENDIENTES.filter(x => x.estado === 'Abierta');
+  const segAct = SEGUIMIENTOS.filter(x => x.estado === 'Activa');
+  const r    = S.kbRes;
+  const soloLectura = S.role !== 'admin';
+
+  /* --- resultado del probador --- */
+  let panel = '<div class="empty">Escribe una pregunta y prueba qué respondería el bot, <b>antes</b> de que un paciente la haga.</div>';
+  if(r){
+    const top = r.hits[0];
+    const frag = r.hits.length
+      ? r.hits.map(h => `<div class="kb-row"><span class="small">📄 <b>${h.a.titulo}</b> <span class="muted">· v${h.a.ver}</span></span>
+           <b class="small" style="color:${h.score>=KB_CFG.umbral?'var(--teal-ink)':'var(--muted)'}">${h.score}</b></div>`).join('')
+      : '<div class="small muted" style="padding:.4rem 0">Ningún fragmento coincide con la pregunta.</div>';
+
+    let salida;
+    if(r.tema){
+      salida = `<div class="msg sys" style="max-width:100%;align-self:stretch">🚫 <b>Tema de escalamiento obligatorio: ${r.tema}</b> — escala aunque el puntaje sea alto (RN-13.4)</div>
+        <div class="msg ia" style="max-width:100%"><div class="who">🤖 Asistente Provivir</div>Esa consulta la debe responder personal de la clínica. Te paso con una de nuestras asistentes ahora mismo. 🙌</div>`;
+    } else if(!top || top.score < KB_CFG.umbral){
+      salida = `<div class="msg sys" style="max-width:100%;align-self:stretch">⤴ <b>Sin cobertura</b> — mejor puntaje ${top?top.score:0} &lt; umbral ${KB_CFG.umbral} · escala con motivo <b>sin_cobertura_kb</b> y la pregunta entra a la cola (RN-13.3)</div>
+        <div class="msg ia" style="max-width:100%"><div class="who">🤖 Asistente Provivir</div>Déjame confirmarlo con una de nuestras asistentes para no darte un dato equivocado. Te responde por este mismo chat en unos minutos. 🙌</div>`;
+    } else {
+      const cta = kbCta(top.a);
+      salida = `<div class="msg sys" style="max-width:100%;align-self:stretch">✅ Responde con <b>${top.a.titulo}</b> (puntaje ${top.score} ≥ ${KB_CFG.umbral})${cta?' · interés detectado → ofrece cita (RN-09.6)':''}</div>
+        <div class="msg ia" style="max-width:100%"><div class="who">🤖 Asistente Provivir</div>${top.a.respuesta}${cta?'<br><br>'+cta:''}</div>`;
+    }
+    panel = `<div style="font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.3rem">Fragmentos recuperados · puntaje</div>
+      ${frag}
+      <div style="font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:.9rem 0 .5rem">Lo que respondería el bot</div>
+      <div style="display:flex;flex-direction:column;gap:.5rem;background:#E8E2D8;padding:.7rem;border-radius:10px">${salida}</div>`;
+  }
+
+  return `
+  <div class="card" style="margin-bottom:1rem"><div class="bd searchbar">
+    <span class="tag t-green">🧠 RN-13</span>
+    <span class="small muted">El bot responde <b>solo</b> con lo que encuentre aquí; si no hay cobertura suficiente <b>escala, no improvisa</b>. Toda cifra (duración, cupos, costo) sale de la ficha del servicio, nunca del texto del artículo.</span>
+  </div></div>
+
+  <div class="grid g4" style="margin-bottom:1rem">
+    <div class="card kpi accent"><div class="lb">Artículos publicados</div><div class="vl">${pub.length}</div><div class="dt">${bor.length} borrador · ${arch.length} archivado${arch.length===1?'':'s'} · fuera del índice</div></div>
+    <div class="card kpi"><div class="lb">Resolución sin humano</div><div class="vl">38%</div><div class="dt">Meta progresiva 70–90% (RN-08.4)</div></div>
+    <div class="card kpi"><div class="lb">Preguntas sin respuesta</div><div class="vl">${pend.length}</div><div class="dt">Cola de mejora (RN-13.6)</div></div>
+    <div class="card kpi"><div class="lb">Seguimientos activos</div><div class="vl">${segAct.length}</div><div class="dt">Se gestionan en la bandeja (RN-09.9)</div></div>
+  </div>
+
+  <div class="grid g2" style="margin-bottom:1rem">
+    <div class="card"><div class="hd"><h3>Probar una pregunta</h3><span class="tag t-gray">Umbral ${KB_CFG.umbral}</span></div>
+      <div class="bd">
+        <div class="searchbar" style="margin-bottom:.7rem">
+          <input id="kb-q" placeholder="Ej.: ¿cómo me preparo para la ecografía?" value="${r?esc(r.q):''}" onkeydown="if(event.key==='Enter')kbProbar()">
+          <button class="btn btn-primary" onclick="kbProbar()">Probar ➤</button>
+        </div>
+        <div class="chips" style="margin-bottom:.9rem">
+          <button class="btn btn-ghost btn-sm" onclick="kbProbar('¿Cómo me preparo para la ecografía?')">preparación de ecografía</button>
+          <button class="btn btn-ghost btn-sm" onclick="kbProbar('¿Manejan sueros de vitamina C?')">venta de servicio</button>
+          <button class="btn btn-ghost btn-sm" onclick="kbProbar('¿Tienen parqueadero para pacientes?')">sin cobertura</button>
+          <button class="btn btn-ghost btn-sm" onclick="kbProbar('Me duele el pecho, ¿qué tengo?')">tema prohibido</button>
+        </div>
+        ${panel}
       </div></div>
+
+    <div class="card"><div class="hd"><h3>Preguntas sin respuesta</h3><div class="spacer"></div><span class="tag t-amber">${pend.length} abiertas</span></div>
+      <div class="bd small muted" style="padding-bottom:.4rem">Preguntas que escalaron porque ningún artículo las cubre, agrupadas y ordenadas por frecuencia. Convertirlas en artículos es lo que mueve la resolución automática del 38% hacia el 70–90%.</div>
+      <table><thead><tr><th>Pregunta</th><th class="center">Veces</th><th class="right">Acción</th></tr></thead><tbody>
+      ${KB_PENDIENTES.map(x => `<tr>
+        <td class="small"><b>${x.pregunta}</b>${x.estado!=='Abierta'?' <span class="tag t-green">artículo creado</span>':''}</td>
+        <td class="center"><span class="tag ${x.ocurrencias>=6?'t-red':'t-gray'}">${x.ocurrencias}</span></td>
+        <td class="right">${x.estado==='Abierta' && !soloLectura ? `<button class="btn btn-soft btn-sm" onclick="kbCrearArticulo('${x.id}')">📝 Crear artículo</button>` : '<span class="small muted">—</span>'}</td></tr>`).join('')}
+      </tbody></table></div>
+  </div>
+
+  ${rev.length?`<div class="card" style="margin-bottom:1rem"><div class="bd small" style="background:var(--amber-soft);color:#8A5510;border-radius:var(--r)">⚠️ <b>${rev.length} artículo(s) marcado(s) para revisión</b> porque su servicio fue desactivado (RN-04.5.4). Revísalos y archívalos si ya no aplican: dejar viva la ficha de un servicio que no se presta es la forma más fácil de que el bot ofrezca algo inexistente.</div></div>`:''}
+
+  <div class="card" style="margin-bottom:1rem">
+    <div class="hd"><h3>Artículos de conocimiento</h3><div class="spacer"></div>
+      ${soloLectura ? '<span class="tag t-gray">Solo lectura · publica administración (RN-13.7)</span>' : `
+      <button class="btn btn-soft btn-sm" onclick="toast('📤 Importar documento: el sistema lo trocea por encabezados y reindexa (conceptual)')">📤 Importar documento</button>
+      <button class="btn btn-primary btn-sm" onclick="toast('➕ Alta de artículo (conceptual)')">➕ Crear</button>`}
+    </div>
+    <table><thead><tr><th>Título</th><th>Categoría</th><th>Servicio vinculado</th><th>Estado</th><th class="center">Versión</th><th>Actualizado</th><th class="right">Acción</th></tr></thead><tbody>
+    ${KB_ARTICULOS.map(a => `<tr>
+      <td><b>${a.titulo}</b><div class="small muted">${a.extracto.slice(0,110)}${a.extracto.length>110?'…':''}</div></td>
+      <td><span class="tag t-teal">${a.cat}</span></td>
+      <td class="small">${a.servId ? serv(a.servId).nombre : '<span class="muted">General</span>'}</td>
+      <td>${a.estado==='Publicado'?'<span class="tag t-green">Publicado</span>':a.estado==='Archivado'?'<span class="tag t-gray">Archivado</span>':'<span class="tag t-amber">Borrador</span>'}${a.revisar?'<br><span class="tag t-amber" style="margin-top:.2rem">Revisar</span>':''}</td>
+      <td class="center small">v${a.ver}</td>
+      <td class="small muted">${a.act}</td>
+      <td class="right">${soloLectura ? '<span class="small muted">—</span>' : `
+        ${a.estado==='Borrador'  ? `<button class="btn btn-green btn-sm" onclick="kbPublicar('${a.id}')">Publicar</button>
+                                    <button class="btn btn-danger btn-sm" onclick="kbEliminar('${a.id}')" title="Solo los borradores pueden eliminarse">🗑</button>` : ''}
+        ${a.estado==='Publicado' ? `<button class="btn btn-amber btn-sm" onclick="kbArchivar('${a.id}')">📥 Archivar</button>
+                                    <button class="btn btn-ghost btn-sm" onclick="kbEliminar('${a.id}')" title="Un artículo publicado no puede eliminarse">🗑</button>` : ''}
+        ${a.estado==='Archivado' ? `<button class="btn btn-soft btn-sm" onclick="kbReactivar('${a.id}')">↺ Reactivar</button>` : ''}`}
+      </td></tr>`).join('')}
+    </tbody></table>
+    <div class="bd small muted">Un artículo en <b>borrador</b> nunca se le sirve al bot. Al publicar se encola el reindexado; hasta que termine sigue vigente la versión anterior. Los que ya no aplican se <b>archivan</b> (salen del índice al instante y se conservan para la auditoría); solo los borradores admiten borrado definitivo.</div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card"><div class="hd"><h3>Ficha comercial de servicios</h3><span class="tag t-blue">P6</span></div>
+      <div class="bd small muted" style="padding-bottom:.4rem">Es lo que el bot usa para vender. <b>Las cifras se leen de aquí</b>, no del texto de los artículos: así el precio, la duración y los cupos nunca se inventan.</div>
+      <table><thead><tr><th>Servicio</th><th>Beneficios que comunica el bot</th><th class="center">Duración</th><th class="center">Agendable</th><th class="right">Ficha</th></tr></thead><tbody>
+      ${SERVICIOS.map(sv => `<tr style="${sv.estado==='Inactivo'?'opacity:.55':''}">
+        <td><b>${sv.nombre}</b>${sv.estado==='Inactivo'?' <span class="tag t-gray">Inactivo</span>':''}<div class="small muted">${sv.desc||''}</div>
+          ${tieneFicha(sv)?'':'<span class="tag t-amber">Sin ficha · el bot no lo ofrece</span>'}</td>
+        <td class="small">${(sv.benef||[]).map(b=>'• '+b).join('<br>')}${sv.prep?`<div class="small muted" style="margin-top:.3rem">🧾 <b>Preparación:</b> ${sv.prep}</div>`:''}</td>
+        <td class="center small">${sv.dur} min${sv.cupos>1?`<br><span class="tag t-blue">${sv.cupos} cupos</span>`:''}</td>
+        <td class="center">${sv.agendable?(sv.orden?'<span class="tag t-amber">Con orden</span>':'<span class="tag t-green">Directo</span>'):'<span class="tag t-gray">No</span>'}</td>
+        <td class="right">${soloLectura?'<span class="small muted">—</span>':`<button class="btn btn-ghost btn-sm" onclick="servModal('${sv.id}')">✏️ Editar</button>`}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="bd small muted">Editar la ficha tiene <b>efecto inmediato</b> en lo que responde el bot: no toca agendas, por eso no necesita periodo de gracia (RN-04.5.2.3). El alta y baja de servicios se hace en <b>Servicios y exámenes</b>.</div></div>
+
+    <div style="display:flex;flex-direction:column;gap:1rem">
+      <div class="card"><div class="hd"><h3>Parámetros de la IA</h3></div><div class="bd">
+        <div class="kb-row"><span class="muted">Umbral de confianza</span><b>${KB_CFG.umbral}</b></div>
+        <div class="kb-row"><span class="muted">Fragmentos por consulta</span><b>${KB_CFG.topk}</b></div>
+        <div class="kb-row"><span class="muted">Sin cobertura</span><b>Escala, no responde</b></div>
+        <div class="kb-row"><span class="muted">Origen de las cifras</span><b>Ficha del servicio</b></div>
+        <div class="small muted" style="margin-top:.6rem">En el piloto se arranca conservador: es preferible escalar de más a responder de más.</div>
+      </div></div>
+
+      <div class="card"><div class="hd"><h3>Temas que escalan siempre</h3><span class="tag t-red">P12</span></div><div class="bd">
+        <div class="chips">${Object.keys(KB_TEMAS_PROHIBIDOS).map(t=>`<span class="tag t-red" style="font-size:.8rem">${t}</span>`).join('')}</div>
+        <div class="small muted" style="margin-top:.7rem">Ignoran el puntaje: aunque exista un artículo que cubra el tema, la conversación pasa a una persona (RN-13.4).</div>
+        <div class="small" style="margin-top:.7rem;padding:.6rem;background:var(--red-soft);border-radius:8px;color:#93321F">🚑 <b>Señales de emergencia:</b> ya implementadas en el prompt del bot. No van a la bandeja. El bot entrega de inmediato el texto de derivación a la línea de emergencias externa — la clínica no presta urgencias y dejar a esa persona en cola sería el peor resultado posible.</div>
+      </div></div>
+
+      <div class="card"><div class="hd"><h3>Seguimiento comercial</h3><span class="tag t-blue">RN-09.9</span></div><div class="bd">
+        <div class="small muted" style="margin-bottom:.6rem">Cuando el bot ofrece la cita y el paciente no la toma, se arma esta secuencia desde el último mensaje de la conversación:</div>
+        ${SEG_PASOS.map(x=>`<div class="kb-row"><span class="muted">${x.lb} · +${segMin(x.min)}</span><b class="small" style="text-align:right;max-width:58%">${x.desc}</b></div>`).join('')}
+        <div class="small muted" style="margin-top:.7rem">Se detiene sola si el paciente responde, agenda por cualquier canal o pide no ser contactado. Solo envía dentro del horario de atención (${SEG_CFG.horaIni}–${SEG_CFG.horaFin}) y toda la secuencia cabe en la ventana de 24 h de WhatsApp.</div>
+        <button class="btn btn-soft btn-sm btn-block" style="margin-top:.9rem" onclick="nav('bandeja')">📥 Ver interesados en la bandeja (${segAct.length} activos)</button>
+      </div></div>
+    </div>
   </div>`;
+};
 
 /* ===== Gestión de agendas (RN-06) ===== */
 V.agendas = () => {
@@ -1093,6 +1636,37 @@ Llega 15 min antes y paga en
 recepción. Recibirás recordatorio
 24 h antes y el mismo día.`;
 
+const DOPPLER_TXT = `━━━━━━━━━━━━━━━━━━
+GRUPO PROVIVIR · CDC ORIENTE
+✅ CITA CONFIRMADA
+━━━━━━━━━━━━━━━━━━
+Paciente: Carlos Mora
+Servicio: Ecografía Doppler
+Atiende: Ecografías CDC
+Fecha: Viernes 21 de agosto
+Hora: 9:00 a.m. (bloque de 40 min)
+Código de atención: E0151
+━━━━━━━━━━━━━━━━━━
+Ayuno de 6 horas. Trae tu orden
+médica impresa y tu documento.
+Llega 15 min antes y paga en
+recepción.`;
+
+const NUTRI_TXT = `━━━━━━━━━━━━━━━━━━
+GRUPO PROVIVIR · CDC ORIENTE
+✅ CITA CONFIRMADA
+━━━━━━━━━━━━━━━━━━
+Paciente: Carlos Mora
+Servicio: Nutrición
+Profesional: Dr. Iván Salas
+Fecha: Jueves 20 de agosto
+Hora: 3:00 p.m. (30 min)
+Código de atención: N0152
+━━━━━━━━━━━━━━━━━━
+Trae exámenes recientes si los
+tienes. Llega 15 min antes y
+paga en recepción.`;
+
 const ESCENARIOS = {
   demo:{
     nombre:'Cita medicina general (balanceo + confirmación de texto)',
@@ -1143,6 +1717,70 @@ const ESCENARIOS = {
       {f:'ia',t:'Confirmado ✅ Suero de vitamina C · viernes 3:00 p.m. Tu código de atención es <span class="code-chip">V0150</span>. Cualquier foto, audio o video que quieras enviarnos, la plataforma lo recibe; nuestras respuestas siempre llegarán en texto. 😉'},
     ]
   },
+  conocimiento:{
+    nombre:'Pregunta general → base de conocimiento → venta → cita',
+    pasos:[
+      {f:'p', t:'Buenas, ¿ustedes hacen ecografía Doppler? ¿Y cómo me tengo que preparar?',
+        det:{intencion:'Consulta de servicio', conf:93, kb:'Buscando en la base de conocimiento…', interes:'Alto · Ecografía Doppler',
+             datos:{Servicio:'Ecografía Doppler', Consulta:'Preparación'}}},
+      {f:'ia',t:'¡Hola! Sí, la hacemos en nuestra sala de imágenes 💙 Para el <b>Doppler abdominal</b> necesitas <b>ayuno de 6 horas</b>; asiste con ropa cómoda y trae tu orden médica.<br><br>El estudio dura <b>40 minutos</b> y te reservamos <b>dos espacios seguidos de agenda</b>, así que nadie te apura. ¿Te la agendo? 😊',
+        det:{intencion:'Consulta de servicio → venta', conf:93, kb:'kb1 · “Preparación para ecografías” v2 · puntaje 91', interes:'Alto · ofrecimiento enviado',
+             datos:{'Preparación':'Del artículo publicado','Duración y cupos':'De la ficha del servicio (40 min · 2 cupos)','Ofrecimiento':'Enviado con la respuesta (RN-09.6)'}}},
+      {f:'p', t:'Sí por favor, ya tengo la orden.',
+        det:{intencion:'Solicitar cita', conf:96, kb:'—', interes:'Alto · aceptó el ofrecimiento',
+             datos:{Servicio:'Ecografía Doppler (ya inferido)', Nota:'No se vuelve a preguntar el servicio'}}},
+      {f:'ia',t:'Perfecto 🙌 Indícame tu número de documento, por favor.'},
+      {f:'p', t:'12345678', det:{intencion:'Solicitar cita', conf:97, interes:'Alto', datos:{Documento:'12345678', Paciente:'Carlos Mora'}}},
+      {f:'ia',t:'Gracias, Carlos. Como el Doppler ocupa <b>dos espacios seguidos</b>, el primer bloque libre completo es el <b>viernes de 9:00 a 9:40 a.m.</b> en la sala de ecografía. ¿Te lo confirmo?',
+        det:{intencion:'Confirmar examen', conf:97, interes:'Alto', datos:{Horario:'Vie 9:00–9:40', Regla:'RN-04 · servicio de doble cupo', Prestador:'Ecografías CDC'}}},
+      {f:'p', t:'Confírmalo.'},
+      {f:'ia',t:'¡Listo ✅!<div class="wa-ticket">'+DOPPLER_TXT+'</div>Recuerda el <b>ayuno de 6 horas</b> y traer tu orden médica impresa.', accion:'crearDoppler'},
+      {f:'sys',t:'Respuesta construida con el artículo “Preparación para ecografías v2” (puntaje 91) + la ficha del servicio para duración y cupos. La conversación empezó informativa y cerró en cita (RN-09.6).'},
+    ]
+  },
+  seguimiento:{
+    nombre:'Preguntó y no agendó → seguimiento 2 h / 5 h / cierre',
+    pasos:[
+      {f:'p', t:'Hola, ¿cuánto dura la consulta de nutrición y qué incluye?',
+        det:{intencion:'Consulta de servicio', conf:90, kb:'Ficha comercial · Nutrición', interes:'Alto · Nutrición',
+             datos:{Servicio:'Nutrición', Consulta:'Duración y contenido'}}},
+      {f:'ia',t:'¡Hola! La consulta de nutrición dura <b>30 minutos</b> completos con el especialista 🥗 Sales con un <b>plan de alimentación escrito y ajustado a tu rutina y tu presupuesto</b>, no con una dieta genérica. Si tienes exámenes recientes, tráelos. ¿Te agendo una? 😊',
+        det:{intencion:'Consulta de servicio → venta', conf:92, kb:'Ficha comercial · Nutrición (30 min · beneficios)', interes:'Alto · ofrecimiento enviado',
+             datos:{Duración:'De la ficha del servicio (30 min)', Ofrecimiento:'Enviado con la respuesta (RN-09.6)'}}},
+      {f:'p', t:'Déjame lo pienso y te escribo.',
+        det:{intencion:'Interés sin cierre', conf:89, interes:'Alto · no aceptó el ofrecimiento',
+             datos:{Resultado:'ofrecida_no_aceptada (RN-09.9.1)', T0:'Este mensaje marca el inicio de la secuencia'}}},
+      {f:'sys',t:'Conversación inactiva, con ofrecimiento hecho y sin cita → se programan tres envíos diferidos: <b>+2 h</b>, <b>+5 h</b> y <b>cierre a las +8 h</b>. Toda la secuencia cabe en la ventana de 24 h de WhatsApp (RN-09.9.1, RN-09.9.6).', accion:'armarSeguimiento'},
+      {f:'sys',t:'⏱ Dos horas después · dentro del horario de atención'},
+      {f:'ia',t:'Hola de nuevo 😊 ¿Te quedó alguna duda con la consulta de nutrición? Te cuento algo que muchos no saben: el plan sale <b>ajustado a tu presupuesto</b>, así que no vas a terminar con una lista de mercado imposible. ¿Te reservo un espacio?',
+        det:{intencion:'Seguimiento 1', conf:0, kb:'Ficha comercial · beneficio no usado en la conversación', interes:'Alto · en seguimiento',
+             datos:{Paso:'Seguimiento 1 · T0 + 2 h', Verificación:'Sin respuesta · sin cita · dentro de horario · dentro de las 24 h'}}},
+      {f:'sys',t:'⏱ Tres horas después · sigue sin respuesta y sin cita en ningún canal'},
+      {f:'ia',t:'Te dejo dos opciones concretas por si te sirven: <b>mañana 10:00 a.m.</b> o <b>jueves 3:00 p.m.</b> con el Dr. Iván Salas. Son 30 minutos. ¿Te aparto alguna? 🗓️',
+        det:{intencion:'Seguimiento 2', conf:0, kb:'Disponibilidad real del motor + ficha del servicio', interes:'Alto · en seguimiento',
+             datos:{Paso:'Seguimiento 2 · T0 + 5 h', Aporte:'Información nueva: horarios concretos', Regla:'Nunca repetir el mismo argumento (RN-09.9.3.2)'}}},
+      {f:'p', t:'El jueves a las 3 me sirve.',
+        det:{intencion:'Confirmar cita', conf:96, interes:'Alto · convirtió en el segundo mensaje', datos:{Horario:'Jue 15:00', Prestador:'Dr. Iván Salas'}}},
+      {f:'ia',t:'¡Excelente! 🙌<div class="wa-ticket">'+NUTRI_TXT+'</div>', accion:'crearNutricion'},
+      {f:'sys',t:'El paciente respondió, así que <b>el mensaje de cierre de las 8 h nunca se envía</b>: la secuencia se cancela al primer signo de vida y también se habría cancelado si hubiera agendado por el portal o en el mostrador (RN-09.9.4).'},
+    ]
+  },
+  sinCobertura:{
+    nombre:'Pregunta fuera de la base → escala (no improvisa)',
+    pasos:[
+      {f:'p', t:'¿Ustedes tienen convenio con Sura para exámenes de medicina laboral?',
+        det:{intencion:'Consulta de servicio', conf:34, kb:'Mejor puntaje 41 < umbral 62 · sin cobertura', interes:'Medio · sin servicio identificado',
+             datos:{Consulta:'Convenio Sura · medicina laboral', Fragmentos:'Ninguno sobre el umbral'}}},
+      {f:'ia',t:'Déjame confirmarlo con una de nuestras asistentes para no darte un dato equivocado. Te responde por este mismo chat en unos minutos. 🙌',
+        accion:'escalar',
+        motivo:'Sin cobertura en base de conocimiento (RN-13.3)',
+        prioridad:'Baja',
+        pendiente:'¿Tienen convenio con Sura para medicina laboral?',
+        auditDet:'Mejor puntaje 41 < umbral 62 · pregunta registrada en la cola de mejora (RN-13.6)',
+        aviso:'⤴ Escalada por falta de cobertura. La pregunta ya suma varias ocurrencias en “Preguntas sin respuesta”.'},
+      {f:'sys',t:'La IA no improvisó: sin fragmento sobre el umbral, escala. La pregunta quedó agrupada en “Preguntas sin respuesta” de la base de conocimiento, lista para convertirse en artículo (RN-13.6).'},
+    ]
+  },
 };
 
 V.whatsapp = () => {
@@ -1186,6 +1824,8 @@ V.whatsapp = () => {
         <div class="row"><span class="muted">Intención</span><b>${lastDet.intencion}</b></div>
         <div class="row"><span class="muted">Confianza</span><b>${lastDet.conf}%</b></div>
         <div class="conf-bar"><i style="width:${lastDet.conf}%;background:${lastDet.conf<70?'var(--amber)':'var(--teal)'}"></i></div>
+        ${lastDet.kb?`<div class="row"><span class="muted">Fuente KB</span><b class="small" style="text-align:right;max-width:60%">${lastDet.kb}</b></div>`:''}
+        ${lastDet.interes?`<div class="row"><span class="muted">Interés comercial</span><b class="small" style="text-align:right;max-width:60%">${lastDet.interes}</b></div>`:''}
         <div style="margin-top:.8rem;font-size:.72rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Datos capturados</div>
         ${Object.entries(lastDet.datos||{}).map(([k,v])=>`<div class="row"><span class="muted">${k}</span><b class="small">${v}</b></div>`).join('')||'<div class="small muted" style="padding:.4rem 0">Aún sin datos</div>'}
         <button class="btn btn-amber btn-sm btn-block" style="margin-top:.9rem" onclick="waEscalarManual()">⤴ Escalar a asistente</button>
@@ -1196,9 +1836,17 @@ V.whatsapp = () => {
 function waStart(k){
   const cv=CONVERSACIONES.find(c=>c.id===1);
   S.waConv=1; S.waScen=k; S.waStep=0; cv.msgs=[]; cv.estado='IA activa'; cv.escalada=false; cv.resuelta=false;
+  /* limpiar el rastro del escenario anterior: si no, un escalamiento por falta de
+     cobertura hereda el adjunto de la orden médica del escenario previo */
+  cv.motivo=null; cv.adj=null; cv.prioridad=null; cv.tomada=false; cv.escTs=null;
   render();
 }
-function waReset(){ const cv=CONVERSACIONES.find(c=>c.id===1); cv.msgs=[]; cv.estado='IA activa'; cv.escalada=false; S.waScen=null; S.waStep=0; render(); }
+function waReset(){
+  const cv=CONVERSACIONES.find(c=>c.id===1);
+  cv.msgs=[]; cv.estado='IA activa'; cv.escalada=false; cv.resuelta=false;
+  cv.motivo=null; cv.adj=null; cv.prioridad=null; cv.tomada=false; cv.escTs=null;
+  S.waScen=null; S.waStep=0; render();
+}
 function waNext(){
   const cv=CONVERSACIONES.find(c=>c.id===S.waConv);
   const scen=ESCENARIOS[S.waScen]; if(!scen) return;
@@ -1211,10 +1859,42 @@ function waNext(){
     audit('IA','Cita confirmada por IA','Cita F0147','Medicina general · Dr. Jaime Ortiz (balanceo) · 14:00','Solicitada','Confirmada');
     toast('✅ Cita <b>F0147</b> creada por la IA con balanceo de medicina general. Ya puedes usarla en el mostrador.');
   }
+  if(paso.accion==='crearDoppler' && !S.demoDopplerCreada){
+    S.demoDopplerCreada=true; S.live.ia++;
+    CITAS.push({id:901, cod:'E0151', pacId:1, presId:'ec', servId:'ecod', tipo:'Examen', sede:S.sede, hora:'09:00', dur:40, estado:'Confirmada', origen:'WhatsApp IA', prio:2, obs:'Doppler · ocupa 2 cupos (RN-04) · nació de una pregunta informativa resuelta con la base de conocimiento'});
+    audit('IA','Cita confirmada por IA','Cita E0151','Ecografía Doppler · bloque doble 9:00–9:40 · originada en consulta informativa (RN-09.6)','Consulta informativa','Confirmada');
+    toast('✅ Cita <b>E0151</b> creada. La conversación empezó como pregunta general y terminó en cita: eso es RN-09.6.');
+  }
+  if(paso.accion==='armarSeguimiento' && !S.demoSegArmado){
+    S.demoSegArmado=true;
+    SEGUIMIENTOS.unshift({id:'sgDemo', tel:cv.tel, pacId:cv.pacId, nombre:null, servId:'nut', t0Min:0, estado:'Activa',
+                          nota:'Preguntó por nutrición y quedó de pensarlo'});
+    audit('IA','Seguimiento comercial armado','Interesado '+cv.tel,'Tres envíos diferidos: +2 h, +5 h y cierre +8 h · dentro de la ventana de 24 h (RN-09.9.1)','Sin cita','En seguimiento');
+    toast('📌 Secuencia armada: <b>+2 h</b>, <b>+5 h</b> y cierre a las <b>8 h</b>. Ya aparece en la bandeja, bajo las conversaciones escaladas.');
+  }
+  if(paso.accion==='crearNutricion' && !S.demoNutCreada){
+    S.demoNutCreada=true; S.live.ia++;
+    CITAS.push({id:902, cod:'N0152', pacId:cv.pacId, presId:'is', servId:'nut', tipo:'General', sede:S.sede, hora:'15:00', dur:30, estado:'Confirmada', origen:'WhatsApp IA', prio:2, obs:'Convertida por el segundo mensaje de la secuencia de seguimiento (RN-09.9)'});
+    const sg=SEGUIMIENTOS.find(x=>x.id==='sgDemo');
+    if(sg){ sg.estado='Cancelada'; sg.motivoCancel='Agendó en el segundo mensaje · el cierre de las 8 h nunca se envía'; }
+    audit('IA','Interesado convertido','Cita N0152','El seguimiento 2 cerró la venta · mensajes pendientes cancelados (RN-09.9.4)','En seguimiento','Convertido');
+    toast('✅ Cita <b>N0152</b> creada desde el seguimiento. El mensaje de cierre se canceló solo.');
+  }
   if(paso.accion==='escalar'){
-    cv.escalada=true; cv.estado='Escalada'; cv.motivo='Orden médica en foto (manuscrita) · atención humana inmediata'; cv.prioridad='Media'; cv.tomada=false; cv.escTs=Date.now(); cv.adj='📷 orden_medica.jpg'; S.live.ia++;
-    audit('IA','Escalamiento inmediato','Conversación '+pacName(cv.pacId),'Orden médica en foto · sin lectura IA (RN-08)','IA activa','Escalada');
-    toast('⤴ Conversación escalada de inmediato a la bandeja · la burbuja roja del menú se actualizó');
+    cv.escalada=true; cv.estado='Escalada';
+    cv.motivo   = paso.motivo    || 'Orden médica en foto (manuscrita) · atención humana inmediata';
+    cv.prioridad= paso.prioridad || 'Media';
+    cv.tomada=false; cv.escTs=Date.now(); S.live.ia++;
+    if(paso.adj) cv.adj=paso.adj; else if(!paso.motivo) cv.adj='📷 orden_medica.jpg';
+    /* Falta de cobertura → la pregunta entra a la cola de mejora (RN-13.3/13.11) */
+    if(paso.pendiente){
+      const ex = KB_PENDIENTES.find(x => x.pregunta === paso.pendiente);
+      if(ex) ex.ocurrencias++;
+      else KB_PENDIENTES.push({id:'kp'+(KB_PENDIENTES.length+1), pregunta:paso.pendiente, ocurrencias:1, estado:'Abierta', servId:null});
+    }
+    audit('IA', paso.pendiente?'Escalamiento por falta de cobertura':'Escalamiento inmediato', 'Conversación '+pacName(cv.pacId),
+          paso.auditDet || 'Orden médica en foto · sin lectura IA (RN-08)', 'IA activa', 'Escalada');
+    toast(paso.aviso || '⤴ Conversación escalada de inmediato a la bandeja · la burbuja roja del menú se actualizó');
   }
   render();
   const b=$('#wa-body'); if(b) b.scrollTop=b.scrollHeight;
@@ -1248,8 +1928,89 @@ V.bandeja = () => {
       </td></tr>`).join('')}
     </tbody></table>`:'<div class="empty">🎉 No hay conversaciones escaladas pendientes</div>'}
     <div class="bd small muted">Los criterios de prioridad (alta/media/baja) están pendientes de definición por la clínica; mientras tanto, el indicador operativo principal es el tiempo de espera.</div>
+  </div>
+
+  <div class="card" style="margin-top:1rem">
+    <div class="hd"><h3>Interesados sin agendar</h3><div class="spacer"></div>
+      <span class="tag t-amber">${SEGUIMIENTOS.filter(x=>x.estado==='Activa').length} en seguimiento</span>
+      <span class="small muted">preguntaron, recibieron el ofrecimiento y no cerraron (RN-09.9)</span></div>
+    ${SEGUIMIENTOS.length?`<table><thead><tr><th>Contacto</th><th>Servicio de interés</th><th>Preguntó hace</th><th>Secuencia</th><th>Próximo mensaje</th><th>Estado</th><th class="right">Acciones</th></tr></thead><tbody>
+    ${SEGUIMIENTOS.map(sg=>{
+      const st = segEstado(sg);
+      const nombre = sg.pacId ? pacName(sg.pacId) : sg.nombre;
+      return `<tr style="${sg.estado!=='Activa'?'opacity:.6':''}">
+      <td class="name-doc"><b>${nombre}</b><span>${sg.tel}</span></td>
+      <td class="small"><b>${serv(sg.servId)?serv(sg.servId).nombre:sg.servId}</b><div class="muted">${sg.nota||''}</div></td>
+      <td class="wait">${segMin(sg.t0Min)}</td>
+      <td class="small">${SEG_PASOS.map((x,i)=>{
+          const enviado = sg.estado==='Activa' ? i < st.enviados : sg.estado==='Terminada';
+          return `<span class="tag ${enviado?'t-green':'t-gray'}" style="font-size:.7rem">${enviado?'✓':'○'} ${x.lb.replace('Seguimiento ','S')}</span>`;
+        }).join(' ')}</td>
+      <td class="small">${sg.estado!=='Activa' ? '<span class="muted">—</span>'
+          : st.prox ? `<b>${st.prox.lb}</b><div class="muted">en ${segMin(st.minutos)}</div>`
+          : '<span class="muted">secuencia agotada</span>'}</td>
+      <td>${sg.estado==='Activa'?'<span class="tag t-blue">En seguimiento</span>'
+          :sg.estado==='Terminada'?'<span class="tag t-gray">Sin respuesta</span>'
+          :'<span class="tag t-green">Detenida</span>'}
+          ${sg.motivoCancel?`<div class="small muted" style="margin-top:.2rem">${sg.motivoCancel}</div>`:''}</td>
+      <td class="right">${sg.estado==='Cancelada'?'<span class="small muted">—</span>':`
+        <button class="btn btn-primary btn-sm" onclick="segTomar('${sg.id}')">Escribir yo</button>
+        <button class="btn btn-green btn-sm" onclick="segAgendada('${sg.id}')">✅ Agendó</button>
+        ${sg.estado==='Activa'?`<button class="btn btn-ghost btn-sm" onclick="segCancelar('${sg.id}')">Detener</button>`:''}`}
+      </td></tr>`;}).join('')}
+    </tbody></table>`:'<div class="empty">No hay interesados pendientes de seguimiento</div>'}
+    <div class="bd small muted">La secuencia envía a las <b>2 h</b>, <b>5 h</b> y <b>8 h</b> desde el último mensaje, siempre dentro del horario de atención, y <b>se detiene sola</b> si el paciente responde, agenda por cualquier canal o pide no ser contactado. Lo automático es el piso: puedes tomar cualquier caso y escribirle a mano en cualquier momento.</div>
   </div>`;
 };
+
+/* ===== Acciones sobre el seguimiento comercial (RN-09.9) ===== */
+function segTomar(id){
+  const sg = SEGUIMIENTOS.find(x => x.id === id); if(!sg) return;
+  sg.estado = 'Cancelada';
+  sg.motivoCancel = 'Tomada por la asistente · la plataforma no escribe sobre una conversación atendida';
+  audit(ROLE_META[S.role].nombre,'Seguimiento tomado por asistente','Interesado '+sg.tel,
+        'Secuencia automática detenida para no escribir encima de la gestión humana (RN-09.9.4)','En seguimiento','Gestión manual');
+  toast(`💬 Tomaste el caso de <b>${sg.tel}</b>. La secuencia automática se detuvo para no escribirle encima.`);
+  render();
+}
+function segAgendada(id){
+  const sg = SEGUIMIENTOS.find(x => x.id === id); if(!sg) return;
+  sg.estado = 'Cancelada';
+  sg.motivoCancel = 'Agendó · secuencia detenida antes del siguiente envío';
+  audit(ROLE_META[S.role].nombre,'Interesado convertido','Interesado '+sg.tel,
+        'Cita creada · se cancelan los mensajes pendientes de la secuencia (RN-09.9.4)','En seguimiento','Convertido');
+  toast(`✅ <b>${sg.tel}</b> marcado como agendado. Los mensajes pendientes se cancelaron: nunca se le pregunta si quiere agendar a quien ya tiene cita.`);
+  render();
+}
+function segCancelar(id){
+  const sg = SEGUIMIENTOS.find(x => x.id === id); if(!sg) return;
+  openModal('Detener seguimiento · '+sg.tel, `
+    <p class="small">Se cancelan los mensajes automáticos que falten de la secuencia. El caso sigue visible en la bandeja para trabajarlo a mano.</p>
+    <div class="field" style="margin-top:.8rem"><label>Motivo</label>
+      <select id="seg-motivo">
+        <option>El paciente pidió no ser contactado</option>
+        <option>Ya lo contactamos por otro medio</option>
+        <option>No aplica para este paciente</option>
+      </select></div>
+    <p class="small muted">Si el motivo es que pidió no ser contactado, el paciente queda marcado y <b>no vuelve a recibir mensajes comerciales</b> (Ley 1581/2012).</p>
+    <div style="display:flex;gap:.6rem;justify-content:flex-end;margin-top:1rem">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-amber" onclick="segCancelarOk('${id}')">Detener seguimiento</button>
+    </div>`);
+}
+function segCancelarOk(id){
+  const sg = SEGUIMIENTOS.find(x => x.id === id); if(!sg) return;
+  const motivo = $('#seg-motivo').value;
+  const optOut = motivo.indexOf('no ser contactado') >= 0;
+  sg.estado = 'Cancelada';
+  sg.motivoCancel = motivo + (optOut ? ' · marcado como no contactar' : '');
+  if(optOut && sg.pacId){ const pa = pac(sg.pacId); if(pa) pa.noContactar = true; }
+  audit(ROLE_META[S.role].nombre,'Seguimiento detenido','Interesado '+sg.tel, motivo,'En seguimiento','Detenido');
+  toast(optOut
+    ? `🚫 Seguimiento detenido y contacto marcado como <b>no contactar</b>: no recibirá más mensajes comerciales.`
+    : `⏹ Seguimiento de <b>${sg.tel}</b> detenido.`);
+  closeModal(); render();
+}
 function bandejaTomar(id){
   const c=CONVERSACIONES.find(x=>x.id===id); c.tomada=true;
   audit(ROLE_META[S.role].nombre,'Toma de conversación','Conversación '+pacName(c.pacId),'Asistente asume el chat de WhatsApp','Escalada','En gestión');

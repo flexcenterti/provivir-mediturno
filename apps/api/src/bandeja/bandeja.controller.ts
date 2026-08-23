@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { BandejaService } from './bandeja.service';
+import { SeguimientoService } from '../seguimiento/seguimiento.service';
 import { Permisos } from '../auth/decorators/permisos.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from '../auth/auth.types';
@@ -13,7 +14,10 @@ class ResponderDto {
 @Controller('bandeja')
 @Permisos('bandeja.operar')
 export class BandejaController {
-  constructor(private readonly bandeja: BandejaService) {}
+  constructor(
+    private readonly bandeja: BandejaService,
+    private readonly seguimiento: SeguimientoService,
+  ) {}
 
   @Get()
   pendientes() {
@@ -21,6 +25,15 @@ export class BandejaController {
   }
 
   /** Alimenta la burbuja roja del menú lateral (sin sonido). */
+  /**
+   * RN-09.9.8 · Interesados sin agendar, debajo de las conversaciones escaladas.
+   * Va en la bandeja y no en un tablero aparte porque es donde la asistente trabaja.
+   */
+  @Get('interesados')
+  interesados() {
+    return this.seguimiento.interesados();
+  }
+
   @Get('pendientes/conteo')
   async conteo() {
     return { pendientes: await this.bandeja.conteoPendientes(), sonido: false };

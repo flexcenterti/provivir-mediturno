@@ -253,3 +253,44 @@ tr.inactiva { opacity: .55; }
 /* Validación en vivo del campo de YouTube. */
 .p-ayuda.ok  { color: var(--exito, #2b8a3e); }
 .p-ayuda.mal { color: var(--peligro, #c92a2a); }
+
+/* ── Base de conocimiento y seguimiento (fase 7) ───────────────────────── */
+
+/* Cabecera de tarjeta: título a la izquierda, contexto a la derecha. */
+.card-cab { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.card-cab h3 { font-size: 1rem; }
+.card-cab .muted { font-size: .82rem; }
+
+/* Estado en forma además de en texto: se lee de un vistazo. */
+.pill { display: inline-block; padding: .14rem .55rem; border-radius: 999px;
+  font-size: .75rem; font-weight: 600; background: #EDF1F2; color: var(--muted); white-space: nowrap; }
+.pill-ok { background: var(--teal-soft); color: var(--teal-ink); }
+.pill-aviso { background: #FBF0DC; color: #8A5510; }
+.pill-error { background: var(--red-soft); color: var(--red); }
+
+.fila-form { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-bottom: .7rem; }
+.fila-form input { flex: 1; min-width: 260px; padding: .6rem .75rem;
+  border: 1px solid var(--line); border-radius: 9px; background: #FBFCFC; }
+
+.resultado-prueba { margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--line); }
+.fragmento { margin-top: .7rem; padding: .7rem .85rem; background: var(--bg);
+  border-radius: 9px; font-size: .9rem; }
+.fragmento p { margin: .35rem 0 0; color: var(--muted); }
+
+/* La ficha comercial se separa de los datos que alimentan el motor: son dos
+   cosas distintas que viven en el mismo formulario. */
+.ficha-comercial { border: 1px solid var(--line); border-radius: var(--r);
+  padding: .9rem 1rem; margin: 1rem 0; }
+.ficha-comercial legend { font-family: var(--fd); font-size: .85rem; font-weight: 600;
+  padding: 0 .4rem; color: var(--teal-ink); }
+.ficha-comercial textarea { width: 100%; padding: .6rem .75rem; border: 1px solid var(--line);
+  border-radius: 9px; background: #FBFCFC; font-family: inherit; font-size: .95rem;
+  color: var(--ink); resize: vertical; }
+
+.btn-sm { padding: .3rem .7rem; font-size: .8rem; border-radius: 7px; }
+
+/* Se usaba sin estilo: las casillas quedaban en la misma línea, pegadas entre sí. */
+.p-check { display: flex; align-items: flex-start; gap: .5rem;
+  margin: .5rem 0; font-size: .9rem; line-height: 1.35; cursor: pointer; }
+.p-check input[type="checkbox"] { width: auto; flex: none; margin-top: .15rem; }

@@ -13,6 +13,8 @@ import { enmascararTelefono } from '../comun/pii';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { WhatsappCola, type TrabajoSeguimiento } from './whatsapp.cola';
 import type { MensajeEntrante } from './whatsapp.tipos';
+import { SeguimientoService } from '../seguimiento/seguimiento.service';
+import { SeguimientoCola } from '../seguimiento/seguimiento.cola';
 
 /** Turnos previos que se le pasan al modelo. Más historial no mejora y encarece cada mensaje. */
 const HISTORIAL_MAX = 20;
@@ -39,6 +41,8 @@ export class ConversacionService {
     private readonly configuracion: ConfiguracionService,
     // La cola agenda el seguimiento y la cola invoca a este servicio: referencia circular.
     @Inject(forwardRef(() => WhatsappCola)) private readonly cola: WhatsappCola,
+    private readonly seguimiento: SeguimientoService,
+    private readonly seguimientoCola: SeguimientoCola,
   ) {}
 
   /**
@@ -179,7 +183,14 @@ export class ConversacionService {
 
     if (resultado.respuesta) {
       try {
-        await this.enviar(conversacionId, telefono, resultado.respuesta);
+        await this.enviar(
+          conversacionId,
+          telefono,
+          resultado.respuesta,
+          resultado.kbArticulos?.length
+            ? { articulos: resultado.kbArticulos, score: resultado.kbScore }
+            : undefined,
+        );
       } catch (e) {
         if (!(e instanceof DestinatarioSinTelefono)) throw e;
         // Reintentar no sirve de nada, y dejarlo así deja al paciente sin
@@ -200,6 +211,17 @@ export class ConversacionService {
       data: {
         ...(resultado.pacienteId ? { pacienteId: resultado.pacienteId } : {}),
         ...(resultado.ofrecioWeb ? { intencion: 'agendamiento web-ofrecida' } : {}),
+        // RN-09.9.1 · interés y desenlace comercial de la conversación.
+        ...(resultado.interesServicioId ? { interesServicioId: resultado.interesServicioId } : {}),
+        ...(resultado.interesComercial ? { interesComercial: resultado.interesComercial } : {}),
+        ...(resultado.interesServicioId ? { ctaOfrecido: true } : {}),
+        ...(resultado.citaCreada
+          ? { resultado: 'agendada' as const }
+          : resultado.escalar
+            ? { resultado: 'escalada' as const }
+            : resultado.interesServicioId
+              ? { resultado: 'ofrecida_no_aceptada' as const }
+              : {}),
       },
     });
 
@@ -212,6 +234,29 @@ export class ConversacionService {
 
     if (resultado.escalar) {
       await this.escalar(conversacionId, resultado.escalar.motivo, resultado.escalar.prioridad);
+    }
+
+    // RN-09.9.1 · el paciente mostró interés en un servicio, se le ofreció la cita y
+    // no la tomó: se arma la secuencia de tres mensajes. `t0` es este momento, el
+    // último de la conversación, para no escribirle encima si sigue conversando.
+    if (
+      resultado.interesServicioId &&
+      !resultado.citaCreada &&
+      !resultado.escalar &&
+      this.seguimiento.activo()
+    ) {
+      const pasos = await this.seguimiento.armar({
+        conversacionId,
+        telefono,
+        servicioId: resultado.interesServicioId,
+        pacienteId: resultado.pacienteId ?? conversacion.pacienteId,
+        sedeId: conversacion.sedeId,
+      });
+      if (pasos) {
+        for (const p of await this.seguimiento.pendientesDeEnvio(new Date(Date.now() + 24 * 3_600_000))) {
+          if (p.conversacionId === conversacionId) await this.seguimientoCola.programar(p.id, p.programadoPara);
+        }
+      }
     }
 
     if (resultado.citaCreada) {
@@ -258,8 +303,19 @@ export class ConversacionService {
     this.gateway.emitirPendientesBandeja(await this.pendientes());
   }
 
-  /** Envía y persiste. El envío real va por cola con reintentos (whatsapp.cola.ts). */
-  async enviar(conversacionId: string, telefono: string, texto: string): Promise<void> {
+  /**
+   * Envía y persiste. El envío real va por cola con reintentos (whatsapp.cola.ts).
+   *
+   * `kb` guarda qué artículos sustentaron la respuesta (RN-13.7.3). Cuando el bot
+   * responde mal, esto es lo que permite ir al artículo culpable en vez de discutir
+   * sobre el prompt.
+   */
+  async enviar(
+    conversacionId: string,
+    telefono: string,
+    texto: string,
+    kb?: { articulos: string[]; score?: number },
+  ): Promise<void> {
     const waMessageId = await this.meta.enviarTexto(telefono, texto);
 
     await this.prisma.mensaje.create({
@@ -269,6 +325,8 @@ export class ConversacionService {
         tipo: 'texto',
         contenido: texto,
         waMessageId: waMessageId || null,
+        kbArticulosUsados: kb?.articulos ?? [],
+        kbScore: kb?.score ?? null,
       },
     });
   }

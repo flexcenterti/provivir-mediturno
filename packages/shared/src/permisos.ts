@@ -56,6 +56,10 @@ export const PERMISOS: readonly DefinicionPermiso[] = [
     descripcion: 'Cambiar servicios, mensajes y videos de cada pantalla.' },
   { clave: 'configuracion.editar', area: 'Configuración', etiqueta: 'Reglas del sistema',
     descripcion: 'Parámetros de agendamiento y documentación comercial de la IA.' },
+  { clave: 'conocimiento.ver', area: 'Configuración', etiqueta: 'Ver la base de conocimiento',
+    descripcion: 'Consultar los artículos con los que responde el bot y las preguntas que no supo responder.' },
+  { clave: 'conocimiento.editar', area: 'Configuración', etiqueta: 'Publicar conocimiento',
+    descripcion: 'Crear, publicar y archivar artículos. Cambia lo que el bot le responde a los pacientes (RN-13.7).' },
 
   { clave: 'metricas.ver', area: 'Dirección', etiqueta: 'Tablero',
     descripcion: 'Indicadores de ocupación, ausentismo y demanda.' },
@@ -84,6 +88,13 @@ export const PERFILES_BASE = [
     nombre: 'Administración',
     descripcion: 'Acceso completo. Equivale al antiguo rol admin.',
     permisos: CLAVES_PERMISO,
+    /**
+     * Su contrato es "todo": al agregar un permiso al catálogo, este perfil lo
+     * recibe también en instalaciones que ya existen. Sin esto, una función nueva
+     * se despliega y nadie puede usarla, porque la fila del perfil se creó con la
+     * lista de permisos de aquel día.
+     */
+    accesoCompleto: true,
   },
   {
     nombre: 'Asistente',
@@ -92,6 +103,7 @@ export const PERFILES_BASE = [
       'bandeja.operar', 'mostrador.operar', 'turnos.ver', 'turnos.atender',
       'citas.gestionar', 'agenda.ver', 'agenda.editar',
       'pacientes.ver', 'pantallas.ver', 'metricas.ver',
+      'conocimiento.ver',
     ],
   },
   {

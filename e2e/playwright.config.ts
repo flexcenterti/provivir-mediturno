@@ -54,7 +54,13 @@ export default defineConfig({
       //
       // Se compila antes de arrancar: `nest start --watch` tarda en quedar listo
       // y recompila a mitad de la suite si alguien toca un archivo.
-      command: 'npx prisma migrate reset --force --skip-generate && npm run build --silent && node dist/main.js',
+      // `shared` se compila PRIMERO: la API resuelve @provivir/shared contra su
+      // `dist`, no contra el código. Sin esto, una constante nueva del paquete
+      // compartido no llega ni al seed ni a la API, y la suite pasa igual porque
+      // jest sí mapea al fuente — es decir, las pruebas y lo que corre no coinciden.
+      command:
+        'npm --prefix ../.. run build --silent -w @provivir/shared' +
+        ' && npx prisma migrate reset --force --skip-generate && npm run build --silent && node dist/main.js',
       cwd: resolve(RAIZ, 'apps/api'),
       url: 'http://localhost:3000/api/health',
       env,

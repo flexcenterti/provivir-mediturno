@@ -1,11 +1,11 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { PERFILES_BASE } from '@provivir/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { generarPassword } from '../auth/password';
 import { hashearPassword } from '../auth/argon2.opciones';
 import type { ActualizarPerfilDto, ActualizarUsuarioDto, CrearPerfilDto, CrearUsuarioDto } from './dto/acceso.dto';
+import { asegurarPerfilesBase } from '../cli/usuarios.comun';
 
 /**
  * Perfiles de acceso y usuarios.
@@ -17,6 +17,8 @@ import type { ActualizarPerfilDto, ActualizarUsuarioDto, CrearPerfilDto, CrearUs
  */
 @Injectable()
 export class AccesoService {
+  private readonly log = new Logger(AccesoService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditoria: AuditoriaService,
@@ -27,21 +29,21 @@ export class AccesoService {
     return this.config.getOrThrow<string>('SEDE_ID');
   }
 
-  /** Crea los perfiles base si faltan. Idempotente. */
+  /**
+   * Crea los perfiles base si faltan. Idempotente.
+   *
+   * Delega en el mismo helper que usa el alta inicial: había dos implementaciones
+   * de esto y ya habían divergido. Corre cada vez que alguien abre la pantalla de
+   * perfiles, que es lo que hace que un permiso nuevo del catálogo llegue a una
+   * instalación ya desplegada.
+   */
   async asegurarPerfilesBase(): Promise<void> {
-    for (const base of PERFILES_BASE) {
-      await this.prisma.perfil.upsert({
-        where: { nombre: base.nombre },
-        // No se pisan los permisos: puede que ya los hayan ajustado.
-        update: { sistema: true },
-        create: {
-          nombre: base.nombre,
-          descripcion: base.descripcion,
-          permisos: [...base.permisos],
-          sistema: true,
-          sedeId: this.sedeId,
-        },
-      });
+    const sinConceder = await asegurarPerfilesBase(this.prisma, this.sedeId);
+    if (sinConceder.length) {
+      this.log.warn(
+        `Permisos del catálogo que no tiene ningún perfil: ${sinConceder.join(', ')}. ` +
+          'Son funciones desplegadas que nadie puede usar hasta que se concedan.',
+      );
     }
   }
 

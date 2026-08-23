@@ -1,5 +1,6 @@
 // Esquema de datos · Grupo Provivir (CDC Oriente)
 // Referencia: Arquitectura v1.0 §5 · Lógica de Negocio v2.0 (RN-01 a RN-12)
+// Fase 7: RN-13 (base de conocimiento), RN-09.9 (seguimiento comercial), RN-04.5 (catálogo)
 // D1: sede vive en el modelo con valor único 'cdc-oriente'; nunca se expone en la UI.
 
 generator client {
@@ -97,6 +98,58 @@ enum TipoMensaje {
 }
 
 /// RN-01.2 · Política de costo del control, parametrizable a futuro
+/// RN-13.7 · Un borrador nunca se sirve al bot; archivar retira del índice sin borrar la ficha
+enum EstadoArticulo {
+  borrador
+  publicado
+  archivado
+}
+
+/// RN-13 · Desenlace de una consulta a la base de conocimiento
+enum ResultadoKbConsulta {
+  respondida
+  escalada
+  bloqueada_por_tema
+}
+
+enum EstadoKbPendiente {
+  abierta
+  articulo_creado
+  descartada
+}
+
+/// RN-09.9.2 · Los tres pasos de la secuencia: T0+2h, T0+5h y cierre en T0+8h
+enum PasoSeguimiento {
+  seguimiento_1
+  seguimiento_2
+  cierre
+}
+
+/// RN-09.9.4 · `descartado` = quedó fuera de la ventana de 24 h de Meta y no hay plantilla
+enum EstadoSeguimiento {
+  programado
+  enviado
+  cancelado
+  diferido
+  descartado
+}
+
+/// RN-09.9.1 · Interés detectado en la conversación
+enum InteresComercial {
+  alto
+  medio
+  nulo
+}
+
+/// RN-09.9.9 · Desenlace comercial, para medir conversión por paso
+enum ResultadoConversacion {
+  agendada
+  ofrecida_no_aceptada
+  informativa
+  escalada
+  no_convertida
+}
+
 enum PoliticaCosto {
   sin_costo
   costo_pleno
@@ -121,6 +174,8 @@ model Sede {
   pantallas      Pantalla[]
   usuarios       Usuario[]
   perfiles       Perfil[]
+  articulos      KbArticulo[]
+  seguimientos   Seguimiento[]
 
   @@map("sede")
 }
@@ -143,6 +198,9 @@ model Paciente {
   condiciones   String[]       @default([])
   origen        OrigenPaciente @default(carga)
   activo        Boolean        @default(true)
+  /// RN-09.9.4 · Opt-out permanente de mensajería comercial (Ley 1581/2012).
+  /// Se verifica en el envío, no solo al encolar.
+  noContactar   Boolean        @default(false) @map("no_contactar")
   sedeId        String         @map("sede_id")
   creadoEn      DateTime       @default(now()) @map("creado_en")
   actualizadoEn DateTime       @updatedAt @map("actualizado_en")
@@ -151,6 +209,7 @@ model Paciente {
   historial      HistorialServicio[]
   citas          Cita[]
   conversaciones Conversacion[]
+  seguimientos   Seguimiento[]
 
   @@index([documento])
   @@index([telefono])
@@ -185,11 +244,26 @@ model Servicio {
   requiereOrden Boolean       @default(false) @map("requiere_orden")
   /// RN-01.2 · El control no tiene costo; parametrizable a futuro
   politicaCosto PoliticaCosto @default(costo_pleno) @map("politica_costo")
+  /// RN-04.5.3 · Baja lógica: un servicio con citas se desactiva, nunca se elimina
   activo        Boolean       @default(true)
 
-  prestadores PrestadorServicio[]
-  agendas     Agenda[]
-  citas       Cita[]
+  // ── Ficha comercial (RN-04.5.1) · es lo que el bot usa para vender.
+  // Un servicio sin descripción ni beneficios NO se ofrece por WhatsApp ni por el portal:
+  // el bot no puede venderlo si no sabe qué decir de él.
+  descripcionComercial String?  @map("descripcion_comercial")
+  beneficios           String[] @default([])
+  preparacion          String?
+  enlaceInfo           String?  @map("enlace_info")
+  rangoPrecio          String?  @map("rango_precio")
+  /// RN-13.9 · Si es false, el bot lo describe pero no ofrece agendarlo por chat
+  agendable            Boolean  @default(true)
+
+  prestadores    PrestadorServicio[]
+  agendas        Agenda[]
+  citas          Cita[]
+  articulos      KbArticulo[]
+  seguimientos   Seguimiento[]
+  conversaciones Conversacion[]
 
   @@map("servicio")
 }
@@ -351,9 +425,19 @@ model Conversacion {
   sedeId     String             @map("sede_id")
   creadoEn   DateTime           @default(now()) @map("creado_en")
 
-  paciente Paciente? @relation(fields: [pacienteId], references: [id])
-  sede     Sede      @relation(fields: [sedeId], references: [id])
-  mensajes Mensaje[]
+  // ── Interés comercial (RN-09.9.1) · dispara la secuencia de seguimiento
+  interesComercial  InteresComercial       @default(nulo) @map("interes_comercial")
+  interesServicioId String?                @map("interes_servicio_id")
+  /// El bot ya ofreció la cita. Sin esto no se arma seguimiento: no se persigue a quien nunca recibió oferta.
+  ctaOfrecido       Boolean                @default(false) @map("cta_ofrecido")
+  resultado         ResultadoConversacion?
+
+  paciente        Paciente?     @relation(fields: [pacienteId], references: [id])
+  sede            Sede          @relation(fields: [sedeId], references: [id])
+  interesServicio Servicio?     @relation(fields: [interesServicioId], references: [id])
+  mensajes        Mensaje[]
+  seguimientos    Seguimiento[]
+  consultasKb     KbConsulta[]
 
   /// Consulta de la bandeja: pendientes = escalada && sin resolver
   @@index([escalada, resueltaTs])
@@ -374,7 +458,13 @@ model Mensaje {
   waMessageId    String?          @unique @map("wa_message_id")
   ts             DateTime         @default(now())
 
+  /// RN-13.7.3 · Qué artículos sustentaron esta respuesta y con qué puntaje.
+  /// Cuando el bot responde mal se corrige el artículo culpable, no el prompt.
+  kbArticulosUsados String[] @default([]) @map("kb_articulos_usados")
+  kbScore           Int?     @map("kb_score")
+
   conversacion Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  consultaKb   KbConsulta?
 
   @@index([conversacionId, ts])
   @@map("mensaje")
@@ -493,4 +583,153 @@ model Configuracion {
   actualizadoEn DateTime @updatedAt @map("actualizado_en")
 
   @@map("configuracion")
+}
+
+// ───────────────── Base de conocimiento del bot (RN-13) ─────────────────
+// Reemplaza a `configuracion.documentacion_comercial`, que hoy inyecta la
+// documentación entera en el prompt de todas las conversaciones.
+// Recuperación léxica sin pgvector: ver docs/adr-a8-recuperacion-conocimiento.md.
+
+/// RN-13 · Contenido institucional aprobado. NUNCA datos de pacientes (RN-13.8):
+/// el índice se comparte entre todas las conversaciones.
+model KbArticulo {
+  id          String         @id @default(uuid())
+  titulo      String
+  categoria   String
+  contenidoMd String         @map("contenido_md")
+  /// Vincula el artículo a un servicio del catálogo. Las CIFRAS salen del servicio,
+  /// nunca del texto del artículo (RN-13.1).
+  servicioId  String?        @map("servicio_id")
+  tags        String[]       @default([])
+  estado      EstadoArticulo @default(borrador)
+  version     Int            @default(1)
+
+  vigenteDesde     DateTime  @default(now()) @map("vigente_desde")
+  /// RN-13.5.5 · Cumplida la fecha, un trabajo diario archiva el artículo solo
+  vigenteHasta     DateTime? @map("vigente_hasta")
+  /// RN-13.5 · Se conserva archivado: la auditoría debe poder explicar respuestas ya dadas
+  archivadoEn      DateTime? @map("archivado_en")
+  archivadoPor     String?   @map("archivado_por")
+  /// RN-04.5.4 · Su servicio se desactivó; hay que revisar si el artículo sigue aplicando
+  requiereRevision Boolean   @default(false) @map("requiere_revision")
+
+  autorId       String?  @map("autor_id")
+  sedeId        String   @map("sede_id")
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  servicio   Servicio?     @relation(fields: [servicioId], references: [id])
+  sede       Sede          @relation(fields: [sedeId], references: [id])
+  fragmentos KbFragmento[]
+
+  /// La consulta de recuperación filtra siempre por estado publicado
+  @@index([estado, servicioId])
+  @@index([requiereRevision])
+  @@map("kb_articulo")
+}
+
+/// RN-13 · Trozos indexables del artículo. Archivar el artículo los borra en la MISMA
+/// transacción: no existe un estado en el que esté archivado pero aún sea recuperable.
+model KbFragmento {
+  id         String @id @default(uuid())
+  articuloId String @map("articulo_id")
+  orden      Int
+  texto      String
+  tokens     Int    @default(0)
+
+  /// Índice léxico: to_tsvector('spanish', inmutable_unaccent(texto)).
+  /// Lo mantiene un trigger definido en la migración —Prisma no modela tsvector—,
+  /// así que no puede quedar desincronizado del texto. No se lee desde Prisma Client:
+  /// la búsqueda va por SQL crudo.
+  tsv Unsupported("tsvector")?
+
+  articulo KbArticulo @relation(fields: [articuloId], references: [id], onDelete: Cascade)
+
+  @@unique([articuloId, orden])
+  /// Capa léxica de la recuperación (RN-13, ADR A8)
+  @@index([tsv], type: Gin)
+  /// Tolerancia a errores de tipeo y a nombres propios de exámenes ("Doppler", "TSH")
+  @@index([texto(ops: raw("gin_trgm_ops"))], type: Gin, map: "kb_fragmento_texto_trgm_idx")
+  @@map("kb_fragmento")
+}
+
+/// RN-13.7.3 · Cada consulta del bot, con lo que recuperó y en qué terminó
+model KbConsulta {
+  id             String              @id @default(uuid())
+  conversacionId String?             @map("conversacion_id")
+  /// Un mensaje del bot se sustenta como máximo en una consulta
+  mensajeId      String?             @unique @map("mensaje_id")
+  pregunta       String
+  scoreTop       Int?                @map("score_top")
+  articulos      String[]            @default([])
+  resultado      ResultadoKbConsulta
+  /// Presente cuando resultado = bloqueada_por_tema (RN-13.4)
+  temaBloqueado  String?             @map("tema_bloqueado")
+  ts             DateTime            @default(now())
+
+  conversacion Conversacion? @relation(fields: [conversacionId], references: [id], onDelete: SetNull)
+  mensaje      Mensaje?      @relation(fields: [mensajeId], references: [id], onDelete: SetNull)
+
+  @@index([resultado, ts])
+  @@map("kb_consulta")
+}
+
+/// RN-13.6 · Preguntas que escalaron por falta de cobertura, agrupadas por similitud.
+/// Convertirlas en artículos es el mecanismo concreto de la mejora de RN-08.4.
+model KbPendiente {
+  id                    String            @id @default(uuid())
+  preguntaNormalizada   String            @unique @map("pregunta_normalizada")
+  preguntaEjemplo       String            @map("pregunta_ejemplo")
+  /// Repetir la pregunta incrementa el contador; no crea otra fila
+  ocurrencias           Int               @default(1)
+  ejemploConversacionId String?           @map("ejemplo_conversacion_id")
+  estado                EstadoKbPendiente @default(abierta)
+  creadoEn              DateTime          @default(now()) @map("creado_en")
+  actualizadoEn         DateTime          @updatedAt @map("actualizado_en")
+
+  /// La bandeja las ordena por frecuencia
+  @@index([estado, ocurrencias])
+  /// RN-13.6 · agrupar preguntas sin respuesta por similitud
+  @@index([preguntaNormalizada(ops: raw("gin_trgm_ops"))], type: Gin, map: "kb_pendiente_pregunta_trgm_idx")
+  @@map("kb_pendiente")
+}
+
+// ────────────── Seguimiento comercial (RN-09.9) ──────────────
+// Extiende el seguimiento de RN-09.8, que ya verifica que no exista cita antes
+// de escribir. Aquí se persiste el estado de la secuencia de tres pasos.
+
+/// RN-09.9 · Un envío programado de la secuencia. La cola de BullMQ es la que
+/// dispara; esta tabla es la que permite ver el estado en la bandeja y hacer
+/// cumplir los límites de insistencia con restricciones de base de datos (RN-09.9.7).
+model Seguimiento {
+  id             String            @id @default(uuid())
+  conversacionId String            @map("conversacion_id")
+  pacienteId     String?           @map("paciente_id")
+  /// Cuando no hay paciente registrado, el teléfono es la única identidad disponible
+  telefono       String
+  servicioId     String            @map("servicio_id")
+  paso           PasoSeguimiento
+  estado         EstadoSeguimiento @default(programado)
+
+  programadoPara    DateTime  @map("programado_para")
+  enviadoEn         DateTime? @map("enviado_en")
+  /// RN-09.9.4 · Por qué no salió: respondió, agendó, opt-out, servicio desactivado,
+  /// fuera de la ventana de 24 h de Meta…
+  motivoCancelacion String?   @map("motivo_cancelacion")
+
+  sedeId   String   @map("sede_id")
+  creadoEn DateTime @default(now()) @map("creado_en")
+
+  conversacion Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  paciente     Paciente?    @relation(fields: [pacienteId], references: [id])
+  servicio     Servicio     @relation(fields: [servicioId], references: [id])
+  sede         Sede         @relation(fields: [sedeId], references: [id])
+
+  /// Rearmar la secuencia no puede duplicar envíos
+  @@unique([conversacionId, paso])
+  /// El worker busca lo que toca enviar
+  @@index([estado, programadoPara])
+  /// RN-09.9.7.2 · Una sola secuencia por paciente y servicio cada 30 días
+  @@index([telefono, servicioId, creadoEn])
+  @@map("seguimiento")
 }

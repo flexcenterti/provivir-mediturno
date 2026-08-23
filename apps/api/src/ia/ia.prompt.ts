@@ -19,6 +19,8 @@ const DERIVAR_EMERGENCIA = 'indícale que acuda de inmediato a un servicio exter
 export function promptSistema(opciones: {
   urlPortal: string;
   documentacionComercial?: string;
+  /** RN-13 · hay artículos publicados: la información se recupera, no se inyecta. */
+  conocimientoDisponible?: boolean;
   ofrecerWeb: boolean;
 }): string {
   const hoy = fechaEnZona();
@@ -90,8 +92,30 @@ Las indicaciones de preparación, los horarios y los precios NO son dudas clíni
 responde con lo que tengas documentado.`,
   );
 
+  bloques.push(
+    `## Preguntas que no son de agendamiento
+Preparación de exámenes, horarios, ubicación, formas de pago, qué traer, cancelaciones, cómo
+funciona la cita de control: para TODAS usa buscar_conocimiento antes de responder. No contestes
+de memoria aunque creas saberlo.
+
+Si la herramienta devuelve accion="escalar", llama a escalar_a_asistente con ese motivo en el
+mismo turno. Una respuesta aproximada sobre una preparación o un precio le cuesta el viaje al
+paciente; decir "déjame confirmarlo con una asistente" no le cuesta nada.
+
+Cualquier cifra —duración, costo, cuántos espacios ocupa— sale de consultar_servicio. Nunca de
+un texto que hayas leído: los textos envejecen, la ficha del servicio es la que gobierna la agenda.`,
+  );
+
   if (opciones.documentacionComercial) {
     bloques.push(`## Servicios de la clínica\n${opciones.documentacionComercial}`);
+  } else if (opciones.conocimientoDisponible) {
+    // RN-13 · el detalle ya no viaja en el prompt: se recupera por pregunta.
+    bloques.push(
+      `## Servicios de la clínica
+El detalle de cada servicio está en la base de conocimiento. Usa listar_servicios para saber qué
+existe, buscar_conocimiento para lo que el paciente pregunte y consultar_servicio para las cifras.
+No inventes beneficios, precios ni indicaciones que no te hayan devuelto esas herramientas.`,
+    );
   } else {
     // P6 · pendiente del cliente. Sin esta documentación el bot informa pero vende poco.
     bloques.push(

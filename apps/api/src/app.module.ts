@@ -15,6 +15,8 @@ import { ColasModule } from './colas/colas.module';
 import { PacientesModule } from './pacientes/pacientes.module';
 import { PrestadoresModule } from './prestadores/prestadores.module';
 import { ServiciosModule } from './servicios/servicios.module';
+import { ConocimientoModule } from './conocimiento/conocimiento.module';
+import { SeguimientoModule } from './seguimiento/seguimiento.module';
 import { AgendasModule } from './agendas/agendas.module';
 import { CargaModule } from './carga/carga.module';
 import { CitasModule } from './citas/citas.module';
@@ -53,6 +55,8 @@ import { RecordatoriosModule } from './recordatorios/recordatorios.module';
     PacientesModule,
     PrestadoresModule,
     ServiciosModule,
+    ConocimientoModule,
+    SeguimientoModule,
     AgendasModule,
     CargaModule,
     // Fase 2 · motor de agendamiento

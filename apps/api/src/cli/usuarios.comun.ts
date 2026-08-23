@@ -1,4 +1,4 @@
-import { PERFILES_BASE } from '@provivir/shared';
+import { CLAVES_PERMISO, PERFILES_BASE } from '@provivir/shared';
 import type { PrismaClient, Rol } from '@prisma/client';
 import { hashearPassword } from '../auth/argon2.opciones';
 import { generarPassword } from '../auth/password';
@@ -24,20 +24,43 @@ export const PERFIL_DE_ROL: Record<Rol, string> = {
 };
 
 /**
- * Crea los perfiles base si faltan. Idempotente, y NO pisa sus permisos: puede que
- * ya los hayan ajustado desde el backoffice.
+ * Crea los perfiles base si faltan. Idempotente y **no pisa los permisos** de los
+ * que ya existen: puede que los hayan ajustado desde el backoffice.
+ *
+ * La excepción es el perfil de acceso completo. Su contrato es "todo", y sin
+ * reconciliarlo un permiso nuevo del catálogo no llega nunca a una instalación ya
+ * desplegada: la función se despliega y nadie puede usarla, porque la fila se creó
+ * con la lista de aquel día. Solo se AGREGAN los que falten; nada se quita.
+ *
+ * Devuelve los permisos del catálogo que no tiene ningún perfil, para poder
+ * avisarlo: son funciones desplegadas que nadie puede usar todavía.
  */
-export async function asegurarPerfilesBase(prisma: PrismaClient, sedeId: string): Promise<void> {
+export async function asegurarPerfilesBase(prisma: PrismaClient, sedeId: string): Promise<string[]> {
   for (const base of PERFILES_BASE) {
-    await prisma.perfil.upsert({
+    const existente = await prisma.perfil.findUnique({ where: { nombre: base.nombre } });
+
+    if (!existente) {
+      await prisma.perfil.create({
+        data: {
+          nombre: base.nombre, descripcion: base.descripcion,
+          permisos: [...base.permisos], sistema: true, sedeId,
+        },
+      });
+      continue;
+    }
+
+    const completo = 'accesoCompleto' in base && base.accesoCompleto === true;
+    const faltantes = completo ? CLAVES_PERMISO.filter((c) => !existente.permisos.includes(c)) : [];
+
+    await prisma.perfil.update({
       where: { nombre: base.nombre },
-      update: { sistema: true },
-      create: {
-        nombre: base.nombre, descripcion: base.descripcion,
-        permisos: [...base.permisos], sistema: true, sedeId,
-      },
+      data: { sistema: true, ...(faltantes.length ? { permisos: [...existente.permisos, ...faltantes] } : {}) },
     });
   }
+
+  const perfiles = await prisma.perfil.findMany({ select: { permisos: true } });
+  const concedidos = new Set(perfiles.flatMap((p) => p.permisos));
+  return CLAVES_PERMISO.filter((c) => !concedidos.has(c));
 }
 
 export interface AltaUsuario {

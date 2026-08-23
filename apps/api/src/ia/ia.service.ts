@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { aHHMM, CONFIG, fechaEnZona } from '@provivir/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CitasService } from '../citas/citas.service';
+import { ConocimientoService } from '../conocimiento/conocimiento.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { enmascararDocumento, enmascararTelefono } from '../comun/pii';
 import { HERRAMIENTAS } from './ia.herramientas';
@@ -29,6 +30,7 @@ export class IaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly citas: CitasService,
+    private readonly conocimiento: ConocimientoService,
     private readonly configuracion: ConfiguracionService,
     private readonly config: ConfigService,
     @Optional() @Inject(CLIENTE_LLM) private readonly llm: ClienteLlm,
@@ -53,10 +55,19 @@ export class IaService {
       };
     }
 
+    // RN-13 · el bloque de documentación comercial se inyecta SOLO mientras la base
+    // de conocimiento esté vacía. En cuanto hay artículos publicados, esa información
+    // se recupera por pregunta y repetirla entera en cada conversación sería pagar
+    // sus tokens para nada. Si se archivaran todos los artículos, vuelve solo.
+    const kbConContenido = await this.conocimiento.hayContenidoPublicado();
+
     const system = promptSistema({
       urlPortal: this.config.get<string>('PORTAL_URL') ?? '',
-      documentacionComercial: this.configuracion.texto('documentacion_comercial', ''),
+      documentacionComercial: kbConContenido
+        ? ''
+        : this.configuracion.texto('documentacion_comercial', ''),
       ofrecerWeb: !ctx.yaOfrecioWeb,
+      conocimientoDisponible: kbConContenido,
     });
 
     const mensajes: MensajeLlm[] = [
@@ -223,9 +234,93 @@ export class IaService {
           return { servicios };
         }
 
+        case 'buscar_conocimiento': {
+          const pregunta = String(args.pregunta ?? '').trim();
+          if (pregunta.length < 2) return { error: 'Pregunta vacía' };
+
+          const r = await this.conocimiento.buscar(pregunta, {
+            servicioId: args.servicioId || undefined,
+            conversacionId: ctx.conversacionId,
+          });
+
+          // Cuando la base no cubre la pregunta, la herramienta NO devuelve texto
+          // que el modelo pueda parafrasear: devuelve la orden de escalar. Es la
+          // diferencia entre "no sé" y una respuesta inventada (RN-13.3).
+          if (r.tipo === 'bloqueada') {
+            return {
+              accion: 'escalar',
+              motivo: `Tema que atiende una persona: ${r.tema}`,
+              prioridad: 'media',
+            };
+          }
+          if (r.tipo === 'sin_cobertura') {
+            return {
+              accion: 'escalar',
+              motivo: 'La documentación de la clínica no cubre esta pregunta',
+              prioridad: 'baja',
+            };
+          }
+
+          // RN-13.7.3 · queda registrado qué sustentó la respuesta.
+          resultado.kbArticulos = [...new Set(r.fragmentos.map((f) => f.articuloId))];
+          resultado.kbScore = r.mejorPuntaje;
+
+          if (args.servicioId) {
+            resultado.interesServicioId = args.servicioId;
+            resultado.interesComercial ??= 'medio';
+          }
+
+          return {
+            accion: 'responder',
+            fragmentos: r.fragmentos.map((f) => ({ titulo: f.titulo, texto: f.texto })),
+            advertencia:
+              'Responde SOLO con lo que digan estos fragmentos. Para cualquier cifra usa consultar_servicio.',
+          };
+        }
+
+        case 'consultar_servicio': {
+          const buscado = String(args.servicio ?? '').trim();
+          if (!buscado) return { error: 'Falta el servicio' };
+
+          const servicio =
+            (await this.prisma.servicio.findFirst({ where: { id: buscado, activo: true } })) ??
+            (await this.prisma.servicio.findFirst({
+              where: { activo: true, nombre: { contains: buscado, mode: 'insensitive' } },
+              orderBy: { nombre: 'asc' },
+            }));
+
+          if (!servicio) return { encontrado: false };
+
+          // Preguntar por la ficha de un servicio agendable es interés comercial
+          // (RN-09.9.1). Si además pide cupos, sube a alto más abajo.
+          if (servicio.agendable) {
+            resultado.interesServicioId = servicio.id;
+            resultado.interesComercial ??= 'medio';
+          }
+
+          return {
+            encontrado: true,
+            id: servicio.id,
+            nombre: servicio.nombre,
+            duracionMin: servicio.duracionMin,
+            cupos: servicio.cupos,
+            requiereOrden: servicio.requiereOrden,
+            politicaCosto: servicio.politicaCosto,
+            rangoPrecio: servicio.rangoPrecio,
+            descripcion: servicio.descripcionComercial,
+            beneficios: servicio.beneficios,
+            preparacion: servicio.preparacion,
+            // RN-13.9 · si no es agendable por chat, el ofrecimiento no es un horario.
+            agendable: servicio.agendable,
+          };
+        }
+
         case 'ofrecer_cupos': {
           // RN-09.8 - pedir cupos ES la intencion de agendar.
           resultado.ofrecioWeb = true;
+          // RN-09.9.1 · y es el interés más claro que puede haber.
+          resultado.interesServicioId = String(args.servicioId);
+          resultado.interesComercial = 'alto';
 
           const cupos = await this.citas.cupos({
             servicioId: String(args.servicioId),

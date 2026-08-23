@@ -90,7 +90,40 @@ export const api = {
     '/citas', { method: 'POST', body: JSON.stringify(cuerpo) }),
 
   prestadores: () => pedir<Prestador[]>('/prestadores'),
-  servicios: () => pedir<Servicio[]>('/servicios'),
+  servicios: (todos = false) => pedir<Servicio[]>(`/servicios${todos ? '?todos=true' : ''}`),
+  impactoServicio: (id: string) => pedir<ImpactoBaja>(`/servicios/${id}/impacto`),
+  desactivarServicio: (id: string) =>
+    pedir<Omit<ImpactoBaja, 'citas'>>(`/servicios/${id}/desactivar`, { method: 'POST' }),
+  activarServicio: (id: string) => pedir<Servicio>(`/servicios/${id}/activar`, { method: 'POST' }),
+  eliminarServicio: (id: string) => pedir<{ eliminado: true }>(`/servicios/${id}`, { method: 'DELETE' }),
+
+  // ── Base de conocimiento (RN-13) ──
+  articulos: (estado?: string) =>
+    pedir<Articulo[]>(`/conocimiento/articulos${estado ? `?estado=${estado}` : ''}`),
+  crearArticulo: (cuerpo: object) =>
+    pedir<Articulo>('/conocimiento/articulos', { method: 'POST', body: JSON.stringify(cuerpo) }),
+  actualizarArticulo: (id: string, cuerpo: object) =>
+    pedir<Articulo>(`/conocimiento/articulos/${id}`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
+  publicarArticulo: (id: string) =>
+    pedir<Articulo>(`/conocimiento/articulos/${id}/publicar`, { method: 'POST' }),
+  archivarArticulo: (id: string) =>
+    pedir<Articulo>(`/conocimiento/articulos/${id}/archivar`, { method: 'POST' }),
+  reactivarArticulo: (id: string) =>
+    pedir<Articulo>(`/conocimiento/articulos/${id}/reactivar`, { method: 'POST' }),
+  eliminarArticulo: (id: string) =>
+    pedir<{ eliminado: boolean }>(`/conocimiento/articulos/${id}`, { method: 'DELETE' }),
+  probarPregunta: (pregunta: string) =>
+    pedir<ResultadoPrueba>('/conocimiento/probar', { method: 'POST', body: JSON.stringify({ pregunta }) }),
+  importarConocimiento: () =>
+    pedir<{ creados: Array<{ titulo: string; servicioId: string | null }>; omitidos: string[]; sinServicio: string[] }>(
+      '/conocimiento/importar', { method: 'POST' }),
+  preguntasPendientes: () => pedir<PreguntaPendiente[]>('/conocimiento/pendientes'),
+  articuloDesdePendiente: (id: string) =>
+    pedir<Articulo>(`/conocimiento/pendientes/${id}/articulo`, { method: 'POST' }),
+  descartarPendiente: (id: string) =>
+    pedir<PreguntaPendiente>(`/conocimiento/pendientes/${id}/descartar`, { method: 'POST' }),
+
+  interesados: () => pedir<Interesado[]>('/bandeja/interesados'),
   pacientes: (q: string) => pedir<{ datos: Paciente[]; total: number }>(`/pacientes?q=${encodeURIComponent(q)}`),
   crearPaciente: (cuerpo: unknown) => pedir<Paciente>('/pacientes', { method: 'POST', body: JSON.stringify(cuerpo) }),
   historial: (id: string) => pedir<HistorialItem[]>(`/pacientes/${id}/historial`),
@@ -176,6 +209,51 @@ export interface Servicio {
   id: string; nombre: string; categoria: string; tipo: string;
   duracionMin: number; cupos: number;
   requiereOrden?: boolean; politicaCosto?: string; activo?: boolean;
+  /** Ficha comercial (RN-04.5.1) · sin descripción ni beneficios el bot no lo ofrece. */
+  descripcionComercial?: string | null;
+  beneficios?: string[];
+  preparacion?: string | null;
+  enlaceInfo?: string | null;
+  rangoPrecio?: string | null;
+  agendable?: boolean;
+}
+
+/** RN-04.5.4 · lo que arrastra desactivar un servicio. */
+export interface ImpactoBaja {
+  citas: number;
+  citasVigentes: number;
+  seguimientosCancelados: number;
+  articulosParaRevisar: number;
+}
+
+/** RN-13 · artículo de la base de conocimiento. */
+export interface Articulo {
+  id: string; titulo: string; categoria: string; contenidoMd: string;
+  servicioId: string | null; estado: 'borrador' | 'publicado' | 'archivado';
+  version: number; requiereRevision: boolean; actualizadoEn: string;
+  _count?: { fragmentos: number };
+}
+
+export interface FragmentoRecuperado {
+  titulo: string; texto: string; puntaje: number; articuloId: string;
+}
+
+export type ResultadoPrueba =
+  | { tipo: 'bloqueada'; tema: string }
+  | { tipo: 'sin_cobertura'; mejorPuntaje: number; fragmentos: FragmentoRecuperado[] }
+  | { tipo: 'respondida'; mejorPuntaje: number; fragmentos: FragmentoRecuperado[] };
+
+export interface PreguntaPendiente {
+  id: string; preguntaEjemplo: string; ocurrencias: number;
+  estado: string; actualizadoEn: string;
+}
+
+/** RN-09.9.8 · interesado sin agendar, con el paso de su secuencia. */
+export interface Interesado {
+  conversacionId: string; telefono: string; paciente: string | null;
+  servicio: string; desde: string;
+  enviados: number; totalPasos: number;
+  proximoPaso: string | null; proximoEnvio: string | null;
 }
 export interface Cita {
   id: string; codigo: string; tipo: string; fecha: string; horaInicio: number; duracionMin: number;

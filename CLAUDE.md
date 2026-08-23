@@ -8,7 +8,10 @@ Canales: backoffice (asistentes/admin), WhatsApp con IA, portal público de auto
 
 ## Documentos — fuente de verdad
 
-Están en `docs/`. **Las reglas RN-01 a RN-12 son la fuente de verdad. Ante cualquier duda de comportamiento, léelas antes de programar.**
+Están en `docs/`. **Las reglas RN-01 a RN-13 son la fuente de verdad. Ante cualquier duda de comportamiento, léelas antes de programar.**
+
+Los documentos v2.0 están **congelados**. Las reglas acordadas después viven en su propio archivo
+(`docs/rn-*.md`) para no reescribir la línea base; ahí se anota de qué familia extienden.
 
 | Archivo | Qué contiene |
 |---|---|
@@ -17,6 +20,12 @@ Están en `docs/`. **Las reglas RN-01 a RN-12 son la fuente de verdad. Ante cual
 | `docs/MediTurno_Provivir_Arquitectura_v1.0.md` | Módulos, modelo de datos, ADRs A1–A7 |
 | `docs/MediTurno_Provivir_Guia_Desarrollo_ClaudeCode_v1.0.md` | Fases 0–6, pruebas y seguridad por fase |
 | `docs/index_v2.html` | **Especificación visual.** El prototipo manda en UI: layout, paleta, textos, componentes. |
+| `docs/rn-09-8-oferta-web.md` | **RN-09.8.** El bot ofrece el enlace del portal al detectar intención de agendar |
+| `docs/rn-09-9-seguimiento-comercial.md` | **RN-09.9.** Secuencia de 3 mensajes al interesado que no agenda (extiende RN-09.8) |
+| `docs/rn-04-5-catalogo-comercial.md` | **RN-04.5.** Ficha comercial del servicio y gobierno del catálogo |
+| `docs/rn-13-base-conocimiento.md` | **RN-13.** Base de conocimiento del bot: artículos versionados con recuperación |
+| `docs/adr-a5-proveedor-ia.md` | **ADR A5 revisado.** Proveedor de IA por configuración, dos adaptadores |
+| `docs/adr-a8-recuperacion-conocimiento.md` | **ADR A8.** Recuperación sin pgvector, y por qué |
 
 Precedencia si algo se contradice: Lógica de Negocio > Especificación > Arquitectura > prototipo.
 
@@ -31,6 +40,17 @@ Precedencia si algo se contradice: Lógica de Negocio > Especificación > Arquit
 - **Zona horaria:** "hoy" se calcula SIEMPRE con `hoyEnSede()`/`fechaEnZona()` de `@provivir/shared`.
   La clínica opera en Cali (UTC−5) y el servidor puede estar en otra zona; usar la del servidor
   desplaza el día entero. Nunca `new Date().toISOString().slice(0,10)`.
+- **RN-13 · El bot no responde con conocimiento propio.** Toda afirmación sale de una herramienta
+  (`buscar_conocimiento`, `consultar_servicio`, `listar_servicios`). **Las cifras salen del catálogo,
+  nunca de un fragmento de texto.** Sin cobertura suficiente se escala, no se aproxima.
+- **RN-13 · Los artículos se archivan, no se borran.** Archivar los saca del índice en la misma
+  transacción; la ficha se conserva porque la auditoría debe poder explicar respuestas ya dadas.
+  Borrado físico solo de borradores.
+- **RN-09.9 · Antes de cada envío de seguimiento se revalida todo**, no al encolarlo. El paciente
+  pudo agendar por otro canal entretanto. Las condiciones que cancelan ganan sobre las que difieren.
+- **`packages/shared` se compila antes que la API.** La API resuelve `@provivir/shared` contra su
+  `dist`, no contra el código; jest sí mapea al fuente. Si no se recompila, una constante nueva del
+  paquete compartido pasa las pruebas y no llega a lo que corre.
 - **El motor es el único que calcula reglas.** `citas.reglas.ts` tiene las funciones puras;
   `citas.service.ts` las orquesta en transacciones. Ningún otro módulo replica lógica de agendamiento.
 
@@ -87,9 +107,15 @@ Borrar migraciones · cambiar el esquema de auditoría · tocar la verificación
 | 5 · Autoagendamiento web + kiosko apagado | **Completa** — `docs/changelog-fase5.md` |
 | 4 · WhatsApp + IA + bandeja | **Completa** (incluye RN-09.8) — `docs/changelog-fase4.md` |
 | 6 · Métricas, endurecimiento y piloto | **Completa** — `docs/changelog-fase6.md` |
+| 7 · Base de conocimiento + seguimiento comercial | **Completa** salvo el golden set — `docs/changelog-fase7.md` |
 
-**Las seis fases están completas.** Lo que falta para producción son credenciales e insumos
+**Las seis primeras fases están completas.** Lo que falta para producción son credenciales e insumos
 del cliente, no código: ver `docs/checklist-piloto.md` y `despliegue/GUIA-DESPLIEGUE.md`.
+
+**Fase 7** es trabajo posterior al alcance original: convierte `configuracion.documentacion_comercial`
+—hoy un bloque de texto inyectado en cada conversación— en artículos versionados con recuperación
+(RN-13), extiende el seguimiento de RN-09.8 a una secuencia comercial (RN-09.9) y completa el
+gobierno del catálogo (RN-04.5).
 
 **La Fase 5 se adelantó a la Fase 4** por decisión del cliente: el bot debe ofrecer el enlace
 del portal (RN-09.8) y no puede apuntar a algo inexistente.
@@ -117,8 +143,8 @@ Ninguna fase se cierra sin sus pruebas en verde y su demo funcionando. No se ava
 
 ## Parámetros configurables (nunca en código)
 
-`hueco_max` (RN-03) · ventana de control por prestador (RN-01.3) · duraciones por prestador y tipo · umbrales de confianza de la IA · `KIOSKO_ACTIVO=false` (D3) · intervalo del video institucional (RN-11.2). Van en tabla de configuración.
+`hueco_max` (RN-03) · ventana de control por prestador (RN-01.3) · duraciones por prestador y tipo · umbrales de confianza de la IA · `KIOSKO_ACTIVO=false` (D3) · intervalo del video institucional (RN-11.2) · `whatsapp_seguimiento_portal_min` (RN-09.8.4) · `whatsapp_botones_interactivos` (RN-09.2) · `kb_score_min` y la lista de temas de escalamiento obligatorio (RN-13.3, RN-13.4) · encendido y cadencia del seguimiento comercial (RN-09.9). Van en tabla de configuración.
 
 ## Pendientes del cliente que bloquean
 
-P1 base de pacientes (bloquea carga masiva) · P2 duraciones · P3 ventanas de control (bloquea RN-01) · P6 documentación comercial (bloquea calidad del bot) · P9 CSV de contactos · P10 enlaces de YouTube. Detalle en la Especificación §5.
+P1 base de pacientes (bloquea carga masiva) · P2 duraciones · P3 ventanas de control (bloquea RN-01) · P6 documentación comercial (bloquea RN-13 entera) · P9 CSV de contactos · P10 enlaces de YouTube · P12 temas que el bot siempre escala (RN-13.4) · P13 información operativa para los primeros artículos. Detalle en la Especificación §5 y en `docs/checklist-piloto.md`.
