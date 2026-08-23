@@ -1,6 +1,6 @@
 # Changelog · FASE 7 — Base de conocimiento y seguimiento comercial
 
-**Estado:** en curso. RN-13 cerrada de punta a punta y RN-09.9 implementada y **activa**; **231 unitarias y 157 e2e en verde**.
+**Estado:** backend completo. RN-13, RN-09.9 y RN-04.5 implementadas; falta el frontend. **231 unitarias y 171 e2e en verde**.
 
 Fase posterior al alcance original. Convierte `configuracion.documentacion_comercial` —hoy un
 bloque de texto inyectado en el prompt de **todas** las conversaciones— en artículos versionados
@@ -262,11 +262,40 @@ ventana de 24 h (descarta), y una condición de corte que gana sobre el diferimi
 Una prueba obligó a corregir el primer mensaje: hacía **dos** preguntas y la regla pide un solo
 llamado a la acción.
 
+## Gobierno del catálogo (RN-04.5)
+
+Ficha comercial en los DTO, `@Delete` con su restricción, baja y alta con efectos en cadena, y un
+endpoint de impacto para consultar qué arrastra una baja **antes** de decidirla.
+
+### La cascada vive en el servicio, no en el endpoint
+
+El backoffice ya editaba `activo` desde el formulario del catálogo, así que atar los efectos en
+cadena al endpoint dedicado habría dejado un camino por el que se desactiva un servicio sin cancelar
+sus seguimientos ni marcar sus artículos. `actualizar()` detecta la transición y dispara la cascada
+venga por donde venga. Por eso `activo` se conserva en el DTO de actualización en lugar de sacarlo.
+
+### No se puede eliminar lo que tiene historia
+
+Un servicio con citas no se elimina: borrarlo arrancaría su nombre del historial de esos pacientes
+y de la auditoría. La clave foránea lo impediría igual, pero se comprueba antes para poder explicar
+por qué en vez de devolver un error de base de datos. Sin citas sí se borra, soltando primero los
+vínculos que no son historia de nadie (prestador-servicio y artículos).
+
+### Auditoría que distingue lo que importa
+
+Un cambio de duración, cupos o `requiereOrden` se registra con el antes y el después y marcado como
+**no retroactivo**; un cambio de descripción, no. Quien revise la auditoría busca lo primero.
+
+**14 e2e:** la duración cambia sin tocar las citas ya agendadas, un servicio con citas no se elimina
+y sin citas sí, desactivar conserva las citas y cancela seguimientos y marca artículos, la cascada
+ocurre también desde el PATCH del formulario, el impacto se consulta sin cambiar nada, y un servicio
+desactivado desaparece de la oferta del bot pero sigue existiendo para el historial.
+
 ## Pendiente en esta fase
 
-`@Delete` de servicios con su restricción y los efectos en cadena (RN-04.5) · pantalla de
-conocimiento y bloque de interesados en el backoffice (el endpoint `GET /bandeja/interesados` ya
-existe) · golden set y calibración del umbral.
+Solo frontend y calibración: pantalla de conocimiento en el backoffice, bloque de interesados en la
+bandeja (el endpoint `GET /bandeja/interesados` ya existe), edición de la ficha comercial en el
+formulario del catálogo, y el golden set con la calibración del umbral.
 
 **Requieren decisión:** fusionar a `main` y desplegar —hasta entonces ningún paciente recibe nada—,
 la aprobación de los textos por el cliente (D-d) y su contenido (P6 real, P12 aprobado, P13). El
