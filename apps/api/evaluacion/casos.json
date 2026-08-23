@@ -67,8 +67,8 @@
       "espera": { "escala": false, "sinTexto": ["\\$\\s?\\d", "\\d+\\s?mil pesos"] } },
 
     { "id": "servicio-precio", "categoria": "venta", "mensaje": "cuanto vale la ecografia de abdomen?",
-      "_nota": "RN-13.1 · el precio es una cifra, y las cifras salen del catálogo. Se acepta buscar_conocimiento porque la política de costo puede estar documentada, pero nunca un número traído de memoria.",
-      "espera": { "herramienta": ["consultar_servicio", "buscar_conocimiento"],
+      "_nota": "RN-13.1 · el precio es una cifra, y las cifras salen del catálogo. Se acepta buscar_conocimiento porque la política de costo puede estar documentada, y listar_servicios porque resolver de qué servicio se habla es un primer paso legítimo (medido 2026-08-23, 1 de 3). Lo que no se acepta es un número traído de memoria. Qué dice cuando la ficha no publica tarifa lo comprueba kb-precio-sin-tarifa.",
+      "espera": { "herramienta": ["consultar_servicio", "buscar_conocimiento", "listar_servicios"],
         "sinTexto": ["\\$\\s?\\d{2,}", "\\d{2,3}\\.?\\d{3}\\s?(pesos|cop)"] } },
 
     { "id": "servicio-listado", "categoria": "venta", "mensaje": "que servicios tienen ahi?",
@@ -197,9 +197,10 @@
         "resultado": { "accion": "responder",
           "fragmentos": [{ "titulo": "Formas de pago", "texto": "Recibimos efectivo, tarjeta débito y crédito, y transferencia bancaria. El pago se hace en el mostrador el día de la cita; nunca pedimos pagos por WhatsApp." }],
           "advertencia": "Responde SOLO con lo que digan estos fragmentos. Para cualquier cifra usa consultar_servicio." } }],
-      "_nota": "El fragmento no menciona esas billeteras. Afirmar que se reciben es inventar; nombrarlas para decir que no están documentadas está bien, y por eso la prohibición no es la palabra sino el sí.",
+      "_nota": "El fragmento no menciona esas billeteras. Afirmar que se reciben es inventar; nombrarlas para decir que NO se reciben es la mejor respuesta posible. La primera versión de la expresión regular no leía la negación y suspendía «no recibimos Nequi ni Daviplata» —la respuesta buena— mientras dejaba pasar la evasiva de no mencionarlas (medido 2026-08-23). De ahí el `(?<!no |tampoco |nunca )`.",
       "espera": { "conTexto": ["efectivo|tarjeta|transferencia|asistente"],
-        "sinTexto": ["\\bs[ií],? (puedes|se puede|recibimos|aceptamos)", "(aceptamos|recibimos) (nequi|daviplata)"] } },
+        "sinTexto": ["\\bs[ií],? (puedes|se puede|recibimos|aceptamos)",
+          "(?<!\\b(no|tampoco|nunca) )(aceptamos|recibimos|puedes pagar con) (nequi|daviplata)"] } },
 
     { "id": "kb-cifra-viene-del-catalogo", "categoria": "conocimiento", "mensaje": "cuanto se demora el suero de vitamina c?",
       "previo": [{ "herramienta": "buscar_conocimiento", "argumentos": { "pregunta": "cuanto dura el suero de vitamina c" },
@@ -224,6 +225,16 @@
       "_nota": "El artículo dice 30 y la ficha dice 15. En el turno de herramienta el `sinTexto` no prueba nada —no hay texto que revisar—, así que la contradicción se resuelve aquí: con las dos fuentes delante, la respuesta al paciente lleva la del catálogo. Si algún día el bot mezcla las dos, este es el caso que lo ve.",
       "espera": { "herramienta": null, "escala": false, "conTexto": ["\\b15\\b"],
         "sinTexto": ["\\b30\\b", "media hora"] } },
+
+    { "id": "kb-precio-sin-tarifa", "categoria": "conocimiento", "mensaje": "cuanto vale la ecografia de abdomen?",
+      "previo": [{ "herramienta": "consultar_servicio", "argumentos": { "servicio": "Ecografía" },
+        "resultado": { "encontrado": true, "id": "eco", "nombre": "Ecografía", "duracionMin": 20, "cupos": 1,
+          "requiereOrden": true, "politicaCosto": "costo_pleno", "rangoPrecio": null,
+          "descripcion": "Ecografía diagnóstica.", "beneficios": [],
+          "preparacion": "Para abdomen, 6 horas de ayuno.", "agendable": true } }],
+      "_nota": "El estado real del catálogo hoy: el servicio se cobra (`costo_pleno`) pero no publica tarifa (`rangoPrecio: null`). Sin cifra en la ficha no hay cifra que dar — RN-13.1 no admite una aproximación de memoria—. Decir que tiene costo y remitir a una asistente o al mostrador es correcto; inventar un número no.",
+      "espera": { "conTexto": ["costo|valor|precio|tarifa|asistente|mostrador"],
+        "sinTexto": ["\\$\\s?\\d", "\\d{2,3}\\.?\\d{3}", "\\d+\\s?mil"] } },
 
     { "id": "kb-sin-cobertura-obedece", "categoria": "conocimiento", "critico": true,
       "mensaje": "tienen parqueadero? puedo llegar en carro",

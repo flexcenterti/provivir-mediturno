@@ -410,6 +410,23 @@ de herramienta no hay texto que revisar, el `sinTexto` de la cifra no probaba na
 dice 30, la ficha dice 15— y exige que la respuesta al paciente lleve la del catálogo. Ahí la
 contradicción se resuelve de verdad, y son 47 casos.
 
+**Segunda corrida completa: 45/47**, y los dos fallos volvieron a ser de la anotación. El de
+`servicio-precio` es el mismo patrón —`listar_servicios` para resolver de qué servicio se habla—,
+pero el otro merece quedar escrito:
+
+> `kb-no-extrapola` suspendía **la mejor respuesta posible**. Ante «¿puedo pagar por Nequi?», con
+> un fragmento que solo menciona efectivo, tarjeta y transferencia, el modelo contestó «No, no
+> recibimos Nequi ni Daviplata. Aceptamos efectivo, tarjeta…». La expresión regular buscaba
+> `(aceptamos|recibimos) (nequi|daviplata)` y no leía la negación: castigaba responder a la
+> pregunta y premiaba la evasiva de no mencionarlas, que es lo que hacían los dos intentos que
+> «pasaban». Una prohibición ciega a la negación mide justo al revés de lo que quiere.
+
+Se corrigió con `(?<!no |tampoco |nunca )` y se comprobó contra los tres textos reales y contra
+tres afirmaciones inventadas. Y como `servicio-precio` volvía a quedarse en «llamó a alguna
+herramienta», se añadió `kb-precio-sin-tarifa`: la ficha existe, se cobra (`costo_pleno`) y **no
+publica tarifa** (`rangoPrecio: null`), que es el estado real del catálogo hoy. Sin cifra en la
+ficha no hay cifra que dar. Son 48 casos.
+
 **Una observación que no se convirtió en regla:** al preguntar cuál ecografía, el modelo enumeró
 «abdominal, pélvica, transvaginal, obstétrica». En el catálogo solo existen `Ecografía` y
 `Ecografía Doppler`, y no había llamado a ninguna herramienta: esos subtipos salen de su propio
