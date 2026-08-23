@@ -160,8 +160,8 @@ El script cifra con AES-256, descarta volcados truncados y rota a 30 días. La c
 ```bash
 sudo tee /etc/provivir/respaldo.env > /dev/null <<'ENV'
 export RESPALDO_CLAVE='<generar con: openssl rand -base64 32>'
-export DATABASE_URL='postgresql://provivir:<clave>@postgres:5432/provivir'
 export PG_SERVICIO=postgres
+export PG_BASE=provivir
 export COMPOSE=/home/crivas/provivir/despliegue/docker-compose.prod.yml
 export COMPOSE_ENV=/etc/provivir/.env
 export DIR_RESPALDOS=/var/backups/provivir
@@ -171,8 +171,16 @@ sudo mkdir -p /var/backups/provivir
 ```
 
 `DIR_RESPALDOS` apunta **fuera del repositorio**: el valor por defecto escribe dentro, y así fue
-como un volcado terminó en git. El `DATABASE_URL` usa el host `postgres` porque `pg_dump` corre
-dentro de la red de Docker.
+como un volcado terminó en git.
+
+**No hace falta la contraseña de Postgres.** Con `PG_BASE`, el volcado corre dentro del contenedor
+y se conecta por el socket local, así que la clave no se copia a un segundo archivo donde pueda
+quedar desincronizada — que es exactamente el error que dio `password authentication failed` la
+primera vez que se intentó.
+
+El script imprime **`Origen:`** antes de volcar. Vale la pena mirarlo: con `PG_SERVICIO` se niega a
+heredar el `.env` del repositorio —que es el de desarrollo—, precisamente para no producir un
+respaldo con buen aspecto y sin un solo dato de producción.
 
 ```bash
 sudo crontab -e
@@ -199,7 +207,7 @@ sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/proviv
   exec postgres psql -U provivir -d postgres -c "CREATE DATABASE prueba_restauracion;"
 
 sudo bash -c '. /etc/provivir/respaldo.env
-  DATABASE_URL="postgresql://provivir:<clave>@postgres:5432/prueba_restauracion" \
+  PG_BASE=prueba_restauracion \
   /home/crivas/provivir/apps/api/scripts/respaldo.sh --restaurar /var/backups/provivir/provivir-XXXX.dump.gz.enc'
 
 # Comprobar que llegaron datos, no solo que el comando no falló:
