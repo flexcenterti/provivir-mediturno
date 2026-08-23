@@ -10,8 +10,17 @@
 #   RESPALDO_CLAVE='...' ./scripts/respaldo.sh
 #   RESPALDO_CLAVE='...' ./scripts/respaldo.sh --restaurar respaldos/provivir-2026-08-21.dump.gz.enc
 #
+# Sin `pg_dump` en el host —el caso normal en este servidor, donde Postgres vive
+# en un contenedor— se usan las herramientas del propio contenedor:
+#
+#   PG_SERVICIO=postgres COMPOSE=/home/crivas/provivir/despliegue/docker-compose.prod.yml \
+#   COMPOSE_ENV=/etc/provivir/.env RESPALDO_CLAVE='...' ./scripts/respaldo.sh
+#
+# `DIR_RESPALDOS` conviene apuntarlo FUERA del repositorio: su valor por defecto
+# escribe dentro, y así fue como un volcado terminó versionado en git.
+#
 # En cron (diario a las 2:00, con la clave en /etc/provivir/respaldo.env):
-#   0 2 * * * . /etc/provivir/respaldo.env && /opt/provivir/apps/api/scripts/respaldo.sh >> /var/log/provivir-respaldo.log 2>&1
+#   0 2 * * * . /etc/provivir/respaldo.env && /home/crivas/provivir/apps/api/scripts/respaldo.sh >> /var/log/provivir-respaldo.log 2>&1
 
 set -euo pipefail
 
@@ -23,6 +32,33 @@ RETENCION_DIAS="${RETENCION_DIAS:-30}"
 # postgresql-client; PG_BIN permite apuntar a una instalación de usuario.
 PG_BIN="${PG_BIN:-$(dirname "$(command -v pg_dump 2>/dev/null || echo /usr/bin/pg_dump)")}"
 export LD_LIBRARY_PATH="${PG_LIB:-}${PG_LIB:+:}${LD_LIBRARY_PATH:-}"
+
+# Postgres en contenedor: si se indica PG_SERVICIO se usan sus binarios en vez de
+# exigir postgresql-client en el host. Además es más correcto, porque la URL de
+# producción apunta al host `postgres`, que solo resuelve dentro de la red de Docker.
+PG_SERVICIO="${PG_SERVICIO:-}"
+COMPOSE="${COMPOSE:-}"
+COMPOSE_ENV="${COMPOSE_ENV:-}"
+
+# `exec -T` porque en cron no hay TTY que asignar.
+en_postgres() {
+  local args=(compose)
+  [ -n "$COMPOSE" ] && args+=(-f "$COMPOSE")
+  [ -n "$COMPOSE_ENV" ] && args+=(--env-file "$COMPOSE_ENV")
+  args+=(exec -T "$PG_SERVICIO")
+  docker "${args[@]}" "$@"
+}
+
+herramienta() {
+  if [ -n "$PG_SERVICIO" ]; then en_postgres "$@"; else "$PG_BIN/$1" "${@:2}"; fi
+}
+
+if [ -z "$PG_SERVICIO" ] && ! command -v "$PG_BIN/pg_dump" >/dev/null 2>&1 && [ ! -x "$PG_BIN/pg_dump" ]; then
+  echo "No hay pg_dump en $PG_BIN." >&2
+  echo "Instala postgresql-client, o usa el contenedor con PG_SERVICIO=postgres" >&2
+  echo "(y COMPOSE=/ruta/docker-compose.prod.yml COMPOSE_ENV=/etc/provivir/.env)." >&2
+  exit 1
+fi
 
 if [ -z "${DATABASE_URL:-}" ]; then
   # shellcheck disable=SC1091
@@ -68,7 +104,7 @@ restaurar() {
   # que indique DATABASE_URL, que en una prueba debe ser una base desechable.
   openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:RESPALDO_CLAVE -in "$archivo" \
     | gunzip \
-    | "$PG_BIN/pg_restore" --dbname "$URL_PG" --clean --if-exists --no-owner --no-privileges
+    | herramienta pg_restore --dbname "$URL_PG" --clean --if-exists --no-owner --no-privileges
 
   echo "Restauración completa."
 }
@@ -88,7 +124,7 @@ echo "Generando respaldo $DESTINO"
 trap 'rm -f "$DESTINO"' ERR
 
 # El formato custom (-Fc) permite restauración selectiva y es más compacto que SQL plano.
-"$PG_BIN/pg_dump" --dbname "$URL_PG" --format=custom --no-owner --no-privileges \
+herramienta pg_dump --dbname "$URL_PG" --format=custom --no-owner --no-privileges \
   | gzip -9 \
   | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:RESPALDO_CLAVE -out "$DESTINO"
 

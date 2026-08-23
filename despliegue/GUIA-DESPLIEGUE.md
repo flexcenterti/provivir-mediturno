@@ -75,8 +75,13 @@ pacientes sin cifrar no debe existir.
 
 ## 3. Desplegar
 
+> **Instalación actual: `/home/crivas/provivir`**, con los contenedores construidos desde
+> `despliegue/`. El repositorio **no tiene remoto configurado**: el árbol de trabajo ES el origen
+> del despliegue, así que no hay `git clone` ni `git pull` que traiga nada. Para una instalación
+> nueva en otro servidor, clonar donde corresponda y ajustar las rutas de esta guía y del cron.
+
 ```bash
-git clone <repo> /opt/provivir && cd /opt/provivir
+cd /home/crivas/provivir          # instalación nueva: clonar primero y ajustar rutas
 npm ci && npm run build          # genera los tres frontends
 
 # Dominio único con rutas: el backoffice va en la raíz, portal y TV en subcarpetas
@@ -143,20 +148,66 @@ La plataforma responde el `hub.challenge` solo si el token coincide.
 
 ## 6. Respaldos automáticos
 
+> **Comprobado el 23-08-2026: no había ninguno corriendo.** El cron de esta guía apuntaba a
+> `/opt/provivir`, que no existe en el servidor, y el host **no tiene `pg_dump`** —Postgres vive en
+> un contenedor—, así que el script no habría funcionado ni con la ruta correcta. El único archivo
+> en `apps/api/respaldos/` era un artefacto de desarrollo que además quedó versionado en git.
+> Corregido: el script ya puede usar las herramientas del contenedor, y `respaldos/` está ignorado.
+
+El script cifra con AES-256, descarta volcados truncados y rota a 30 días. La clave va en
+`/etc/provivir/respaldo.env` (permisos `600`), **nunca** en el repositorio ni en el cron:
+
+```bash
+sudo tee /etc/provivir/respaldo.env > /dev/null <<'ENV'
+export RESPALDO_CLAVE='<generar con: openssl rand -base64 32>'
+export DATABASE_URL='postgresql://provivir:<clave>@postgres:5432/provivir'
+export PG_SERVICIO=postgres
+export COMPOSE=/home/crivas/provivir/despliegue/docker-compose.prod.yml
+export COMPOSE_ENV=/etc/provivir/.env
+export DIR_RESPALDOS=/var/backups/provivir
+ENV
+sudo chmod 600 /etc/provivir/respaldo.env
+sudo mkdir -p /var/backups/provivir
+```
+
+`DIR_RESPALDOS` apunta **fuera del repositorio**: el valor por defecto escribe dentro, y así fue
+como un volcado terminó en git. El `DATABASE_URL` usa el host `postgres` porque `pg_dump` corre
+dentro de la red de Docker.
+
 ```bash
 sudo crontab -e
 # Diario a las 2:00
-0 2 * * * . /etc/provivir/.env && /opt/provivir/apps/api/scripts/respaldo.sh >> /var/log/provivir-respaldo.log 2>&1
+0 2 * * * . /etc/provivir/respaldo.env && /home/crivas/provivir/apps/api/scripts/respaldo.sh >> /var/log/provivir-respaldo.log 2>&1
 ```
 
-**Probar la restauración antes del lanzamiento** — un respaldo que nunca se restauró
-no es un respaldo:
+**Verificar que produce un archivo, sin esperar a mañana:**
 
 ```bash
-docker compose -f despliegue/docker-compose.prod.yml exec postgres \
-  psql -U provivir -d postgres -c "CREATE DATABASE prueba_restauracion;"
-DATABASE_URL="postgresql://provivir:...@localhost:5432/prueba_restauracion" \
-  ./apps/api/scripts/respaldo.sh --restaurar respaldos/provivir-XXXX.dump.gz.enc
+sudo bash -c '. /etc/provivir/respaldo.env && /home/crivas/provivir/apps/api/scripts/respaldo.sh'
+sudo ls -lh /var/backups/provivir/
+```
+
+Debe imprimir `Respaldo completo:` con un tamaño con cuerpo. Si el script no encuentra `pg_dump`
+lo dice y sale con error, en vez de dejar un archivo vacío que parece bueno.
+
+**Probar la restauración antes del lanzamiento** — un respaldo que nunca se restauró no es un
+respaldo. Se restaura sobre una base **desechable**, nunca sobre `provivir`:
+
+```bash
+cd /home/crivas/provivir
+sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env \
+  exec postgres psql -U provivir -d postgres -c "CREATE DATABASE prueba_restauracion;"
+
+sudo bash -c '. /etc/provivir/respaldo.env
+  DATABASE_URL="postgresql://provivir:<clave>@postgres:5432/prueba_restauracion" \
+  /home/crivas/provivir/apps/api/scripts/respaldo.sh --restaurar /var/backups/provivir/provivir-XXXX.dump.gz.enc'
+
+# Comprobar que llegaron datos, no solo que el comando no falló:
+sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env \
+  exec postgres psql -U provivir -d prueba_restauracion -c "SELECT count(*) FROM paciente;"
+
+sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env \
+  exec postgres psql -U provivir -d postgres -c "DROP DATABASE prueba_restauracion;"
 ```
 
 Copiar los respaldos **fuera del servidor**: si el VPS muere, los respaldos mueren con él.
@@ -177,16 +228,36 @@ y a `https://provivir.exagos.co/citas`, que llevan políticas distintas.
 **Respalda antes de migrar.** Es un minuto y es la diferencia entre un susto y una pérdida:
 
 ```bash
-docker compose -f despliegue/docker-compose.prod.yml exec postgres \
+cd /home/crivas/provivir && sudo docker compose -f despliegue/docker-compose.prod.yml \
+  --env-file /etc/provivir/.env exec postgres \
   pg_dump -U provivir provivir | gzip > ~/respaldo-$(date +%F-%H%M).sql.gz
+
+# Un pg_dump por tubería falla en silencio: gzip crea el archivo igual. Comprobar SIEMPRE.
+gunzip -c ~/respaldo-*.sql.gz | tail -3    # debe terminar en: PostgreSQL database dump complete
 ```
 
+> **El repositorio ES el origen del despliegue.** Los contenedores se construyen desde
+> `/home/crivas/provivir` (compose en `despliegue/`), y no hay remoto configurado: no existe
+> `git pull` que traiga nada. **Se despliega lo que esté en el árbol de trabajo en ese momento.**
+> Antes de reconstruir, comprobar en qué commit está: `git log --oneline -1`.
+>
+> Corolario incómodo: un `up -d --build` por cualquier motivo despliega lo que haya en disco,
+> aunque no fuera la intención.
+
 ```bash
-cd /opt/provivir && git pull
+cd /home/crivas/provivir && git log --oneline -1     # ¿es esto lo que se quiere desplegar?
 npm ci && npm run build && cp -r apps/backoffice/dist/. despliegue/web/ && cp -r apps/portal/dist despliegue/web/citas && cp -r apps/tv/dist despliegue/web/tv
-docker compose -f despliegue/docker-compose.prod.yml up -d --build api
-docker compose -f despliegue/docker-compose.prod.yml exec api npx prisma migrate deploy
+sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env up -d --build api
+sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env exec api npx prisma migrate deploy
 ```
+
+**Los comandos van con `sudo` y con `--env-file`.** Los contenedores corren como `ubuntu` y los
+secretos viven en `/etc/provivir/.env`, que es de `root`. Sin `--env-file`, el compose falla con
+`required variable POSTGRES_PASSWORD is missing a value` antes de hacer nada.
+
+**El frontend y la API se despliegan por separado.** Caddy sirve `despliegue/web/` como bind-mount
+de solo lectura, así que las pantallas no cambian hasta que se copian los `dist`. Reconstruir la
+API sola deja el backoffice viejo contra la API nueva.
 
 Las migraciones son versionadas y se aplican con `migrate deploy`, que **nunca** borra datos.
 

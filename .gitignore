@@ -31,3 +31,9 @@ test-results/
 playwright-report/
 dist-esm/
 e2e/capturas/
+
+# Respaldos de la base: NUNCA en el repositorio.
+# Un volcado cifrado de ~200.000 pacientes no va en git, y si entra queda en el
+# historial para siempre. El checklist además los quiere fuera del servidor.
+respaldos/
+*.dump.gz.enc
