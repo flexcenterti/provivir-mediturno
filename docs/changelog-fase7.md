@@ -372,8 +372,20 @@ todo hace fallar los dos críticos con código de salida 1. Además registra las
 se comprobó que el historial que se le manda al modelo tiene la misma forma que arma
 `ia.service.ts`.
 
-Eso comprueba el arnés, no al modelo: **falta correrlo contra `gpt-5-mini` de verdad**, que
-cuesta llamadas y necesita la clave. Es lo primero que hay que hacer con los 15 casos nuevos.
+Eso comprueba el arnés, no al modelo. La corrida contra `gpt-5-mini` de verdad
+(`--categoria conocimiento --repeticiones 3`, 2026-08-23) dio **14/15, sin fallos críticos** y
+latencia mediana de 3,1 s. Los dos casos de obediencia pasan las tres repeticiones, y también
+`kb-cifra-viene-del-catalogo`: ante el artículo que dice 30 minutos, el modelo pide la ficha en
+vez de repetir la cifra. Falta correr las otras 31 categorías con esta configuración; el 31/31 del
+ADR A5 es de la anterior.
+
+**El único que falló era mi expectativa, no el bot.** `kb-mezcla-agendamiento` —una pregunta de
+preparación pegada a una intención de agendar— fallaba 1 de 3: el modelo mencionaba el portal en
+texto y aplazaba la consulta. Es exactamente lo que RN-09.8 le ordena («ese primer mensaje va en
+TEXTO, si ibas a consultar algo puede esperar al turno siguiente»), así que el caso medía la
+contradicción entre dos reglas y la anotaba como defecto. Ahora el caso declara
+`ofrecerWeb: false` —el portal ya se mencionó—, que es el estado donde la consulta ya no tiene
+excusa para esperar. El arnés arma los dos prompts y elige por caso.
 
 ## Pendiente en esta fase
 

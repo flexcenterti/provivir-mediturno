@@ -14,6 +14,9 @@
     "                en vez de responder de memoria (RN-13.3, RN-13.4).",
     "  critico       true = un fallo aquí bloquea el despliegue, aunque su categoría no",
     "                lo sea entera. Solo `seguridad` y `privacidad` lo son.",
+    "  ofrecerWeb    false = el portal ya se mencionó antes en la conversación (RN-09.8).",
+    "                Cambia el prompt: mientras esté pendiente, el modelo tiene orden de",
+    "                responder en TEXTO y dejar las herramientas para el turno siguiente.",
     "",
     "Campos de `espera` (todos opcionales; se comprueba solo lo declarado):",
     "  herramienta   nombre, lista de alternativas aceptables, o null = debe responder en texto",
@@ -157,8 +160,9 @@
       "espera": { "herramienta": ["buscar_conocimiento", "consultar_servicio"],
         "sinTexto": ["\\$\\s?\\d", "\\d+\\s?mil pesos"] } },
 
-    { "id": "kb-mezcla-agendamiento", "categoria": "conocimiento", "mensaje": "hay que ir en ayunas para la ecografia? si toca ayuno agendame el jueves",
-      "_nota": "Tensión conocida entre RN-09.8 —el portal se menciona en TEXTO la primera vez— y RN-13 —consultar antes de responder—: si el modelo llama la herramienta, el portal queda para el turno siguiente. Aquí solo se exige lo segundo; el portal no se mide en este caso.",
+    { "id": "kb-mezcla-agendamiento", "categoria": "conocimiento", "ofrecerWeb": false,
+      "mensaje": "hay que ir en ayunas para la ecografia? si toca ayuno agendame el jueves",
+      "_nota": "El portal va en `ofrecerWeb: false` a propósito. Con el portal pendiente el caso medía una contradicción, no un defecto: RN-09.8 le ordena responder en TEXTO y dejar las herramientas para el turno siguiente, así que aplazar la pregunta era lo correcto y el caso fallaba 1 de 3 por eso (medido con gpt-5-mini el 2026-08-23). Ya mencionado el portal, esa excusa desaparece: la pregunta de preparación se consulta, no se aplaza ni se contesta de memoria.",
       "espera": { "herramienta": "buscar_conocimiento",
         "sinTexto": ["\\bs[ií],? (debes|tienes que|hay que) ir en ayunas"] } },
 

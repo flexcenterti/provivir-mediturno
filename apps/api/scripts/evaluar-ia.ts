@@ -15,6 +15,7 @@
  *   OPENAI_API_KEY=... npm run evaluar -w @provivir/api
  *   OPENAI_API_KEY=... npm run evaluar -w @provivir/api -- --modelos gpt-5-mini,gpt-5-nano
  *   ... --categoria seguridad     limita a una categoría
+ *   ... --caso kb-mezcla-agendamiento   limita a un caso, para iterar sin pagar el resto
  *   ... --json informe.json       vuelca el detalle para revisarlo caso por caso
  *   ... --concurrencia 8          cuántos casos en vuelo a la vez (por defecto 4)
  *   ... --repeticiones 3          cada caso N veces (por defecto 1)
@@ -81,6 +82,12 @@ interface Caso {
   categoria: string;
   mensaje: string;
   previo?: TurnoPrevio[];
+  /**
+   * RN-09.8 · false = el portal ya se mencionó en esta conversación. Cambia el prompt,
+   * y con él lo que es correcto: mientras el portal esté pendiente, el modelo tiene
+   * orden de responder en TEXTO y dejar las herramientas para el turno siguiente.
+   */
+  ofrecerWeb?: boolean;
   /** Bloquea el despliegue aunque su categoría no sea crítica entera. */
   critico?: boolean;
   espera: Espera;
@@ -217,18 +224,23 @@ async function evaluar(modelo: string, casos: Caso[], concurrencia: number, repe
   // RN-13 vino a comprobar: que el bot consulta antes de responder en vez de recitar lo
   // que lleva en el prompt. `--sin-conocimiento` reproduce la instalación recién montada,
   // antes de importar P6, que también es un estado real del sistema.
-  const system = promptSistema({
-    urlPortal: URL_PORTAL,
-    documentacionComercial: SIN_CONOCIMIENTO ? DOCUMENTACION_COMERCIAL : undefined,
-    conocimientoDisponible: !SIN_CONOCIMIENTO,
-    ofrecerWeb: true,
-  });
+  const prompt = (ofrecerWeb: boolean): string =>
+    promptSistema({
+      urlPortal: URL_PORTAL,
+      documentacionComercial: SIN_CONOCIMIENTO ? DOCUMENTACION_COMERCIAL : undefined,
+      conocimientoDisponible: !SIN_CONOCIMIENTO,
+      ofrecerWeb,
+    });
+
+  // Dos, porque el bloque del portal cambia lo que el modelo debe hacer en el turno:
+  // con el portal pendiente tiene orden de contestar en texto y consultar después.
+  const system = { conWeb: prompt(true), sinWeb: prompt(false) };
 
   const uno = async (caso: Caso): Promise<Resultado> => {
     const t0 = Date.now();
     try {
       const r = await adaptador.responder({
-        system,
+        system: caso.ofrecerWeb === false ? system.sinWeb : system.conWeb,
         mensajes: conversacion(caso),
         herramientas: HERRAMIENTAS,
       });
@@ -340,10 +352,13 @@ async function main(): Promise<void> {
 
   const datos = JSON.parse(readFileSync(join(__dirname, '..', 'evaluacion', 'casos.json'), 'utf8')) as { casos: Caso[] };
   const categoria = argumento('categoria');
-  const casos = categoria ? datos.casos.filter((c) => c.categoria === categoria) : datos.casos;
+  const soloCaso = argumento('caso');
+  const casos = datos.casos
+    .filter((c) => !categoria || c.categoria === categoria)
+    .filter((c) => !soloCaso || c.id === soloCaso);
 
   if (!casos.length) {
-    console.error(`\n  Ningún caso en la categoría "${categoria}".\n`);
+    console.error(`\n  Ningún caso con ${soloCaso ? `id "${soloCaso}"` : `categoría "${categoria}"`}.\n`);
     process.exit(1);
   }
 
