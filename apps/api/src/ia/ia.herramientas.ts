@@ -48,6 +48,39 @@ export const HERRAMIENTAS: HerramientaLlm[] = [
     parametros: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
+    nombre: 'buscar_conocimiento',
+    descripcion:
+      'Busca en la documentación aprobada de la clínica para responder preguntas que NO son de ' +
+      'agendamiento: preparación de exámenes, horarios, ubicación, formas de pago, qué traer, ' +
+      'políticas de cancelación, cómo funciona la cita de control. Úsala ANTES de responder ' +
+      'cualquier pregunta de este tipo. Si devuelve accion="escalar", llama a escalar_a_asistente ' +
+      'con el motivo que te indique: NO respondas de memoria ni aproximes.',
+    parametros: {
+      type: 'object',
+      properties: {
+        pregunta: { type: 'string', description: 'La pregunta del paciente, tal como la hizo' },
+        servicioId: { type: 'string', description: 'Solo si la pregunta es claramente sobre un servicio concreto' },
+      },
+      required: ['pregunta'],
+      additionalProperties: false,
+    },
+  },
+  {
+    nombre: 'consultar_servicio',
+    descripcion:
+      'Ficha completa de UN servicio: duración, si requiere orden médica, costo, preparación y ' +
+      'beneficios. Es la ÚNICA fuente válida para cifras. Cualquier duración, costo o número de ' +
+      'cupos que menciones debe salir de aquí, nunca de un texto que hayas leído.',
+    parametros: {
+      type: 'object',
+      properties: {
+        servicio: { type: 'string', description: 'Identificador o nombre del servicio' },
+      },
+      required: ['servicio'],
+      additionalProperties: false,
+    },
+  },
+  {
     nombre: 'ofrecer_cupos',
     descripcion:
       'Devuelve los horarios disponibles para un servicio y una fecha. Es la ÚNICA forma válida de ' +

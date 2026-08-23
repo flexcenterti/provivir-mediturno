@@ -179,7 +179,14 @@ export class ConversacionService {
 
     if (resultado.respuesta) {
       try {
-        await this.enviar(conversacionId, telefono, resultado.respuesta);
+        await this.enviar(
+          conversacionId,
+          telefono,
+          resultado.respuesta,
+          resultado.kbArticulos?.length
+            ? { articulos: resultado.kbArticulos, score: resultado.kbScore }
+            : undefined,
+        );
       } catch (e) {
         if (!(e instanceof DestinatarioSinTelefono)) throw e;
         // Reintentar no sirve de nada, y dejarlo así deja al paciente sin
@@ -258,8 +265,19 @@ export class ConversacionService {
     this.gateway.emitirPendientesBandeja(await this.pendientes());
   }
 
-  /** Envía y persiste. El envío real va por cola con reintentos (whatsapp.cola.ts). */
-  async enviar(conversacionId: string, telefono: string, texto: string): Promise<void> {
+  /**
+   * Envía y persiste. El envío real va por cola con reintentos (whatsapp.cola.ts).
+   *
+   * `kb` guarda qué artículos sustentaron la respuesta (RN-13.7.3). Cuando el bot
+   * responde mal, esto es lo que permite ir al artículo culpable en vez de discutir
+   * sobre el prompt.
+   */
+  async enviar(
+    conversacionId: string,
+    telefono: string,
+    texto: string,
+    kb?: { articulos: string[]; score?: number },
+  ): Promise<void> {
     const waMessageId = await this.meta.enviarTexto(telefono, texto);
 
     await this.prisma.mensaje.create({
@@ -269,6 +287,8 @@ export class ConversacionService {
         tipo: 'texto',
         contenido: texto,
         waMessageId: waMessageId || null,
+        kbArticulosUsados: kb?.articulos ?? [],
+        kbScore: kb?.score ?? null,
       },
     });
   }

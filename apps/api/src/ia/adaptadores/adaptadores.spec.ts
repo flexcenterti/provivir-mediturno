@@ -257,8 +257,21 @@ describe('Adaptador de OpenAI', () => {
 });
 
 describe('Las herramientas son neutras de proveedor', () => {
-  it('define las 8 herramientas del motor', () => {
-    expect(HERRAMIENTAS).toHaveLength(8);
+  it('expone exactamente el inventario esperado', () => {
+    // Lista explícita y no un conteo: si alguien agrega o quita una herramienta,
+    // el fallo dice cuál, no que el número cambió.
+    expect(HERRAMIENTAS.map((h) => h.nombre)).toEqual([
+      'buscar_paciente',
+      'registrar_paciente',
+      'listar_servicios',
+      'buscar_conocimiento',
+      'consultar_servicio',
+      'ofrecer_cupos',
+      'confirmar_cita',
+      'consultar_citas',
+      'cancelar_cita',
+      'escalar_a_asistente',
+    ]);
   });
 
   it('cada una trae nombre, descripción y JSON Schema', () => {

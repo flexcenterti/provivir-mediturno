@@ -75,4 +75,7 @@ export interface ResultadoIA {
   citaCreada?: { codigo: string };
   /** Turnos del loop consumidos; alimenta el límite de gasto por conversación. */
   turnos: number;
+  /** RN-13.7.3 · Artículos que sustentaron la respuesta, y su puntaje. */
+  kbArticulos?: string[];
+  kbScore?: number;
 }

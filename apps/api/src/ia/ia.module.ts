@@ -5,6 +5,7 @@ import { AnthropicAdaptador } from './adaptadores/anthropic.adaptador';
 import { OpenAiAdaptador } from './adaptadores/openai.adaptador';
 import { CitasModule } from '../citas/citas.module';
 import type { ClienteLlm } from './ia.tipos';
+import { ConocimientoModule } from '../conocimiento/conocimiento.module';
 
 /**
  * El proveedor de IA se elige por configuración (`IA_PROVEEDOR`), no por código.
@@ -14,7 +15,7 @@ import type { ClienteLlm } from './ia.tipos';
  * de las conversaciones a la asistente por una variable mal puesta.
  */
 @Module({
-  imports: [CitasModule],
+  imports: [CitasModule, ConocimientoModule],
   providers: [
     AnthropicAdaptador,
     OpenAiAdaptador,

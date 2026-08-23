@@ -1,6 +1,6 @@
 # Changelog · FASE 7 — Base de conocimiento y seguimiento comercial
 
-**Estado:** en curso. Esquema migrado y módulo `conocimiento` operativo; **195 unitarias y 134 e2e en verde**.
+**Estado:** en curso. Esquema migrado, módulo `conocimiento` operativo y el bot ya lo consulta; **195 unitarias y 140 e2e en verde**.
 
 Fase posterior al alcance original. Convierte `configuracion.documentacion_comercial` —hoy un
 bloque de texto inyectado en el prompt de **todas** las conversaciones— en artículos versionados
@@ -138,12 +138,50 @@ la capa semántica es concreto: que la cola de preguntas sin respuesta se llene 
   reactivación a borrador, borrado restringido y reindexado al editar.
 - Un tema prohibido **no** entra a la cola de mejora: no se resuelve escribiendo un artículo.
 
+## Herramientas del orquestador
+
+Dos herramientas nuevas, de ocho a diez en el inventario.
+
+**`buscar_conocimiento(pregunta, servicioId?)`** · para todo lo que no es agendamiento.
+Cuando la base no cubre la pregunta **no devuelve texto**, devuelve `accion: "escalar"` con el
+motivo. Es la diferencia entre que el modelo reciba un "no sé" que pueda parafrasear y que reciba
+una orden. Lo mismo con los temas de RN-13.4: el modelo nunca ve el contenido, solo la instrucción
+de pasar a una persona.
+
+**`consultar_servicio(servicio)`** · ficha completa desde el catálogo, por id o por nombre. Es la
+única fuente válida para cifras. `listar_servicios` se conserva: devuelve el catálogo; esta
+devuelve el detalle de uno.
+
+**Trazabilidad (RN-13.7.3):** el mensaje saliente guarda `kbArticulosUsados` y `kbScore`. Cuando
+el bot responde mal se va al artículo culpable en vez de discutir sobre el prompt.
+
+**Prompt:** un bloque nuevo obliga a consultar antes de responder preguntas informativas y a
+escalar cuando la herramienta lo indique. El texto lo dice sin rodeos: *una respuesta aproximada
+sobre una preparación o un precio le cuesta el viaje al paciente; decir "déjame confirmarlo con
+una asistente" no le cuesta nada.*
+
+El bloque `documentacion_comercial` sigue inyectándose mientras la base se llena de artículos, tal
+como prevé RN-13. Se retira cuando el contenido esté migrado.
+
+**6 e2e nuevas** sobre el doble del modelo: pregunta cubierta con su trazabilidad, falta de
+cobertura que ordena escalar sin entregar fragmentos, tema prohibido que hace lo mismo, la ficha
+del servicio con las cifras del catálogo (el Doppler ocupa 2 espacios) y un servicio inexistente
+que devuelve `encontrado: false` en vez de inventarlo.
+
+La prueba que fijaba el inventario en «8 herramientas» pasó a comparar la lista de nombres: si
+alguien agrega o quita una, el fallo dice cuál.
+
 ## Pendiente en esta fase
 
-Herramientas `buscar_conocimiento` y `consultar_servicio` en el orquestador · migración del
-contenido de `documentacion_comercial` a artículos · extensión de la cola de RN-09.8 a los tres
-pasos · `@Delete` de servicios con su restricción y los efectos en cadena · bloque de interesados
-en la bandeja · pantalla de conocimiento en el backoffice · golden set.
+Migración del contenido de `documentacion_comercial` a artículos · extensión de la cola de RN-09.8
+a los tres pasos (RN-09.9) · `@Delete` de servicios con su restricción y los efectos en cadena
+(RN-04.5) · bloque de interesados en la bandeja · pantalla de conocimiento en el backoffice ·
+golden set y calibración del umbral.
+
+**Fuera de mi alcance, requieren decisión:** encender el seguimiento comercial (manda mensajes a
+pacientes reales), fusionar a `main` y desplegar, los textos de los tres mensajes, y el contenido
+del cliente (P6 real, P12 aprobado, P13). El umbral de 62 es **una hipótesis**: calibrarlo necesita
+preguntas reales del número de prueba.
 
 ## Nota de operación
 
