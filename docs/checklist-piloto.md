@@ -139,9 +139,11 @@ Fusionada a `main`. Procedimiento completo en `despliegue/GUIA-DESPLIEGUE.md` §
 
 - ⬜ **Respaldo antes de migrar.** La migración añade tablas y no borra nada, pero es el momento
   de tenerlo.
-- ⬜ **Decidir el estado del seguimiento comercial ANTES de desplegar.** Queda **encendido** por
-  defecto: basta con desplegar para que empiece a escribirle a pacientes reales. Si los textos aún
-  no están aprobados (D-d), apagarlo primero — comando en la guía, o Administración → Reglas.
+- ✅ **Estado del seguimiento comercial decidido: arranca ENCENDIDO** (Carlos Rivas, 2026-08-23),
+  sabiendo que los textos de los tres mensajes siguen sin aprobación formal del cliente (D-d) y
+  que empieza a escribir en cuanto entre la primera conversación. Se apaga desde Administración →
+  Reglas sin desplegar. **Vigilar la tasa de opt-out desde el primer día**: es la señal temprana
+  de que la cadencia molesta, y llega antes que cualquier queja.
 - ⬜ Comprobar que el usuario de PostgreSQL es superusuario: la migración crea `unaccent` y
   `pg_trgm`. Con la imagen oficial lo es, pero se verifica en un comando.
 - ⬜ Tras desplegar: **Conocimiento → Importar documentación comercial**. Hasta entonces el bot
