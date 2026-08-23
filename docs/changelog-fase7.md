@@ -436,7 +436,18 @@ turno no había texto que revisar. De ahí sale la regla que ahora encabeza `cas
 > llamar, la llamará, y el caso suspenderá una conducta correcta.
 
 Con las dos llamadas resueltas —ficha sin tarifa y artículo que remite al mostrador— el caso ya
-mide lo que quería medir: que no aparezca un número que ninguna fuente tiene.
+mide lo que quería medir: que no aparezca un número que ninguna fuente tiene. Remedido: 3/3.
+
+**Estado del conjunto: 48 casos, sin fallos conocidos.** Los tres retocados o nuevos se midieron
+sueltos y pasan las tres repeticiones; la última corrida completa fue la de 45/47, anterior a
+esas correcciones. Queda pendiente una corrida de las 48 seguidas para dejarla registrada.
+
+**Lo que este ejercicio dice del arnés, y conviene no olvidar:** en dos corridas completas
+encontró **cinco fallos, y los cinco eran de las expectativas, ninguno del bot**. No es un
+resultado decepcionante —el modelo se comporta— pero sí acota para qué sirve: detectar
+regresiones de aquí en adelante, no descubrir defectos hoy. Que las prohibiciones disparan de
+verdad se comprobó caso por caso con los dobles, que es lo único que separa «pasa porque está
+bien» de «pasa porque no mira».
 
 **Una observación que no se convirtió en regla:** al preguntar cuál ecografía, el modelo enumeró
 «abdominal, pélvica, transvaginal, obstétrica». En el catálogo solo existen `Ecografía` y
