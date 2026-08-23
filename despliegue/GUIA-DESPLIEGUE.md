@@ -237,11 +237,14 @@ y a `https://provivir.exagos.co/citas`, que llevan políticas distintas.
 
 ```bash
 cd /home/crivas/provivir && sudo docker compose -f despliegue/docker-compose.prod.yml \
-  --env-file /etc/provivir/.env exec postgres \
+  --env-file /etc/provivir/.env exec -T postgres \
   pg_dump -U provivir provivir | gzip > ~/respaldo-$(date +%F-%H%M).sql.gz
 
+# El -T no es opcional: sin él, `compose exec` reserva un TTY, la tubería se rompe y el
+# respaldo sale VACÍO. El 2026-08-23 dos respaldos seguidos quedaron en 20 bytes por esto.
 # Un pg_dump por tubería falla en silencio: gzip crea el archivo igual. Comprobar SIEMPRE.
-gunzip -c ~/respaldo-*.sql.gz | tail -3    # debe terminar en: PostgreSQL database dump complete
+gunzip -c ~/respaldo-*.sql.gz | tail -4    # debe traer: PostgreSQL database dump complete
+ls -lh ~/respaldo-*.sql.gz                 # y pesar bastante más de 20 bytes
 ```
 
 > **El repositorio ES el origen del despliegue.** Los contenedores se construyen desde
@@ -254,10 +257,30 @@ gunzip -c ~/respaldo-*.sql.gz | tail -3    # debe terminar en: PostgreSQL databa
 
 ```bash
 cd /home/crivas/provivir && git log --oneline -1     # ¿es esto lo que se quiere desplegar?
-npm ci && npm run build && cp -r apps/backoffice/dist/. despliegue/web/ && cp -r apps/portal/dist despliegue/web/citas && cp -r apps/tv/dist despliegue/web/tv
-sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env up -d --build api
-sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env exec api npx prisma migrate deploy
+npm ci && npm run build
+export C="-f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env"
+
+sudo docker compose $C build api                     # imagen nueva, sin relevar todavía
+sudo docker compose $C run --rm --entrypoint sh api -c "cd apps/api && npx prisma migrate status; npx prisma migrate deploy"
+sudo docker compose $C up -d api                     # el relevo, ya con las tablas
+
+# El frontend va AL FINAL: Caddy sirve este directorio en vivo, sin reinicio.
+cp -r apps/backoffice/dist/. despliegue/web/
+cp -r apps/portal/dist/.     despliegue/web/citas/
+cp -r apps/tv/dist/.         despliegue/web/tv/
 ```
+
+**Ese `/.` final y la barra del destino no son adorno.** `cp -r apps/portal/dist despliegue/web/citas`
+funciona la primera vez, cuando `citas/` no existe; después crea `citas/dist/` y **el portal sigue
+sirviendo el build viejo sin que nada falle a la vista**. Comprobarlo cuesta un comando:
+`ls despliegue/web/citas` no debe contener `dist`.
+
+**Y el orden importa.** Migrar desde un contenedor efímero *antes* del relevo evita las dos ventanas
+malas: la API nueva contra una base sin sus tablas, y el frontend nuevo contra la API vieja. Las
+migraciones solo añaden, así que la API vieja sigue sirviendo encima de la base ya migrada.
+
+`despliegue/web/` está en `.gitignore`: no hay `git checkout` que lo revierta. Antes de copiar,
+`tar czf ~/web-pre-<fecha>.tgz -C despliegue web`.
 
 **Los comandos van con `sudo` y con `--env-file`.** Los contenedores corren como `ubuntu` y los
 secretos viven en `/etc/provivir/.env`, que es de `root`. Sin `--env-file`, el compose falla con
