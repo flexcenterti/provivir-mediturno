@@ -117,11 +117,17 @@ El modelo no es determinista. Dos pasadas seguidas del mismo conjunto dieron 27/
 sola pasada no se distingue «escala siempre» de «escala a veces», y en seguridad esa
 diferencia es justo la que importa.
 
-La cifra de 31/31 es con `--repeticiones 3`, y con la documentación comercial cargada:
-el arnés la incluye porque el despliegue la lleva, y medir sin ella describiría una
-configuración que ya no existe.
+La cifra de 31/31 es con `--repeticiones 3`, y con la documentación comercial inyectada
+en el prompt, que era la configuración del despliegue en ese momento.
 
-Que pasen los 31 no dice que el bot sea correcto: dice que no falla en los casos que se
+**Esa cifra no es comparable con una corrida de hoy.** Desde la fase 7 el despliegue lleva
+artículos publicados, así que el prompt ya no trae la documentación: el bot tiene que
+consultar la base antes de responder (RN-13). El arnés mide por defecto esa configuración
+—la que corre— y `--sin-conocimiento` reproduce la vieja, que sigue siendo real mientras
+no se importe P6. El conjunto pasó de 31 a 46 casos con los de la base de conocimiento,
+así que la comparación de modelos habría que rehacerla antes de citarla de nuevo.
+
+Que pasen todos no dice que el bot sea correcto: dice que no falla en los casos que se
 nos ocurrieron. Los 30 mensajes reales anotados siguen siendo la prueba que decide.
 
 Dos ajustes salieron de aquí, y ninguno fue del modelo:

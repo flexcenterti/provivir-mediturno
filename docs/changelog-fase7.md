@@ -330,6 +330,51 @@ formulario de servicios quedaban pegadas en la misma línea; y «Medicina genera
 como *Información general* porque la regla de categoría hacía match con la palabra suelta
 «general».
 
+## Arnés de evaluación
+
+`apps/api/evaluacion/casos.json` pasa de 31 a 46 casos: 15 de la base de conocimiento, en su
+propia categoría `conocimiento`. Preguntas cubiertas (horarios, ubicación, formas de pago, qué
+llevar, cancelación, cita de control), escalamiento obligatorio de RN-13.4 que todavía no estaba
+representado (descuentos, facturación en disputa), y la pregunta que llega con el documento del
+paciente adentro (RN-13.8).
+
+**Dos cambios estructurales, sin los cuales los casos nuevos no medirían nada:**
+
+**El prompt se arma como el del despliegue.** El arnés inyectaba la documentación comercial
+porque así corría producción cuando se escribió. Desde esta fase el prompt no la lleva —el bot
+recupera— y medir con el bloque adentro habría tapado justamente lo que RN-13 vino a comprobar:
+el modelo recitaba y aprobaba sin llamar a `buscar_conocimiento`. `--sin-conocimiento` reproduce
+la configuración anterior, que sigue siendo real mientras no se importe P6.
+
+**Casos de segundo turno.** Un caso puede declarar `previo`: llamadas ya resueltas con el
+resultado que devolvería el motor. Las dos reglas que más importan no se ven en el primer turno,
+porque en el primero el modelo solo tiene que llamar a la herramienta:
+
+- ante `accion: "escalar"` —sin cobertura o tema prohibido— escala en vez de responder igual;
+- ante un fragmento con una cifra vieja, la cifra la pide con `consultar_servicio` (RN-13.1). El
+  artículo del caso dice 30 minutos y el catálogo dice 15, que es exactamente cómo envejece un
+  artículo sin que nadie lo note.
+
+Los dos casos de obediencia son `critico: true`: bloquean el despliegue sin volver crítica a toda
+la categoría, que hasta ahora era la única forma de expresarlo. Y `espera.argumentos` comprueba
+los argumentos de una llamada —el documento que no debe viajar a la base, el motivo con que
+escala—, no solo el texto de la respuesta.
+
+**`npm run evaluar` estaba roto:** invocaba `ts-node`, que no es dependencia del repo (el resto
+usa `tsx`). Nadie lo había notado porque el comando se corre a mano y con clave de OpenAI.
+
+**Cómo se verificó, y qué falta.** El SDK de OpenAI respeta `OPENAI_BASE_URL`, así que probar el
+arnés sin gastar llamadas cuesta un servidor de cuarenta líneas en el sitio del proveedor:
+`apps/api/scripts/openai-doble.mjs`. Trae dos dobles porque un validador probado en una sola
+dirección no distingue «está bien» de «es permisivo» — uno que siempre escala hace pasar los
+casos de obediencia y fallar los de consulta, y uno que siempre responde en texto afirmando de
+todo hace fallar los dos críticos con código de salida 1. Además registra las peticiones, y ahí
+se comprobó que el historial que se le manda al modelo tiene la misma forma que arma
+`ia.service.ts`.
+
+Eso comprueba el arnés, no al modelo: **falta correrlo contra `gpt-5-mini` de verdad**, que
+cuesta llamadas y necesita la clave. Es lo primero que hay que hacer con los 15 casos nuevos.
+
 ## Pendiente en esta fase
 
 Golden set de 40-50 preguntas anotadas y calibración de `kb_score_min`. Necesita preguntas reales

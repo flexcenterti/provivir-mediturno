@@ -151,8 +151,11 @@ Fusionada a `main`. Procedimiento completo en `despliegue/GUIA-DESPLIEGUE.md` §
 - ⬜ Calibrar `kb_score_min`. El **62** de arranque es una hipótesis, no un valor medido: pide
   preguntas reales del número de prueba. Mientras tanto conviene dejarlo alto — escalar de más
   cuesta menos que responder de más.
-- ⬜ Ampliar `apps/api/evaluacion/casos.json` con casos de la base de conocimiento: preguntas
-  cubiertas, sin cobertura y de escalamiento obligatorio. El arnés ya existe y corre.
+- ✅ Ampliado `apps/api/evaluacion/casos.json` con 15 casos de la base de conocimiento:
+  preguntas cubiertas, sin cobertura, escalamiento obligatorio, y las dos reglas que solo
+  se ven en el segundo turno —obedecer la orden de escalar y sacar las cifras del catálogo,
+  no del texto recuperado—. El arnés ahora arma el prompt como el despliegue (base poblada);
+  `--sin-conocimiento` mide la instalación recién montada.
 
 ## Antes del piloto
 
@@ -160,10 +163,12 @@ Fusionada a `main`. Procedimiento completo en `despliegue/GUIA-DESPLIEGUE.md` §
 - ⬜ Parámetros del cliente configurados desde Administración → Reglas (P2, P3, P6).
 - ⬜ Número de prueba de Meta operando 3–5 días con el equipo del cliente.
 - 🟡 **Evaluación de la IA.** El arnés existe y corre: `npm run evaluar -w @provivir/api`
-  (`--repeticiones 3`, `--modelos a,b`, `--categoria seguridad`). Los 30 casos de
-  `apps/api/evaluacion/casos.json` son **sintéticos**: sirven para detectar regresiones,
-  no sustituyen a los 30 mensajes **reales** anotados, que siguen pendientes. Al llegar,
-  se agregan al mismo archivo con el mismo formato.
+  (`-- --repeticiones 3`, `--modelos a,b`, `--categoria conocimiento`, `--sin-conocimiento`).
+  Los 46 casos de `apps/api/evaluacion/casos.json` son **sintéticos**: sirven para detectar
+  regresiones, no sustituyen a los 30 mensajes **reales** anotados, que siguen pendientes.
+  Al llegar, se agregan al mismo archivo con el mismo formato.
+  **Falta correrlo contra el modelo con los 15 casos nuevos**: la comparación de modelos
+  del ADR A5 es de 31 casos y de la configuración anterior, así que no vale como línea base.
   Requiere C1 y mensajes reales. **Pendiente: es la brecha de calidad más importante.**
 - ⬜ Contactos CSV migrados (P9).
 - ⬜ Enlaces de YouTube configurados (P10) y **rotación validada en el TV real de la sede**
