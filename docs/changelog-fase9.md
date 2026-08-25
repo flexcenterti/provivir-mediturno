@@ -68,8 +68,9 @@ sin una necesidad demostrada.
 - 5 e2e (`test/auth.e2e-spec.ts`): login → refresh → el acceso nuevo abre `/auth/yo`; el refresco
   como `Bearer` da 401; un acceso usado para refrescar da 401.
 - Suite completa en verde: 253 unitarias, typecheck de API y backoffice, lint.
-- **Pendiente**: las pruebas de navegador (Playwright), que recrean su base y necesitan aprobación
-  explícita para correr.
+- **18 de navegador** (Playwright, los tres frontends), incluida «con credenciales válidas se entra
+  y la sesión sobrevive al recargar», que es exactamente el camino que se tocó: al recargar, el
+  token de acceso puede estar vencido y la sesión se restaura con el de refresco.
 
 ## Cómo comprobarlo en la sede
 
