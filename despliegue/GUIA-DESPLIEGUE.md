@@ -8,9 +8,19 @@ Servidor de referencia: VPS Ubuntu 24 con Docker y Docker Compose.
 
 ```bash
 sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 git
-sudo usermod -aG docker "$USER"   # cerrar y reabrir sesión
 sudo mkdir -p /etc/provivir && sudo chmod 700 /etc/provivir
 ```
+
+> **Todos los comandos de `docker` de esta guía llevan `sudo`, a propósito.**
+>
+> Meter al usuario en el grupo `docker` (`usermod -aG docker "$USER"`) evitaría
+> escribirlo, pero ese grupo **equivale a root**: quien lo tiene puede montar el
+> disco del host dentro de un contenedor privilegiado. En un servidor con la base
+> de pacientes no compensa ahorrarse cinco letras.
+>
+> En la instalación actual el usuario `crivas` **no está** en el grupo `docker`,
+> así que sin `sudo` los comandos fallan con `permission denied` sobre
+> `/var/run/docker.sock`. No hay Docker rootless: solo el demonio de sistema.
 
 ## 2. Secretos
 
@@ -91,9 +101,27 @@ cp -r apps/backoffice/dist/.  despliegue/web/
 cp -r apps/portal/dist        despliegue/web/citas
 cp -r apps/tv/dist            despliegue/web/tv
 
-docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env up -d
-docker compose -f despliegue/docker-compose.prod.yml exec api npx prisma migrate deploy
+sudo docker compose -f despliegue/docker-compose.prod.yml \
+  --env-file /etc/provivir/.env up -d --build
+sudo docker compose -f despliegue/docker-compose.prod.yml \
+  --env-file /etc/provivir/.env exec api npx prisma migrate deploy
 ```
+
+**Las tres partes del comando son obligatorias y cada una falla distinto:**
+
+| | Si falta | Síntoma |
+|---|---|---|
+| `sudo` | el usuario no está en el grupo `docker` | `permission denied ... /var/run/docker.sock`, o `stat /etc/provivir/.env: permission denied` si ni siquiera puede leer los secretos |
+| `--env-file` | los secretos son de `root` y viven fuera del repo | `required variable POSTGRES_PASSWORD is missing a value` |
+| `--build` | la imagen de la API se compila desde el código fuente | **ninguno**: Compose reutiliza la imagen vieja y el despliegue parece correcto. Con el frontend ya copiado, quedas con pantallas nuevas contra una API vieja |
+
+Y **lánzalo desde `/home/crivas/provivir`**: `-f despliegue/...` es una ruta relativa. Desde
+`~` apunta a `/home/crivas/despliegue/`, que no existe. Si prefieres no depender del directorio,
+usa la ruta absoluta `-f /home/crivas/provivir/despliegue/docker-compose.prod.yml`.
+
+> Esto es para la **instalación inicial**. Para actualizar una instalación que ya corre, ve al
+> §8: el orden ahí es distinto a propósito —migrar antes del relevo y el frontend al final— y
+> evita dos ventanas de incoherencia que este comando no cubre.
 
 El seed **no se corre en producción**: crea usuarios con contraseña conocida. Las
 credenciales reales se crean aparte, una vez.
@@ -129,7 +157,15 @@ CORS_ORIGINS=https://agenda.grupoprovivir.com
 PORTAL_URL=https://agenda.grupoprovivir.com/citas
 ```
 
-Luego `docker compose up -d caddy api`. Caddy pide el certificado nuevo solo.
+Luego, desde `/home/crivas/provivir`:
+
+```bash
+sudo docker compose -f despliegue/docker-compose.prod.yml \
+  --env-file /etc/provivir/.env up -d caddy api
+```
+
+Caddy pide el certificado nuevo solo. Aquí **no** hace falta `--build`: no cambia el código, solo
+las variables de entorno.
 
 **Antes de cambiar, revisa qué apunta al dominio viejo:** el webhook registrado en el
 panel de Meta, los QR impresos en la sede y el iframe embebido en el sitio del cliente.
@@ -224,8 +260,10 @@ Copiar los respaldos **fuera del servidor**: si el VPS muere, los respaldos muer
 
 ```bash
 curl -sS https://provivir.exagos.co/api/health/ready       # {"estado":"ok","db":"ok"}
-docker compose -f despliegue/docker-compose.prod.yml ps          # todo healthy
-docker compose -f despliegue/docker-compose.prod.yml logs -f api
+sudo docker compose -f despliegue/docker-compose.prod.yml \
+  --env-file /etc/provivir/.env ps                                  # todo healthy
+sudo docker compose -f despliegue/docker-compose.prod.yml \
+  --env-file /etc/provivir/.env logs -f api
 ```
 
 Revisa las cabeceras en <https://securityheaders.com> apuntando a `https://provivir.exagos.co`
@@ -282,9 +320,13 @@ migraciones solo añaden, así que la API vieja sigue sirviendo encima de la bas
 `despliegue/web/` está en `.gitignore`: no hay `git checkout` que lo revierta. Antes de copiar,
 `tar czf ~/web-pre-<fecha>.tgz -C despliegue web`.
 
-**Los comandos van con `sudo` y con `--env-file`.** Los contenedores corren como `ubuntu` y los
-secretos viven en `/etc/provivir/.env`, que es de `root`. Sin `--env-file`, el compose falla con
+**Los comandos van con `sudo` y con `--env-file`.** El usuario del host (`crivas`) no está en el
+grupo `docker`, así que sin `sudo` no se llega ni al socket; y los secretos viven en
+`/etc/provivir/.env`, que es de `root` con permisos `600`. Sin `--env-file`, el compose falla con
 `required variable POSTGRES_PASSWORD is missing a value` antes de hacer nada.
+
+(Dentro de la imagen el proceso corre como `node`, nunca como root: ver el `USER node` del
+`Dockerfile.api`.)
 
 **El frontend y la API se despliegan por separado.** Caddy sirve `despliegue/web/` como bind-mount
 de solo lectura, así que las pantallas no cambian hasta que se copian los `dist`. Reconstruir la
@@ -306,8 +348,9 @@ el `POSTGRES_USER` de la imagen oficial se crea como superusuario, así que func
 comprobarlo antes:
 
 ```bash
-docker compose -f despliegue/docker-compose.prod.yml exec postgres \
-  psql -U provivir -d provivir -c "SELECT rolsuper FROM pg_roles WHERE rolname = current_user;"
+sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env \
+  exec postgres psql -U provivir -d provivir \
+  -c "SELECT rolsuper FROM pg_roles WHERE rolname = current_user;"
 ```
 
 **2 · El seguimiento comercial queda ENCENDIDO.** El parámetro `seguimiento_comercial_activo` vale
@@ -316,7 +359,8 @@ pacientes que preguntaron y no agendaron. Si los textos todavía no están aprob
 (decisión D-d), apágalo **antes** de que entre la primera conversación:
 
 ```bash
-docker compose -f despliegue/docker-compose.prod.yml exec postgres psql -U provivir -d provivir -c \
+sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env \
+  exec postgres psql -U provivir -d provivir -c \
   "INSERT INTO configuracion (clave, valor, descripcion, actualizado_en)
    VALUES ('seguimiento_comercial_activo', 'false',
            'RN-09.9 · apagado hasta aprobar los textos con el cliente', now())
@@ -343,6 +387,59 @@ El código se revierte con `git revert` del merge y un redespliegue. **Las migra
 revierten**: las tablas `kb_*` y `seguimiento` quedan, vacías y sin uso, sin afectar a nada. Para
 apagar el comportamiento sin tocar código basta con archivar los artículos y poner
 `seguimiento_comercial_activo` en `false`.
+
+### Despliegue de la pantalla de Base de conocimiento
+
+Posterior a la fase 7. **No trae migraciones**: cero cambios en `schema.prisma`, así que el paso de
+`migrate deploy` del §8 es un no-op y se puede dejar tal cual.
+
+**1 · El trabajo de vigencia empieza a ejecutarse de verdad.** `archivarVencidos()` (RN-13.5.5)
+estaba implementada desde la fase 7 y **no la llamaba nadie**: no había cron ni trabajo repetible,
+así que poner una fecha en «vigente hasta» no hacía nada. Ahora es un repetible de BullMQ que corre
+cada día a las **3:15 en la zona de la sede** y archiva todo artículo publicado cuya fecha ya haya
+pasado: sale del índice y el bot deja de citarlo.
+
+Es el comportamiento correcto, pero si alguien puso fechas dando por hecho que eran decorativas,
+esos artículos desaparecerán del índice en el primer barrido. **Compruébalo antes de desplegar:**
+
+```bash
+sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env \
+  exec postgres psql -U provivir -d provivir -c \
+  "SELECT titulo, vigente_hasta FROM kb_articulo
+    WHERE estado = 'publicado' AND vigente_hasta < now();"
+```
+
+Si devuelve filas y alguna no debía vencer, límpiale la fecha antes del relevo:
+
+```bash
+sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env \
+  exec postgres psql -U provivir -d provivir -c \
+  "UPDATE kb_articulo SET vigente_hasta = NULL WHERE titulo = '<título exacto>';"
+```
+
+Para verificar que el repetible quedó registrado tras el arranque:
+
+```bash
+sudo docker compose -f despliegue/docker-compose.prod.yml --env-file /etc/provivir/.env \
+  exec redis redis-cli -a "$REDIS_PASSWORD" --scan --pattern 'bull:conocimiento:repeat*'
+```
+
+**2 · Cuatro parámetros nuevos que se siembran solos.** `kb_temas_prohibidos` y las tres claves de
+cadencia del seguimiento (`seguimiento_retraso_1_min`, `_2_min`, `_cierre_min`) las añade
+`asegurarBase()` al arrancar la API, de forma aditiva. **Los valores por defecto reproducen
+exactamente el comportamiento anterior**: la lista de temas es la misma que estaba en código y la
+cadencia sigue siendo 120/300/480 minutos. No hay que tocar la base a mano.
+
+`kb_temas_prohibidos` es la lista de P12 y hasta ahora **no se podía administrar**: no existía como
+fila, y el tope de 200 caracteres del endpoint de configuración impedía guardarla de todos modos.
+Ahora se edita desde **Base de conocimiento → Temas que escalan siempre**.
+
+**3 · La importación de documentos escribe en disco.** El volumen `uploads` ya existe en el compose
+(`uploads:/app/uploads`), así que no hay nada que preparar. Los documentos subidos se trocean por
+encabezados y **entran como borrador**: nada llega al bot hasta que alguien los revise y publique.
+
+**4 · El menú cambia de nombre.** «Conocimiento» pasa a «Base de conocimiento». Conviene avisar a
+las asistentes antes del despliegue: es el único cambio visible que no añade nada, solo mueve.
 
 ## 9. Reversa
 
