@@ -232,19 +232,19 @@ test('RN-05 · las reglas de prioridad se editan y quedan guardadas', async ({ p
   await entrar(page);
   await page.getByRole('button', { name: 'Reglas de prioridad' }).click();
 
-  const campo = page.getByLabel(/Margen de tolerancia/);
+  const campo = page.getByRole('spinbutton', { name: /Margen de tolerancia/ });
   const original = await campo.inputValue();
 
   await campo.fill('12');
-  await page.getByRole('button', { name: 'Guardar' }).first().click();
+  await page.getByRole('button', { name: /Guardar · Margen de tolerancia/ }).click();
   await expect(page.getByText(/Regla actualizada/)).toBeVisible({ timeout: 15_000 });
 
   await page.reload();
   await page.getByRole('button', { name: 'Reglas de prioridad' }).click();
-  await expect(page.getByLabel(/Margen de tolerancia/)).toHaveValue('12');
+  await expect(page.getByRole('spinbutton', { name: /Margen de tolerancia/ })).toHaveValue('12');
 
   // Se devuelve para no dejar la base de pruebas con un valor distinto del seed.
-  await page.getByLabel(/Margen de tolerancia/).fill(original);
-  await page.getByRole('button', { name: 'Guardar' }).first().click();
+  await page.getByRole('spinbutton', { name: /Margen de tolerancia/ }).fill(original);
+  await page.getByRole('button', { name: /Guardar · Margen de tolerancia/ }).click();
   await expect(page.getByText(/Regla actualizada/)).toBeVisible({ timeout: 15_000 });
 });

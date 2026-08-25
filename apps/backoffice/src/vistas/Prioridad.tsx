@@ -71,8 +71,11 @@ export function Prioridad() {
                     value={editado[p.clave] ?? config[p.clave] ?? ''}
                     onChange={(e) => setEditado({ ...editado, [p.clave]: e.target.value })}
                   />
+                  {/* Tres botones «Guardar» idénticos no se distinguen ni con lector
+                      de pantalla ni con el teclado: cada uno dice qué guarda. */}
                   <button
                     className="btn btn-soft btn-sm"
+                    aria-label={`Guardar · ${p.etiqueta}`}
                     disabled={editado[p.clave] === undefined || editado[p.clave] === config[p.clave]}
                     onClick={() => guardar(p.clave)}
                   >
