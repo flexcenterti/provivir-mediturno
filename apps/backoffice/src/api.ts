@@ -157,8 +157,11 @@ export const api = {
   eliminarServicio: (id: string) => pedir<{ eliminado: true }>(`/servicios/${id}`, { method: 'DELETE' }),
 
   // ── Base de conocimiento (RN-13) ──
+  resumenConocimiento: (dias = 30) =>
+    pedir<ResumenConocimiento>(`/conocimiento/resumen?dias=${dias}`),
   articulos: (estado?: string) =>
     pedir<Articulo[]>(`/conocimiento/articulos${estado ? `?estado=${estado}` : ''}`),
+  articulo: (id: string) => pedir<ArticuloDetalle>(`/conocimiento/articulos/${id}`),
   crearArticulo: (cuerpo: object) =>
     pedir<Articulo>('/conocimiento/articulos', { method: 'POST', body: JSON.stringify(cuerpo) }),
   actualizarArticulo: (id: string, cuerpo: object) =>
@@ -176,6 +179,7 @@ export const api = {
   importarConocimiento: () =>
     pedir<{ creados: Array<{ titulo: string; servicioId: string | null }>; omitidos: string[]; sinServicio: string[] }>(
       '/conocimiento/importar', { method: 'POST' }),
+  importacionesKb: () => pedir<ImportacionKb[]>('/conocimiento/importaciones'),
   preguntasPendientes: () => pedir<PreguntaPendiente[]>('/conocimiento/pendientes'),
   articuloDesdePendiente: (id: string) =>
     pedir<Articulo>(`/conocimiento/pendientes/${id}/articulo`, { method: 'POST' }),
@@ -294,7 +298,51 @@ export interface Articulo {
 }
 
 export interface FragmentoRecuperado {
-  titulo: string; texto: string; puntaje: number; articuloId: string;
+  fragmentoId: string; articuloId: string;
+  titulo: string; version: number;
+  /** Con qué servicio está vinculado el artículo. De aquí sale el ofrecimiento
+   *  de cita: las cifras las pone la ficha del catálogo, nunca el texto (RN-13.1). */
+  servicioId: string | null;
+  texto: string; puntaje: number;
+}
+
+/** Un artículo con su troceado, tal como quedó en el índice. */
+export interface ArticuloDetalle extends Articulo {
+  tags: string[];
+  vigenteHasta: string | null;
+  fragmentos: Array<{ id: string; orden: number; texto: string; tokens: number }>;
+}
+
+/** Todo lo que la pantalla de Base de conocimiento pinta, en una sola petición. */
+export interface ResumenConocimiento {
+  articulos: { publicados: number; borradores: number; archivados: number; requierenRevision: number };
+  pendientesAbiertas: number;
+  seguimientosActivos: number;
+  resolucionSinHumano: { porcentaje: number; conversaciones: number; dias: number };
+  parametros: {
+    umbral: number;
+    topK: number;
+    temas: string[];
+    seguimiento: {
+      activo: boolean;
+      pasos: Array<{ paso: string; minutos: number }>;
+      horaApertura: number;
+      horaCierre: number;
+    };
+  };
+}
+
+/** Estado de una importación de documento en cola. */
+export interface ImportacionKb {
+  id: string;
+  archivo: string;
+  estado: string;
+  progreso: number | { procesados: number; total: number };
+  resumen: {
+    totalBloques: number; creados: number; omitidos: number;
+    sinServicio: string[]; erroneos: number;
+  } | null;
+  error?: string | null;
 }
 
 export type ResultadoPrueba =

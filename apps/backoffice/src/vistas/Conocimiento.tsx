@@ -3,9 +3,16 @@ import {
   api,
   type Articulo,
   type PreguntaPendiente,
-  type ResultadoPrueba,
+  type ResumenConocimiento,
   type Servicio,
+  type UsuarioSesion,
 } from '../api';
+import { ModalFichaComercial, tieneFicha } from '../componentes/FichaComercial';
+import { Probador } from './conocimiento/Probador';
+import { TablaArticulos } from './conocimiento/TablaArticulos';
+import { FormArticulo } from './conocimiento/FormArticulo';
+import { ImportarDocumento } from './conocimiento/ImportarDocumento';
+import { PanelesIa } from './conocimiento/PanelesIa';
 
 /**
  * RN-13 · Base de conocimiento del bot.
@@ -13,29 +20,48 @@ import {
  * Es la pantalla donde se decide qué le responde la plataforma a los pacientes, así
  * que lo primero que ofrece no es el listado sino el **probador**: permite ver qué
  * recuperaría el bot antes de que la pregunta la haga alguien de verdad.
+ *
+ * Debajo, lo que gobierna esa respuesta: los artículos, la ficha comercial de la
+ * que salen las cifras (RN-13.1) y los parámetros de la IA.
  */
-export function Conocimiento() {
+export function Conocimiento({ usuario, onNavegar }: {
+  usuario: UsuarioSesion;
+  onNavegar: (vista: 'bandeja') => void;
+}) {
+  const [resumen, setResumen] = useState<ResumenConocimiento | null>(null);
   const [articulos, setArticulos] = useState<Articulo[]>([]);
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [pendientes, setPendientes] = useState<PreguntaPendiente[]>([]);
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
 
+  const [editando, setEditando] = useState<{ id: string | null } | null>(null);
+  const [importando, setImportando] = useState(false);
+  const [fichaDe, setFichaDe] = useState<Servicio | null>(null);
+
+  /**
+   * Dos permisos distintos aunque hoy coincidan en el perfil de administración:
+   * redactar artículos es `conocimiento.editar` y tocar el umbral es
+   * `configuracion.editar`. El día que exista un perfil de redactor, la pantalla
+   * ya lo soporta sin cambiarla.
+   */
+  const puedeEditarContenido = usuario.rol === 'admin';
+  const puedeEditarParametros = usuario.rol === 'admin';
+
   const recargar = useCallback(() => {
-    Promise.all([api.articulos(), api.servicios(true), api.preguntasPendientes()])
-      .then(([a, s, p]) => { setArticulos(a); setServicios(s); setPendientes(p); })
+    Promise.all([
+      api.resumenConocimiento(),
+      api.articulos(),
+      api.servicios(true),
+      api.preguntasPendientes(),
+    ])
+      .then(([r, a, s, p]) => { setResumen(r); setArticulos(a); setServicios(s); setPendientes(p); })
       .catch((e: Error) => setError(e.message));
   }, []);
 
   useEffect(recargar, [recargar]);
 
-  const nombreServicio = (id: string | null) => servicios.find((s) => s.id === id)?.nombre ?? null;
-
-  /**
-   * `fn` puede devolver su propio mensaje. Sin eso, el genérico pisaba el informe
-   * de la importación, que es justo la parte útil: cuántos entraron y cuáles
-   * quedaron sin servicio vinculado.
-   */
+  /** `fn` puede devolver su propio mensaje: el informe de la importación es la parte útil. */
   async function accion(fn: () => Promise<string | void>, exito?: string) {
     setError(''); setAviso('');
     try {
@@ -47,11 +73,19 @@ export function Conocimiento() {
     }
   }
 
-  const publicados = articulos.filter((a) => a.estado === 'publicado');
-  const paraRevisar = articulos.filter((a) => a.requiereRevision);
+  if (!resumen) {
+    return (
+      <div className="vista">
+        {error ? <div className="error" role="alert">{error}</div> : <p className="nota">Cargando…</p>}
+      </div>
+    );
+  }
+
+  const { articulos: conteo, parametros } = resumen;
+  const categorias = [...new Set(articulos.map((a) => a.categoria))].sort();
 
   return (
-    <div className="vista">
+    <div className="vista ancha">
       <header className="vista-cab">
         <div>
           <h2>Base de conocimiento</h2>
@@ -60,270 +94,273 @@ export function Conocimiento() {
             escala en vez de aproximar: nunca inventa horarios, precios ni indicaciones.
           </p>
         </div>
-        {publicados.length === 0 && (
-          <button
-            className="btn"
-            onClick={() => accion(async () => {
-              const r = await api.importarConocimiento();
-              return (
-                `${r.creados.length} artículo(s) importados.` +
-                (r.sinServicio.length
-                  ? ` ${r.sinServicio.length} quedaron sin servicio vinculado y conviene atarlos a mano: ${r.sinServicio.join(', ')}.`
-                  : '')
-              );
-            })}
-          >
-            Importar documentación comercial
-          </button>
-        )}
       </header>
 
-      {error && <div className="error">{error}</div>}
-      {aviso && <div className="aviso">{aviso}</div>}
+      {error && <div className="error" role="alert">{error}</div>}
+      {aviso && <div className="exito">{aviso}</div>}
 
-      {paraRevisar.length > 0 && (
-        <div className="aviso">
-          {paraRevisar.length} artículo(s) marcados para revisión porque su servicio se desactivó.
-          Revísalos y archívalos si ya no aplican: dejar viva la ficha de un servicio que no se
-          presta es como el bot termina ofreciendo algo inexistente.
-        </div>
-      )}
-
-      <Probador servicios={servicios} />
-
-      <PreguntasSinRespuesta
-        pendientes={pendientes}
-        onCrear={(id) => accion(async () => { await api.articuloDesdePendiente(id); }, 'Borrador creado desde la pregunta')}
-        onDescartar={(id) => accion(async () => { await api.descartarPendiente(id); }, 'Pregunta descartada')}
-      />
-
-      <div className="card">
-        <div className="card-cab">
-          <h3>Artículos</h3>
-          <span className="muted">
-            {publicados.length} publicados · {articulos.filter((a) => a.estado === 'borrador').length} en
-            borrador · {articulos.filter((a) => a.estado === 'archivado').length} archivados
+      <div className="card plano" style={{ marginBottom: '1rem' }}>
+        <div className="bd searchbar">
+          <span className="tag t-green">🧠 RN-13</span>
+          <span className="small muted" style={{ flex: 1 }}>
+            El bot responde <b>solo</b> con lo que encuentre aquí; si no hay cobertura suficiente{' '}
+            <b>escala, no improvisa</b>. Toda cifra —duración, cupos, costo— sale de la ficha del
+            servicio, nunca del texto del artículo.
           </span>
         </div>
-
-        {articulos.length === 0 ? (
-          <p className="nota">
-            Todavía no hay artículos. Mientras la base esté vacía, el bot usa el bloque de
-            documentación comercial que está en Administración → Reglas.
-          </p>
-        ) : (
-          <table className="tabla">
-            <thead>
-              <tr>
-                <th>Título</th><th>Categoría</th><th>Servicio</th>
-                <th>Estado</th><th>Versión</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {articulos.map((a) => (
-                <tr key={a.id} className={a.estado === 'archivado' ? 'inactiva' : ''}>
-                  <td>
-                    <strong>{a.titulo}</strong>
-                    {a.requiereRevision && <span className="etiqueta"> revisar</span>}
-                  </td>
-                  <td>{a.categoria}</td>
-                  <td>{nombreServicio(a.servicioId) ?? <span className="muted">— general</span>}</td>
-                  <td><EstadoArticulo estado={a.estado} /></td>
-                  <td>v{a.version}</td>
-                  <td className="acciones">
-                    {a.estado === 'borrador' && (
-                      <>
-                        <button className="btn btn-sm" onClick={() => accion(async () => { await api.publicarArticulo(a.id); }, `«${a.titulo}» publicado`)}>
-                          Publicar
-                        </button>
-                        <button className="btn btn-sm btn-ghost" onClick={() => accion(async () => { await api.eliminarArticulo(a.id); }, 'Borrador eliminado')}>
-                          Eliminar
-                        </button>
-                      </>
-                    )}
-                    {a.estado === 'publicado' && (
-                      <button className="btn btn-sm btn-ghost" onClick={() => accion(async () => { await api.archivarArticulo(a.id); }, `«${a.titulo}» archivado: sale del índice ahora`)}>
-                        Archivar
-                      </button>
-                    )}
-                    {a.estado === 'archivado' && (
-                      <button className="btn btn-sm btn-ghost" onClick={() => accion(async () => { await api.reactivarArticulo(a.id); }, 'Vuelve a borrador para revisarlo')}>
-                        Reactivar
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-
-        <p className="nota">
-          Los artículos se archivan, no se borran: la auditoría debe poder explicar respuestas que
-          el bot ya dio con ellos. Solo los borradores, que nunca sustentaron una respuesta, se
-          eliminan de verdad.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function EstadoArticulo({ estado }: { estado: Articulo['estado'] }) {
-  if (estado === 'publicado') return <span className="pill pill-ok">Publicado</span>;
-  if (estado === 'borrador') return <span className="pill pill-aviso">Borrador</span>;
-  return <span className="pill">Archivado</span>;
-}
-
-/** Ensaya una pregunta contra la base sin registrarla en las métricas ni en la cola. */
-function Probador({ servicios }: { servicios: Servicio[] }) {
-  const [pregunta, setPregunta] = useState('');
-  const [resultado, setResultado] = useState<ResultadoPrueba | null>(null);
-  const [cargando, setCargando] = useState(false);
-  const [error, setError] = useState('');
-
-  const EJEMPLOS = [
-    '¿Cómo me preparo para la ecografía?',
-    '¿A qué hora abren los sábados?',
-    '¿Tienen parqueadero?',
-    'Me duele el pecho, ¿qué tengo?',
-  ];
-
-  async function probar(q: string) {
-    if (!q.trim()) return;
-    setPregunta(q); setError(''); setCargando(true);
-    try {
-      setResultado(await api.probarPregunta(q));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error');
-    } finally {
-      setCargando(false);
-    }
-  }
-
-  return (
-    <div className="card">
-      <div className="card-cab">
-        <h3>Probar una pregunta</h3>
-        <span className="muted">No cuenta para las métricas ni para la cola de mejora</span>
       </div>
 
-      <div className="fila-form">
-        <input
-          value={pregunta}
-          placeholder="Escribe una pregunta como la haría un paciente"
-          onChange={(e) => setPregunta(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') void probar(pregunta); }}
-        />
-        <button className="btn" disabled={cargando || !pregunta.trim()} onClick={() => void probar(pregunta)}>
-          {cargando ? 'Buscando…' : 'Probar'}
-        </button>
-      </div>
-
-      <div className="chips">
-        {EJEMPLOS.map((e) => (
-          <button key={e} className="chip" onClick={() => void probar(e)}>{e}</button>
-        ))}
-      </div>
-
-      {error && <div className="error">{error}</div>}
-      {resultado && <ResultadoDePrueba r={resultado} servicios={servicios} />}
-    </div>
-  );
-}
-
-function ResultadoDePrueba({ r, servicios }: { r: ResultadoPrueba; servicios: Servicio[] }) {
-  if (r.tipo === 'bloqueada') {
-    return (
-      <div className="resultado-prueba">
-        <p className="pill pill-error">Escala siempre · {r.tema}</p>
-        <p className="nota">
-          Este tema pasa a una persona aunque exista un artículo que lo cubra. La lista se
-          configura en Administración → Reglas.
-        </p>
-      </div>
-    );
-  }
-
-  if (r.tipo === 'sin_cobertura') {
-    return (
-      <div className="resultado-prueba">
-        <p className="pill pill-aviso">Sin cobertura · mejor coincidencia {r.mejorPuntaje}</p>
-        <p className="nota">
-          El bot escala en vez de responder, y la pregunta entra a «Preguntas sin respuesta».
-          Si debería saber contestarla, ahí mismo se convierte en artículo.
-        </p>
-      </div>
-    );
-  }
-
-  const primero = r.fragmentos[0];
-  const servicio = servicios.find((s) => s.id && primero && s.nombre && primero.titulo.includes(s.nombre));
-
-  return (
-    <div className="resultado-prueba">
-      <p className="pill pill-ok">Responde · coincidencia {r.mejorPuntaje}</p>
-      {r.fragmentos.map((f, i) => (
-        <div key={i} className="fragmento">
-          <strong>{f.titulo}</strong> <span className="muted">· {f.puntaje}</span>
-          {/* El fragmento lleva el encabezado del artículo, que aquí ya está en el título. */}
-          <p>{f.texto.replace(/^#{1,6}\s+.*\n?/, '').trim()}</p>
+      {/* ── Los cuatro indicadores, de una sola petición ── */}
+      <div className="grid g4" style={{ marginBottom: '1rem' }}>
+        <div className="card kpi accent">
+          <div className="lb">Artículos publicados</div>
+          <div className="vl">{conteo.publicados}</div>
+          <div className="dt">
+            {conteo.borradores} borrador · {conteo.archivados} archivado
+            {conteo.archivados === 1 ? '' : 's'} · fuera del índice
+          </div>
         </div>
-      ))}
-      {servicio && (
-        <p className="nota">
-          Las cifras de la respuesta —duración, costo, cuántos espacios ocupa— no salen de este
-          texto sino de la ficha de «{servicio.nombre}» en el catálogo.
-        </p>
+        <div className="card kpi">
+          <div className="lb">Resolución sin humano</div>
+          <div className="vl">{resumen.resolucionSinHumano.porcentaje}%</div>
+          <div className="dt">Meta progresiva 70–90% (RN-08.4)</div>
+        </div>
+        <div className="card kpi">
+          <div className="lb">Preguntas sin respuesta</div>
+          <div className="vl">{resumen.pendientesAbiertas}</div>
+          <div className="dt">Cola de mejora (RN-13.6)</div>
+        </div>
+        <div className="card kpi">
+          <div className="lb">Seguimientos activos</div>
+          <div className="vl">{resumen.seguimientosActivos}</div>
+          <div className="dt">Se gestionan en la bandeja (RN-09.9)</div>
+        </div>
+      </div>
+
+      <div className="grid g2" style={{ marginBottom: '1rem' }}>
+        <Probador servicios={servicios} umbral={parametros.umbral} />
+        <PreguntasSinRespuesta
+          pendientes={pendientes}
+          soloLectura={!puedeEditarContenido}
+          onCrear={(id) => accion(async () => {
+            const borrador = await api.articuloDesdePendiente(id);
+            // Abrirlo evita que quede un borrador vacío olvidado en la lista.
+            setEditando({ id: borrador.id });
+            return 'Borrador creado desde la pregunta. Complétalo y publícalo.';
+          })}
+          onDescartar={(id) => accion(async () => { await api.descartarPendiente(id); }, 'Pregunta descartada')}
+        />
+      </div>
+
+      {conteo.requierenRevision > 0 && (
+        <div className="card plano" style={{ marginBottom: '1rem' }}>
+          <div className="bd aviso" style={{ margin: 0 }}>
+            ⚠️ <b>{conteo.requierenRevision} artículo(s) marcado(s) para revisión</b> porque su
+            servicio fue desactivado (RN-04.5.4). Revísalos y archívalos si ya no aplican: dejar
+            viva la ficha de un servicio que no se presta es la forma más fácil de que el bot
+            ofrezca algo inexistente.
+          </div>
+        </div>
+      )}
+
+      {importando && puedeEditarContenido && (
+        <ImportarDocumento hayPublicados={conteo.publicados > 0} onCambio={recargar} />
+      )}
+
+      <TablaArticulos
+        articulos={articulos}
+        servicios={servicios}
+        soloLectura={!puedeEditarContenido}
+        onAccion={accion}
+        onEditar={(id) => setEditando({ id })}
+        onCrear={() => setEditando({ id: null })}
+        onImportar={() => setImportando((v) => !v)}
+      />
+
+      <div className="grid g2">
+        <FichaComercialServicios
+          servicios={servicios}
+          soloLectura={!puedeEditarContenido}
+          onEditar={setFichaDe}
+        />
+        <PanelesIa
+          resumen={resumen}
+          editable={puedeEditarParametros}
+          onAccion={accion}
+          onIrABandeja={() => onNavegar('bandeja')}
+        />
+      </div>
+
+      {editando && (
+        <FormArticulo
+          articuloId={editando.id}
+          servicios={servicios}
+          categorias={categorias}
+          onCerrar={() => setEditando(null)}
+          onGuardado={(mensaje) => { setEditando(null); setAviso(mensaje); recargar(); }}
+        />
+      )}
+
+      {fichaDe && (
+        <ModalFichaComercial
+          servicio={fichaDe}
+          onCerrar={() => setFichaDe(null)}
+          onGuardado={() => {
+            setFichaDe(null);
+            setAviso(`Ficha de «${fichaDe.nombre}» actualizada. Tiene efecto inmediato en el bot.`);
+            recargar();
+          }}
+        />
       )}
     </div>
   );
 }
 
-function PreguntasSinRespuesta({
-  pendientes,
-  onCrear,
-  onDescartar,
-}: {
+/**
+ * La cola de mejora (RN-13.6): lo que los pacientes preguntaron y el bot no supo
+ * contestar, agrupado por frecuencia. Convertir las más repetidas en artículos es
+ * lo que mueve la resolución automática hacia el 70–90%.
+ */
+function PreguntasSinRespuesta({ pendientes, soloLectura, onCrear, onDescartar }: {
   pendientes: PreguntaPendiente[];
+  soloLectura: boolean;
   onCrear: (id: string) => void;
   onDescartar: (id: string) => void;
 }) {
   return (
-    <div className="card">
-      <div className="card-cab">
+    <div className="card plano">
+      <div className="hd">
         <h3>Preguntas sin respuesta</h3>
-        <span className="muted">Lo que los pacientes preguntaron y el bot no supo contestar</span>
+        <div className="spacer" />
+        <span className="tag t-amber">{pendientes.length} abiertas</span>
+      </div>
+
+      <div className="bd small muted" style={{ paddingBottom: '.4rem' }}>
+        Preguntas que escalaron porque ningún artículo las cubre, agrupadas y ordenadas por
+        frecuencia. Convertirlas en artículos es lo que mueve la resolución automática hacia
+        el 70–90% (RN-08.4).
       </div>
 
       {pendientes.length === 0 ? (
-        <p className="nota">
-          Nada pendiente. Cuando alguien pregunte algo que la base no cubre, aparecerá aquí
-          agrupado por frecuencia.
-        </p>
+        <div className="bd">
+          <p className="nota">
+            Nada pendiente. Cuando alguien pregunte algo que la base no cubre, aparecerá aquí
+            agrupado por frecuencia.
+          </p>
+        </div>
       ) : (
         <table className="tabla">
           <thead>
-            <tr><th>Pregunta</th><th>Veces</th><th></th></tr>
+            <tr><th>Pregunta</th><th className="center">Veces</th><th className="right">Acción</th></tr>
           </thead>
           <tbody>
             {pendientes.map((p) => (
               <tr key={p.id}>
-                <td>{p.preguntaEjemplo}</td>
-                <td>{p.ocurrencias}</td>
-                <td className="acciones">
-                  <button className="btn btn-sm" onClick={() => onCrear(p.id)}>Crear artículo</button>
-                  <button className="btn btn-sm btn-ghost" onClick={() => onDescartar(p.id)}>Descartar</button>
+                <td className="small"><b>{p.preguntaEjemplo}</b></td>
+                <td className="center">
+                  <span className={`tag ${p.ocurrencias >= 6 ? 't-red' : 't-gray'}`}>{p.ocurrencias}</span>
+                </td>
+                <td className="right">
+                  {soloLectura ? <span className="small muted">—</span> : (
+                    <div className="acciones-fila" style={{ justifyContent: 'flex-end' }}>
+                      <button className="btn btn-soft btn-sm" onClick={() => onCrear(p.id)}>
+                        📝 Crear artículo
+                      </button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => onDescartar(p.id)}>
+                        Descartar
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+    </div>
+  );
+}
 
-      <p className="nota">
-        Convertir las más repetidas en artículos es lo que hace que el bot resuelva cada vez más
-        sin pasar por una persona.
-      </p>
+/**
+ * RN-04.5.1 · lo que el bot usa para vender.
+ *
+ * Está en esta pantalla porque es el primer sitio donde se mira cuando el bot dice
+ * algo raro de un servicio: **las cifras se leen de aquí**, no del texto de los
+ * artículos, así que un precio o una duración equivocados se corrigen acá.
+ */
+function FichaComercialServicios({ servicios, soloLectura, onEditar }: {
+  servicios: Servicio[];
+  soloLectura: boolean;
+  onEditar: (s: Servicio) => void;
+}) {
+  return (
+    <div className="card plano">
+      <div className="hd">
+        <h3>Ficha comercial de servicios</h3>
+        <div className="spacer" />
+        <span className="tag t-blue">P6</span>
+      </div>
+
+      <div className="bd small muted" style={{ paddingBottom: '.4rem' }}>
+        Es lo que el bot usa para vender. <b>Las cifras se leen de aquí</b>, no del texto de los
+        artículos: así el precio, la duración y los cupos nunca se inventan.
+      </div>
+
+      <div className="tabla-ancha">
+      <table className="tabla">
+        <thead>
+          <tr>
+            <th>Servicio</th><th>Beneficios que comunica el bot</th>
+            <th className="center">Duración</th><th className="center">Agendable</th>
+            <th className="right">Ficha</th>
+          </tr>
+        </thead>
+        <tbody>
+          {servicios.map((s) => (
+            <tr key={s.id} style={s.activo === false ? { opacity: 0.55 } : undefined}>
+              <td>
+                <b>{s.nombre}</b>
+                {s.activo === false && <span className="tag t-gray"> Inactivo</span>}
+                <div className="small muted">{s.descripcionComercial ?? ''}</div>
+                {!tieneFicha(s) && (
+                  <span className="tag t-amber">Sin ficha · el bot no lo ofrece</span>
+                )}
+              </td>
+              <td className="small">
+                {(s.beneficios ?? []).map((b) => <div key={b}>• {b}</div>)}
+                {s.preparacion && (
+                  <div className="small muted" style={{ marginTop: '.3rem' }}>
+                    🧾 <b>Preparación:</b> {s.preparacion}
+                  </div>
+                )}
+              </td>
+              <td className="center small">
+                {s.duracionMin} min
+                {s.cupos > 1 && <><br /><span className="tag t-blue">{s.cupos} cupos</span></>}
+              </td>
+              <td className="center">
+                {s.agendable === false
+                  ? <span className="tag t-gray">No</span>
+                  : s.requiereOrden
+                    ? <span className="tag t-amber">Con orden</span>
+                    : <span className="tag t-green">Directo</span>}
+              </td>
+              <td className="right">
+                {soloLectura
+                  ? <span className="small muted">—</span>
+                  : <button className="btn btn-ghost btn-sm" onClick={() => onEditar(s)}>✏️ Editar</button>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      </div>
+
+      <div className="bd small muted">
+        Editar la ficha tiene <b>efecto inmediato</b> en lo que responde el bot: no toca agendas,
+        por eso no necesita periodo de gracia (RN-04.5.2). El alta y baja de servicios se hace
+        en <b>Catálogo</b>.
+      </div>
     </div>
   );
 }

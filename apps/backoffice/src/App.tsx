@@ -25,7 +25,7 @@ const MENU: Array<{ id: Vista; etiqueta: string; roles: UsuarioSesion['rol'][] }
   { id: 'pacientes', etiqueta: 'Pacientes', roles: ['admin', 'asistente'] },
   { id: 'agendas', etiqueta: 'Agendas', roles: ['admin', 'asistente'] },
   { id: 'catalogo', etiqueta: 'Catálogo', roles: ['admin'] },
-  { id: 'conocimiento', etiqueta: 'Conocimiento', roles: ['admin', 'asistente'] },
+  { id: 'conocimiento', etiqueta: 'Base de conocimiento', roles: ['admin', 'asistente'] },
   { id: 'administracion', etiqueta: 'Administración', roles: ['admin'] },
 ];
 
@@ -104,7 +104,7 @@ function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => 
         {vista === 'pacientes' && <Pacientes />}
         {vista === 'agendas' && <Agendas />}
         {vista === 'catalogo' && <Catalogo />}
-        {vista === 'conocimiento' && <Conocimiento />}
+        {vista === 'conocimiento' && <Conocimiento usuario={usuario} onNavegar={setVista} />}
         {vista === 'administracion' && <Administracion />}
         {vista === 'prestador' && (
           usuario.prestadorId
