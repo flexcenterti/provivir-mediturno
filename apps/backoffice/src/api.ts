@@ -4,6 +4,8 @@ export interface UsuarioSesion {
   email: string;
   rol: 'admin' | 'asistente' | 'prestador' | 'pantalla';
   prestadorId: string | null;
+  /** Permisos efectivos del perfil. El menú se arma con esto, no con el rol. */
+  permisos: string[];
 }
 
 export interface DefinicionPermiso {
@@ -237,6 +239,9 @@ export const api = {
     pedir<Pantalla>(`/pantallas/${id}`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
 
   kiosko: () => pedir<EstadoKiosko>('/kiosko/estado'),
+
+  /** RN-10.1 · el enlace público del portal; el QR lo sirve /portal/qr.png. */
+  enlacePortal: () => pedir<{ url: string }>('/portal/enlace'),
 
   cola: (prestadorId?: string) => pedir<Turno[]>(`/turnos${prestadorId ? `?prestadorId=${prestadorId}` : ''}`),
   registrarLlegada: (cuerpo: unknown) => pedir<Turno>('/turnos/llegada', { method: 'POST', body: JSON.stringify(cuerpo) }),

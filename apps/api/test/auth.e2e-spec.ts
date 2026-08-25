@@ -80,6 +80,76 @@ describe('Auth (e2e)', () => {
     });
   });
 
+  /**
+   * `login` devolvía nombre y correo; `GET /auth/yo` devolvía permisos. El
+   * backoffice usa el primero al entrar y el segundo al recargar, así que la
+   * sesión cambiaba de forma bajo los pies del frontend.
+   */
+  describe('forma de la sesión', () => {
+    it('RN-09: la sesión devuelve la misma forma al entrar y al recargar', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ email: 'admin@provivir.local', password: PASSWORD })
+        .expect(200);
+
+      const yo = await request(app.getHttpServer())
+        .get('/api/auth/yo')
+        .set('Authorization', `Bearer ${login.body.accessToken}`)
+        .expect(200);
+
+      expect(Object.keys(yo.body).sort()).toEqual(Object.keys(login.body.usuario).sort());
+      expect(yo.body).toEqual(login.body.usuario);
+      expect(yo.body.nombre).toEqual(expect.any(String));
+      expect(yo.body.nombre.length).toBeGreaterThan(0);
+    });
+
+    it('RN-09: la sesión incluye los permisos del perfil, no el rol a secas', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ email: 'asistente@provivir.local', password: PASSWORD })
+        .expect(200);
+
+      // El menú del backoffice se arma con esta lista.
+      expect(login.body.usuario.permisos).toContain('metricas.ver');
+      expect(login.body.usuario.permisos).toContain('bandeja.operar');
+      expect(login.body.usuario.permisos).not.toContain('configuracion.editar');
+      expect(login.body.usuario.permisos).not.toContain('auditoria.ver');
+      expect(login.body.usuario.permisos).not.toContain('usuarios.gestionar');
+    });
+
+    /**
+     * Los permisos salen de la FILA del perfil, no de `PERFILES_BASE`. Solo el
+     * perfil de acceso completo se reconcilia al arrancar, así que un perfil base
+     * creado antes de que existiera un permiso no lo recibe nunca. Es el caso de
+     * `conocimiento.ver` en el perfil Asistente de esta instalación: el catálogo
+     * dice que debería tenerlo y la fila no lo tiene. Se comprueba la regla, no el
+     * dato concreto, para que la prueba no tape la deriva.
+     */
+    it('RN-09: los permisos salen del perfil guardado, no del catálogo de código', async () => {
+      const perfil = await prisma.perfil.findUnique({ where: { nombre: 'Asistente' } });
+      const login = await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ email: 'asistente@provivir.local', password: PASSWORD })
+        .expect(200);
+
+      expect(login.body.usuario.permisos.sort()).toEqual([...perfil!.permisos].sort());
+    });
+
+    it('RN-09: el refresco devuelve la sesión completa, no solo los tokens', async () => {
+      const login = await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ email: 'admin@provivir.local', password: PASSWORD })
+        .expect(200);
+
+      const r = await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: login.body.refreshToken })
+        .expect(200);
+
+      expect(r.body.usuario).toEqual(login.body.usuario);
+    });
+  });
+
   describe('acceso denegado', () => {
     it('sin token → 401', async () => {
       await request(app.getHttpServer()).get('/api/auth/yo').expect(401);

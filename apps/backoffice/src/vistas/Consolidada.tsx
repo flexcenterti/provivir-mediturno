@@ -27,8 +27,7 @@ export function Consolidada() {
 
   return (
     <div className="vista">
-      <header className="vista-cab">
-        <h2>Agenda consolidada</h2>
+      <header className="vista-cab" style={{ justifyContent: 'flex-end' }}>
         <button className="btn btn-primary" onClick={() => setCreando(true)}>Crear cita</button>
       </header>
 

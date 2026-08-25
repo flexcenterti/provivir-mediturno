@@ -34,7 +34,6 @@ export function Agendas() {
     <div className="vista">
       <header className="vista-cab">
         <div>
-          <h2>Gestión de agendas</h2>
           <p className="nota">
             Solo administración crea, modifica o bloquea disponibilidad. Los prestadores la ven
             en modo solo lectura.

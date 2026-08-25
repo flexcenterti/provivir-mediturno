@@ -72,6 +72,14 @@ describe('Portal público (e2e)', () => {
       // Firma PNG
       expect(r.body.slice(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     });
+
+    it('RN-10.1: el enlace del portal se consulta sin sesión', async () => {
+      const r = await request(app.getHttpServer()).get('/api/portal/enlace').expect(200);
+
+      // Es la misma URL que codifica el QR; el backoffice la muestra en texto
+      // porque una imagen no se puede leer desde el navegador.
+      expect(r.body.url).toMatch(/^https?:\/\//);
+    });
   });
 
   describe('RN-10.2 · paciente registrado', () => {

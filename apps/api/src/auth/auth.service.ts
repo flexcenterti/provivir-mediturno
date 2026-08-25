@@ -5,7 +5,9 @@ import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
+import type { Rol } from '@provivir/shared';
 import type { JwtPayload } from './auth.types';
+import { permisosDe } from './permisos.resolucion';
 import type { LoginDto } from './dto/login.dto';
 import { ARGON2_OPCIONES } from './argon2.opciones';
 
@@ -21,6 +23,9 @@ const TTL = {
 
 /** `15m`, `8h`, `7d`. Nada más: un valor raro caduca la sesión donde no toca. */
 const FORMATO_TTL = /^\d+[mhd]$/;
+
+/** El perfil se carga con el usuario: los permisos salen de él, no del token. */
+const PERFIL = { perfil: { select: { permisos: true, activo: true } } } as const;
 
 /** Mismo mensaje para todo lo que falla al refrescar: no se dice qué falló. */
 const SESION_INVALIDA = 'Sesión expirada';
@@ -80,7 +85,10 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const usuario = await this.prisma.usuario.findUnique({ where: { email: dto.email } });
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { email: dto.email },
+      include: PERFIL,
+    });
 
     // Mismo mensaje y mismo costo aproximado exista o no el usuario: sin enumeración de cuentas.
     if (!usuario || !usuario.activo) {
@@ -105,13 +113,7 @@ export class AuthService {
 
     return {
       ...(await this.emitirPar(payload)),
-      usuario: {
-        id: usuario.id,
-        nombre: usuario.nombre,
-        email: usuario.email,
-        rol: usuario.rol,
-        prestadorId: usuario.prestadorId,
-      },
+      usuario: this.sesionDesde(usuario),
     };
   }
 
@@ -135,7 +137,10 @@ export class AuthService {
     // emitidos antes de esta versión (sin `tipo`) tampoco, que es lo prudente.
     if (payload.tipo !== 'refresco') throw new UnauthorizedException(SESION_INVALIDA);
 
-    const usuario = await this.prisma.usuario.findUnique({ where: { id: payload.sub } });
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: payload.sub },
+      include: PERFIL,
+    });
     if (!usuario || !usuario.activo) throw new UnauthorizedException(SESION_INVALIDA);
 
     // Se reconstruye desde la base, no desde el token: si al usuario le cambiaron el
@@ -149,13 +154,40 @@ export class AuthService {
 
     return {
       ...(await this.emitirPar(nuevo)),
-      usuario: {
-        id: usuario.id,
-        nombre: usuario.nombre,
-        email: usuario.email,
-        rol: usuario.rol,
-        prestadorId: usuario.prestadorId,
-      },
+      usuario: this.sesionDesde(usuario),
     };
+  }
+
+  /**
+   * La forma única de la sesión, para que entrar y recargar devuelvan lo mismo.
+   *
+   * Antes `login` devolvía nombre y correo, y `GET /auth/yo` devolvía permisos: el
+   * frontend usa el primero al entrar y el segundo al recargar, así que la barra
+   * lateral se quedaba sin nombre en cuanto se pulsaba F5, y un menú filtrado por
+   * permisos habría salido vacío al entrar y completo al recargar.
+   */
+  private sesionDesde(usuario: {
+    id: string; nombre: string; email: string; rol: Rol; prestadorId: string | null;
+    perfil?: { permisos: string[]; activo: boolean } | null;
+  }) {
+    return {
+      id: usuario.id,
+      nombre: usuario.nombre,
+      email: usuario.email,
+      rol: usuario.rol,
+      prestadorId: usuario.prestadorId,
+      permisos: permisosDe(usuario),
+    };
+  }
+
+  /** La misma sesión, cuando solo se tiene el id (lo que `GET /auth/yo` recibe del guard). */
+  async sesionDe(usuarioId: string) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      include: PERFIL,
+    });
+    // El guard ya revalidó contra la base en esta misma petición; si no está, se cayó entretanto.
+    if (!usuario || !usuario.activo) throw new UnauthorizedException(SESION_INVALIDA);
+    return this.sesionDesde(usuario);
   }
 }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ADMIN } from './utiles';
+import { ADMIN, ASISTENTE } from './utiles';
 
 /**
  * Backoffice · lo que usan las asistentes todo el día.
@@ -62,7 +62,7 @@ async function entrar(page: import('@playwright/test').Page): Promise<void> {
 test('RN-13 · la base de conocimiento se prueba antes de exponerla a un paciente', async ({ page }) => {
   await entrar(page);
   await page.getByRole('button', { name: 'Base de conocimiento' }).click();
-  await expect(page.getByRole('heading', { name: 'Base de conocimiento' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Base de conocimiento/ })).toBeVisible();
 
   // La base arranca vacía: el bot sigue con el bloque de documentación comercial,
   // y la migración vive dentro del panel de importación.
@@ -107,10 +107,10 @@ test('RN-09.9.8 · los interesados se ven en la bandeja, bajo las escaladas', as
 
 test('RN-04.5.1 · el formulario del catálogo edita la ficha comercial', async ({ page }) => {
   await entrar(page);
-  await page.getByRole('button', { name: 'Catálogo' }).click();
-  // El catálogo abre en Prestadores: sin cambiar de pestaña, «Ecografía Doppler»
-  // aparece en la columna de duraciones de un prestador, no como servicio.
-  await page.getByRole('button', { name: 'Servicios' }).click();
+  // «Catálogo» se partió en dos entradas de menú; esta abre ya en la pestaña de
+  // servicios. Sin ella, «Ecografía Doppler» aparecería en la columna de duraciones
+  // de un prestador y no como servicio.
+  await page.getByRole('button', { name: 'Servicios y exámenes' }).click();
 
   const fila = page.getByRole('row', { name: /Ecografía Doppler/ });
   await fila.getByRole('button', { name: 'Editar' }).click();
@@ -160,4 +160,91 @@ test('RN-13.7.1 · un borrador nuevo no lo recupera el bot hasta publicarlo', as
   await page.getByRole('button', { name: 'sin cobertura' }).click();
   await expect(page.locator('.conversacion-simulada').getByText(/Sin cobertura/))
     .toBeVisible({ timeout: 15_000 });
+});
+
+// ─────────────── Fase 10 · menú del prototipo y pantallas nuevas ───────────────
+
+test('RN-09 · el menú agrupa las entradas en Operación, Gestión y Configuración', async ({ page }) => {
+  await entrar(page);
+
+  const menu = page.getByRole('navigation');
+  await expect(menu.getByText('Operación', { exact: true })).toBeVisible();
+  await expect(menu.getByText('Gestión', { exact: true })).toBeVisible();
+  await expect(menu.getByText('Configuración', { exact: true })).toBeVisible();
+
+  // Los iconos son decorativos: el nombre accesible sigue siendo la etiqueta sola.
+  await expect(page.getByRole('button', { name: 'Base de conocimiento' })).toBeVisible();
+
+  await page.screenshot({ path: 'e2e/capturas/menu.png', fullPage: true });
+});
+
+test('RN-09 · con perfil Asistente el menú oculta lo que su perfil no permite', async ({ page }) => {
+  await page.goto('');
+  await page.getByLabel('Correo').fill(ASISTENTE.email);
+  await page.getByLabel('Contraseña').fill(ASISTENTE.password);
+  await page.getByRole('button', { name: /Entrar|Ingresar/ }).click();
+  await expect(page.getByLabel('Contraseña')).toHaveCount(0, { timeout: 15_000 });
+
+  const menu = page.getByRole('navigation');
+  // Lo que su perfil sí concede.
+  await expect(menu.getByRole('button', { name: 'Métricas' })).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Bandeja asistente' })).toBeVisible();
+  // Lo que no: antes se decidía por rol y estos perfiles no se podían distinguir.
+  await expect(menu.getByRole('button', { name: 'Auditoría' })).toHaveCount(0);
+  await expect(menu.getByRole('button', { name: 'Carga masiva' })).toHaveCount(0);
+  await expect(menu.getByRole('button', { name: 'Reglas de prioridad' })).toHaveCount(0);
+  await expect(menu.getByRole('button', { name: 'Administración' })).toHaveCount(0);
+});
+
+test('RN-09 · al recargar la pestaña el nombre del usuario sigue en pantalla', async ({ page }) => {
+  await entrar(page);
+  // `GET /auth/yo` no devolvía nombre ni correo, así que tras un F5 la píldora
+  // quedaba vacía mientras la sesión seguía viva.
+  await page.reload();
+  await expect(page.locator('.user-pill .nm')).not.toBeEmpty({ timeout: 15_000 });
+});
+
+test('RN-02 · la pantalla de métricas separa el balanceo de medicina general', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: 'Métricas' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Balanceo · Medicina general' })).toBeVisible();
+  await expect(page.getByText(/los controles no cuentan \(RN-02\)/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Resolución automática IA' })).toHaveCount(0);
+
+  await page.screenshot({ path: 'e2e/capturas/metricas.png', fullPage: true });
+});
+
+test('RN-10.1 · la pantalla de autoagendamiento muestra el QR de la sede', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: 'Autoagendamiento web' }).click();
+
+  const qr = page.getByRole('img', { name: /Código QR del portal/ });
+  await expect(qr).toBeVisible();
+  // Que se vea el `img` no basta: una imagen rota también «se ve».
+  await expect.poll(() => qr.evaluate((el: HTMLImageElement) => el.naturalWidth))
+    .toBeGreaterThan(0);
+
+  await page.screenshot({ path: 'e2e/capturas/portal-web.png', fullPage: true });
+});
+
+test('RN-05 · las reglas de prioridad se editan y quedan guardadas', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: 'Reglas de prioridad' }).click();
+
+  const campo = page.getByRole('spinbutton', { name: /Margen de tolerancia/ });
+  const original = await campo.inputValue();
+
+  await campo.fill('12');
+  await page.getByRole('button', { name: /Guardar · Margen de tolerancia/ }).click();
+  await expect(page.getByText(/Regla actualizada/)).toBeVisible({ timeout: 15_000 });
+
+  await page.reload();
+  await page.getByRole('button', { name: 'Reglas de prioridad' }).click();
+  await expect(page.getByRole('spinbutton', { name: /Margen de tolerancia/ })).toHaveValue('12');
+
+  // Se devuelve para no dejar la base de pruebas con un valor distinto del seed.
+  await page.getByRole('spinbutton', { name: /Margen de tolerancia/ }).fill(original);
+  await page.getByRole('button', { name: /Guardar · Margen de tolerancia/ }).click();
+  await expect(page.getByText(/Regla actualizada/)).toBeVisible({ timeout: 15_000 });
 });

@@ -38,7 +38,6 @@ export function Dashboard() {
     <div className="vista">
       <header className="vista-cab">
         <div>
-          <h2>Dashboard</h2>
           {/* El cliente lo pidió expresamente: "hoy, fecha tal" */}
           <p className="fecha-larga">{fechaLarga}</p>
         </div>
