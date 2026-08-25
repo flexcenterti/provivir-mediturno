@@ -2,7 +2,11 @@
 :root {
   --bg: #F3F6F7; --card: #FFFFFF; --ink: #13272F; --muted: #5C7078; --line: #E1E8EA;
   --teal: #0E6E6B; --teal-ink: #0A4E4C; --teal-soft: #E2F1F0;
+  --green: #2F9E62; --green-soft: #E4F4EB;
+  --amber: #C77E1E; --amber-soft: #FBF0DC;
+  --blue: #2E6FD8; --blue-soft: #E7EFFC;
   --red: #C34A38; --red-soft: #FAE8E4;
+  --slate: #1D3540;
   --shadow: 0 1px 2px rgba(19,39,47,.06), 0 4px 14px rgba(19,39,47,.06);
   --r: 12px;
   --fd: 'Sora', system-ui, sans-serif;
@@ -294,3 +298,114 @@ tr.inactiva { opacity: .55; }
 .p-check { display: flex; align-items: flex-start; gap: .5rem;
   margin: .5rem 0; font-size: .9rem; line-height: 1.35; cursor: pointer; }
 .p-check input[type="checkbox"] { width: auto; flex: none; margin-top: .15rem; }
+
+/* ══════════ Componentes del prototipo ══════════
+   Portados de `prototipo_plataforma_citas_medicas_3.html` para que «Base de
+   conocimiento» sea la misma pantalla que vio el cliente. `.tag`, sus seis
+   variantes y `.aviso` ya se usaban en Catálogo, Administración, Pacientes,
+   Bandeja, Agendas y Prestador **sin estar definidas**: se veían como texto
+   plano. Definirlas aquí arregla esas pantallas de paso.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* ── Etiquetas de color ── */
+.tag { display: inline-block; padding: .14rem .55rem; border-radius: 999px;
+  font-size: .75rem; font-weight: 600; white-space: nowrap; }
+.t-teal  { background: var(--teal-soft);  color: var(--teal-ink); }
+.t-green { background: var(--green-soft); color: #1E6B42; }
+.t-amber { background: var(--amber-soft); color: #8A5510; }
+.t-blue  { background: var(--blue-soft);  color: #1D4FA3; }
+.t-red   { background: var(--red-soft);   color: #93321F; }
+.t-gray  { background: #EDF1F2;           color: var(--muted); }
+
+/* Hermano de `.error` y `.exito`, que sí existían. */
+.aviso { background: var(--amber-soft); color: #8A5510; padding: .55rem .75rem;
+  border-radius: 9px; font-size: .85rem; margin-bottom: .9rem; line-height: 1.5; }
+
+/* ── Botones ── (`.btn`, `.btn-ghost`, `.btn-primary` y `.btn-sm` ya existen) */
+.btn-soft   { background: var(--teal-soft);  color: var(--teal-ink); }
+.btn-danger { background: var(--red-soft);   color: #93321F; }
+.btn-green  { background: var(--green);      color: #fff; }
+.btn-amber  { background: var(--amber-soft); color: #8A5510; }
+.btn-block  { width: 100%; }
+.btn:hover:not(:disabled) { filter: brightness(1.06); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+/* `.btn-primary` heredó `width:100%` del login; dentro de una tarjeta tiene que
+   ocupar lo que mide su texto o la fila de botones del encabezado se parte. */
+.card .btn-primary, .searchbar .btn-primary, .acciones .btn-primary { width: auto; }
+
+/* ── Tarjeta con cabecera y cuerpo ──
+   `.card` del backoffice trae `padding:1.2rem`; la del prototipo no, porque lo
+   ponen `.hd` y `.bd`. Sin el modificador quedaría doble padding, así que el
+   relleno se anula solo donde se usa esta estructura. */
+.card.plano { padding: 0; border: 1px solid var(--line); }
+.card .hd { display: flex; align-items: center; gap: .7rem; padding: .95rem 1.15rem;
+  border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.card .hd h3 { font-size: .98rem; margin-bottom: 0; }
+.card .hd .spacer { flex: 1; }
+.card .bd { padding: 1.05rem 1.15rem; }
+.card.plano .tabla th:first-child, .card.plano .tabla td:first-child { padding-left: 1.15rem; }
+.card.plano .tabla th:last-child,  .card.plano .tabla td:last-child  { padding-right: 1.15rem; }
+
+/* Una tabla densa dentro de media rejilla se desborda. Que scrollee dentro de su
+   propia tarjeta y no empuje la página: lo que se sale por el lado de la ventana
+   no lo encuentra nadie. */
+.tabla-ancha { overflow-x: auto; }
+.tabla-ancha .tabla { min-width: 520px; }
+
+/* ── Rejillas ── (no colisiona con `.grid-2`, que es otra cosa)
+   `auto-fit` y no columnas fijas con media query: el ancho que importa es el del
+   contenedor, no el de la ventana. Con la barra lateral de 240 px, una pantalla
+   de 1280 deja menos de 1000 px útiles, y una media query a 1080 px no se entera:
+   dejaba la columna derecha fuera del área visible. */
+.grid { display: grid; gap: 1rem; }
+.g4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); }
+
+/* ── KPI ── (`.kpi` ya existe con fondo y sombra; esto va después para ganar) */
+.kpi { padding: 1rem 1.1rem; }
+.kpi .lb { font-size: .75rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .07em; }
+.kpi .vl { font-family: var(--fd); font-size: 1.75rem; font-weight: 700; margin-top: .25rem; }
+.kpi .dt { font-size: .78rem; color: var(--muted); margin-top: .2rem; }
+.kpi.accent { border-top: 3px solid var(--teal); }
+
+/* ── Utilidades ── */
+.small  { font-size: .8rem; }
+.center { text-align: center; }
+.right  { text-align: right; }
+.empty  { padding: 2rem; text-align: center; color: var(--muted); font-size: .88rem; }
+.chips  { display: flex; gap: .4rem; flex-wrap: wrap; }   /* `.chip` singular es otra cosa */
+
+.searchbar { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; }
+.searchbar input, .searchbar select { padding: .55rem .8rem; border: 1px solid var(--line);
+  border-radius: 9px; background: #fff; min-width: 200px; flex: 1; }
+
+/* Fila de dato con puntos suspensivos: etiqueta a la izquierda, valor a la derecha. */
+.kb-row { display: flex; justify-content: space-between; align-items: center; gap: .6rem;
+  padding: .4rem 0; border-bottom: 1px dashed var(--line); font-size: .84rem; }
+.kb-row:last-child { border-bottom: none; }
+.kb-row input { width: 90px; padding: .3rem .5rem; border: 1px solid var(--line);
+  border-radius: 7px; text-align: right; }
+
+/* ── Burbujas del probador ──
+   Reproducen la conversación de WhatsApp para que se lea lo que el bot diría,
+   no un JSON. El fondo es el del simulador del prototipo. */
+.conversacion-simulada { display: flex; flex-direction: column; gap: .5rem;
+  background: #E8E2D8; padding: .7rem; border-radius: 10px; }
+.msg { max-width: 78%; padding: .55rem .8rem; border-radius: 12px; font-size: .88rem;
+  line-height: 1.4; box-shadow: 0 1px 1px rgba(0,0,0,.08); }
+.msg.ia  { align-self: flex-start; background: #fff; border-bottom-left-radius: 3px;
+  max-width: 100%; }
+.msg.sys { align-self: stretch; background: var(--amber-soft); font-size: .76rem;
+  color: #8A5510; border-radius: 8px; max-width: 100%; }
+.msg .who { font-size: .68rem; font-weight: 700; color: var(--teal-ink); margin-bottom: .15rem;
+  text-transform: uppercase; letter-spacing: .05em; }
+
+/* Rótulo de sección dentro de una tarjeta. */
+.rotulo { font-size: .72rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: .4rem; }
+.rotulo + .rotulo, .kb-row + .rotulo { margin-top: .9rem; }
+
+/* La base de conocimiento pinta nueve tarjetas en dos rejillas: necesita más
+   ancho que las vistas de una sola columna. */
+.vista.ancha { max-width: 1340px; }
