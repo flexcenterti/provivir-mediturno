@@ -5,6 +5,7 @@ import {
   momentoDeEnvio,
   proximoHabil,
   RETRASOS_MIN,
+  retrasosValidos,
 } from './seguimiento.horario';
 
 /** Cali es UTC−5: las 12:00Z son las 07:00 en la sede. */
@@ -21,6 +22,36 @@ describe('RN-09.9.2 · cadencia', () => {
     const t0 = enCali('2026-09-07T13:00:00Z'); // lunes, 08:00 en Cali
     expect(momentoDeEnvio(t0, 'seguimiento_1').toISOString()).toBe('2026-09-07T15:00:00.000Z');
     expect(momentoDeEnvio(t0, 'seguimiento_2').toISOString()).toBe('2026-09-07T18:00:00.000Z');
+  });
+
+  it('RN-09.9.2: la cadencia sale de configuración, no de una constante', () => {
+    const t0 = enCali('2026-09-07T13:00:00Z'); // lunes, 08:00 en Cali
+    const propia = { seguimiento_1: 60, seguimiento_2: 180, cierre: 300 };
+
+    expect(momentoDeEnvio(t0, 'seguimiento_1', undefined, undefined, propia).toISOString())
+      .toBe('2026-09-07T14:00:00.000Z');
+    // Y sin pasarla sigue rigiendo la de por defecto: quien no la configure no cambia.
+    expect(momentoDeEnvio(t0, 'seguimiento_1').toISOString()).toBe('2026-09-07T15:00:00.000Z');
+  });
+});
+
+describe('RN-09.9.6 · una cadencia mal configurada no puede salirse de la ventana', () => {
+  it('la cadencia por defecto es válida', () => {
+    expect(retrasosValidos(RETRASOS_MIN)).toBe(true);
+  });
+
+  it('RN-09.9.6: un cierre más allá de las 24 h no vale: solo saldría como plantilla', () => {
+    expect(retrasosValidos({ seguimiento_1: 120, seguimiento_2: 300, cierre: 1_500 })).toBe(false);
+  });
+
+  it('RN-09.9.6: los pasos desordenados no valen', () => {
+    // Cerrar antes del primer seguimiento dejaría la conversación cerrada sin empezar.
+    expect(retrasosValidos({ seguimiento_1: 300, seguimiento_2: 120, cierre: 480 })).toBe(false);
+    expect(retrasosValidos({ seguimiento_1: 120, seguimiento_2: 300, cierre: 200 })).toBe(false);
+  });
+
+  it('RN-09.9.6: un primer paso inmediato no vale: escribiría encima de la conversación', () => {
+    expect(retrasosValidos({ seguimiento_1: 0, seguimiento_2: 300, cierre: 480 })).toBe(false);
   });
 });
 
