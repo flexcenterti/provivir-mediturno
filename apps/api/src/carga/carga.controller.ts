@@ -3,10 +3,8 @@ import {
   Query, Res, UploadedFile, UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { randomUUID } from 'node:crypto';
-import { extname } from 'node:path';
 import type { Response } from 'express';
+import { opcionesSubida } from '../comun/subidas';
 import { CargaCola } from './carga.cola';
 import { ContactosProcesador } from './contactos.procesador';
 import { Permisos } from '../auth/decorators/permisos.decorator';
@@ -16,7 +14,9 @@ import type { UsuarioAutenticado } from '../auth/auth.types';
 /** 200 MB cubre con holgura un CSV de 400.000 pacientes. */
 const MAX_BYTES = 200 * 1024 * 1024;
 const EXTENSIONES = ['.csv', '.txt'];
-export const DIR_SUBIDAS = process.env.DIR_SUBIDAS ?? 'uploads';
+
+// Se re-exporta para no romper a quien ya lo importaba desde aquí.
+export { DIR_SUBIDAS } from '../comun/subidas';
 
 @Controller('carga')
 @Permisos('carga.ejecutar')
@@ -32,45 +32,14 @@ export class CargaController {
    * nombre a quien escribe sin estar registrado.
    */
   @Post('contactos')
-  @UseInterceptors(
-    FileInterceptor('archivo', {
-      storage: diskStorage({
-        destination: DIR_SUBIDAS,
-        filename: (_req, file, cb) => cb(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`),
-      }),
-      limits: { fileSize: MAX_BYTES, files: 1 },
-      fileFilter: (_req, file, cb) => {
-        const ext = extname(file.originalname).toLowerCase();
-        if (!EXTENSIONES.includes(ext)) {
-          return cb(new BadRequestException(`Extensión no permitida. Use: ${EXTENSIONES.join(', ')}`), false);
-        }
-        cb(null, true);
-      },
-    }),
-  )
+  @UseInterceptors(FileInterceptor('archivo', opcionesSubida(EXTENSIONES, MAX_BYTES)))
   async subirContactos(@UploadedFile() archivo: Express.Multer.File | undefined) {
     if (!archivo) throw new BadRequestException('No se recibió el archivo');
     return this.contactos.procesar(archivo.path, archivo.originalname);
   }
 
   @Post()
-  @UseInterceptors(
-    FileInterceptor('archivo', {
-      // Fuera del webroot y con nombre generado: nada del nombre original llega al disco.
-      storage: diskStorage({
-        destination: DIR_SUBIDAS,
-        filename: (_req, file, cb) => cb(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`),
-      }),
-      limits: { fileSize: MAX_BYTES, files: 1 },
-      fileFilter: (_req, file, cb) => {
-        const ext = extname(file.originalname).toLowerCase();
-        if (!EXTENSIONES.includes(ext)) {
-          return cb(new BadRequestException(`Extensión no permitida. Use: ${EXTENSIONES.join(', ')}`), false);
-        }
-        cb(null, true);
-      },
-    }),
-  )
+  @UseInterceptors(FileInterceptor('archivo', opcionesSubida(EXTENSIONES, MAX_BYTES)))
   async subir(
     @UploadedFile() archivo: Express.Multer.File | undefined,
     @UsuarioActual() usuario: UsuarioAutenticado,
