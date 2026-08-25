@@ -1,7 +1,6 @@
 # Changelog · FASE 10 — Menú del prototipo y las pantallas que faltaban
 
-**Estado:** completa salvo la corrida de Playwright (ver «Pendiente de ejecutar»).
-258 unitarias + 198 e2e de API en verde.
+**Estado:** completa. 258 unitarias + 198 e2e de API + 17 de navegador en verde.
 
 ## Por qué
 
@@ -120,8 +119,11 @@ recuperación de la base de conocimiento —nunca llama al modelo—. Construirl
 conviene decidir antes: consume tokens de Anthropic en cada prueba, y hay que aislarlo para que las
 conversaciones simuladas no ensucien la bandeja ni las métricas de resolución automática.
 
-## Pendiente de ejecutar
+## Nota sobre los iconos
 
-Las pruebas de navegador (`npm run e2e -- --project=backoffice`) no se corrieron: Playwright recrea
-`provivir_e2e` con `prisma migrate reset --force`, y Prisma exige consentimiento explícito del
-usuario para que un agente ejecute esa orden. Las siete pruebas nuevas están escritas.
+Los iconos del menú son emoji, como en la especificación visual y como el resto de la plataforma
+(«➕ Crear», «📤 Importar documento», «🗑»). En la captura de `e2e/capturas/menu.png` salen como
+cuadros vacíos porque **el Chromium sin cabeza de esta máquina no tiene ninguna fuente de emoji
+instalada** (`fc-list | grep -c emoji` → 0); en un equipo de escritorio con Noto Color Emoji, macOS
+o Windows se ven bien. No es un cambio de comportamiento —la plataforma ya dependía de emoji desde
+la Fase 7—, pero conviene comprobarlo en los equipos del mostrador antes del piloto.
