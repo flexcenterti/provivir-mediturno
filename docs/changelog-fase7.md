@@ -470,3 +470,133 @@ umbral de 62 es **una hipótesis**: calibrarlo necesita preguntas reales del nú
 `prisma migrate dev` se quedó colgado tras aplicar la migración, en el chequeo de deriva contra la
 base sombra. `prisma migrate deploy` aplica sin base sombra y `prisma migrate diff` comprueba la
 deriva sin bloquearse; conviene usar esos dos en esta máquina.
+
+---
+
+# Pantalla de Base de conocimiento contra el prototipo
+
+Trabajo posterior al cierre de la fase. El cliente revisó
+`prototipo_plataforma_citas_medicas_3.html` y la pantalla implementada se había quedado muy por
+debajo de lo que ahí se describe: un scroll plano de tres tarjetas frente a las nueve del
+prototipo, sin forma de crear un artículo y sin forma de cargar el documento del cliente.
+
+## Lo que faltaba y ahora está
+
+| Pieza | Antes | Ahora |
+|---|---|---|
+| Crear / editar artículo | `POST` y `PATCH` existían desde la fase 7 y **no los llamaba nadie**: sin formulario, la base solo se poblaba con el importador automático | Modal con título, categoría, servicio, markdown, etiquetas y vigencia, más la previsualización del troceado real |
+| Importar masivo | Solo `POST /conocimiento/importar`, que lee `documentacion_comercial` — limitada a **200 caracteres** por el DTO, o sea inservible para un documento real (P6) | Subida de `.md`/`.txt` a cola propia, con progreso y CSV de errores |
+| 4 indicadores de cabecera | No existían | `GET /conocimiento/resumen`, una sola petición |
+| Ficha comercial de servicios | Solo en Catálogo | Tabla + modal aquí, con el componente extraído y compartido |
+| Parámetros de la IA · Temas P12 · Seguimiento | No existían | Tres paneles, **editables** |
+| Menú | «Conocimiento» | «Base de conocimiento» |
+
+## Dos cosas que estaban rotas en silencio
+
+**`archivarVencidos()` no la ejecutaba nadie.** Implementada desde la fase 7 (RN-13.5.5) y sin
+cron ni job repetible en toda la API: poner una fecha de vigencia no hacía absolutamente nada.
+Ahora es un repetible de BullMQ —`upsertJobScheduler`, 3:15 a.m. en la zona de la sede— en la cola
+`conocimiento`. No se añadió `@nestjs/schedule`: BullMQ ya estaba y evita una dependencia.
+
+**`kb_temas_prohibidos` (P12) no se podía administrar.** No existía como fila de `configuracion`,
+así que `GET /configuracion` nunca la devolvía y la rejilla de Reglas no la mostraba. Y aunque
+hubiera existido, `FijarValorDto` topaba en `@MaxLength(200)` y la lista serializada ronda el
+kilobyte y medio: era **imposible de guardar**. El mismo tope bloqueaba pegar el
+`documentacion_comercial` real. Ahora hay un límite por clave (60.000 para el documento, 20.000
+para los temas, 200 para todo lo demás) y la lista se edita con un modal de temas y señales. Sin
+migración: `configuracion.valor` ya era `text`.
+
+## Por qué lo importado entra como borrador
+
+Es la diferencia deliberada con `importarDocumentacionComercial`, que sí publica.
+
+Aquella **migra** un bloque de texto que el bot ya venía inyectando en cada conversación:
+publicarlo no expone nada que no estuviera expuesto. Un documento que alguien acaba de subir no lo
+ha revisado nadie, y RN-13.7.1 dice que al bot solo se le sirve lo aprobado. El test
+`RN-13.7.1: un documento importado entra como borrador y el bot no lo recupera` lo comprueba de
+extremo a extremo: `estado === 'borrador'`, cero fragmentos y `buscar()` devolviendo
+`sin_cobertura` para una pregunta que el documento cubre.
+
+El botón viejo se conserva dentro del panel de importación y solo con la base vacía, que es cuando
+tiene sentido.
+
+## Numeración de reglas
+
+El prototipo numera distinto. Se mantiene la del repo (CLAUDE.md: docs > prototipo) y se copia
+todo lo demás. Equivalencias, por si alguien compara pantalla contra prototipo:
+
+| Prototipo | Repo |
+|---|---|
+| RN-13.6 temas prohibidos | **RN-13.4** |
+| RN-13.5 sin cobertura | **RN-13.3** |
+| RN-13.11 cola de mejora | **RN-13.6** |
+| RN-13.12 borrador no se sirve | **RN-13.7.1 / .7.2** |
+| RN-13.14 archivar / reactivar / borrar | **RN-13.5 / .5.3 / .5.4** |
+| RN-13.8 ofrecimiento de cita | **RN-09.8** (cifras de RN-04.5.1) |
+| RN-14 seguimiento comercial | **RN-09.9** |
+| RN-15.5 artículos a revisar | **RN-04.5.4** |
+| RN-15.3.3 efecto inmediato de la ficha | **RN-04.5.2** |
+
+El recuadro de señales de emergencia del prototipo lo atribuye a «RN-13.7», que en el repo es
+«Gobierno y trazabilidad». No se inventó un número: la pantalla cita
+`ia.prompt.ts · DERIVAR_EMERGENCIA`, que es como lo lista `docs/rn-13-base-conocimiento.md`.
+
+## Cadencia del seguimiento, a configuración
+
+`RETRASOS_MIN` era una constante de código, pero CLAUDE.md lista «encendido y **cadencia** del
+seguimiento comercial» entre los parámetros configurables. Ahora sale de tres claves nuevas
+(`seguimiento_retraso_{1,2,cierre}_min`, 120/300/480) y `momentoDeEnvio` recibe la cadencia como
+último parámetro con valor por defecto, para no romper a quien la llamaba.
+
+`retrasosValidos()` rechaza lo que no cumple RN-09.9.6: pasos desordenados o un cierre más allá de
+las 24 h. Si la configuración no vale se avisa por log y rige la de por defecto — una secuencia
+conservadora es mejor que no programar nada y perder al interesado en silencio. La validación
+también está en el cliente, antes de guardar.
+
+## Permisos: ninguno nuevo
+
+Los paneles editables escriben en `PUT /configuracion/:clave`, bajo `configuracion.editar` → solo
+Administración. El perfil Asistente tiene `conocimiento.ver` y nada más, así que la pantalla ya le
+sale en solo lectura y el `soloLectura` del prototipo coincide con la realidad sin tocar nada.
+
+No se relajó el guard: `kb_score_min` cambia lo que el bot le responde a *todos* los pacientes y
+pertenece al mismo nivel de confianza que Reglas. Tampoco se creó un `conocimiento.parametros`,
+que sería un permiso que nadie salvo el admin recibiría. La vista usa **dos banderas separadas**
+(`puedeEditarContenido` / `puedeEditarParametros`) aunque hoy valgan lo mismo: el día que exista un
+perfil de redactor —`conocimiento.editar` sin `configuracion.editar`— ya lo soporta.
+
+Por lo mismo, `GET /conocimiento/resumen` sirve el umbral y el top-k: viven en `configuracion`, que
+un asistente no puede leer, y sin ellos no sabría contra qué se está midiendo el probador.
+
+## Cambios de paso
+
+- **`.tag` y sus seis variantes de color no existían en `estilos.css`** pese a usarse en Catálogo,
+  Administración, Pacientes, Bandeja, Agendas y Prestador: se renderizaban como texto plano.
+  Igual `.aviso`, usada en tres sitios. Portarlas arregla esas pantallas.
+- **`Servicio.enlaceInfo`** existía en el esquema, en los dos DTO y en `api.ts`, y **ningún
+  formulario lo escribía**. Ahora tiene su campo en la ficha.
+- **Las opciones de subida estaban duplicadas dos veces** en `carga.controller.ts`. Extraídas a
+  `comun/subidas.ts`; la importación de documentos habría sido la tercera copia.
+- **`crear()` reventaba con `servicioId: ''`** —lo que manda un `<select>` de «— General»— y
+  `vigenteHasta` en formato `YYYY-MM-DD` no lo acepta Prisma. Nunca había salido porque nada
+  llamaba al endpoint. Se normalizan los dos.
+- **`ActualizarArticuloDto` no admitía `null`**: no había forma de desvincular un servicio ni de
+  limpiar una fecha de vigencia.
+- **`resolucionSinHumano()`** se extrajo de `reporte()` a método público. Dos definiciones de la
+  cifra que el cliente mira serían dos verdades.
+
+## Fuera de alcance
+
+**`.docx`.** No hay parser en el repo y `mammoth` es dependencia nueva, que según CLAUDE.md no se
+decide sin revisión humana. Si se aprueba es **un `case` en `extraerTexto()`** de
+`conocimiento.importacion.procesador.ts` y `'.docx'` en `EXTENSIONES_KB`; nada más cambia. El
+punto de extensión quedó aislado justamente para eso.
+
+**Runner de tests de frontend.** El backoffice no tiene vitest ni jest y añadirlo es dependencia
+nueva. La cobertura de la vista va por Playwright.
+
+## Sin migraciones
+
+Cero cambios en `schema.prisma`, cero migraciones, nada del esquema de auditoría, nada de la firma
+del webhook de Meta. `KbArticulo` ya tenía `tags`, `vigenteHasta`, `actualizadoEn` y
+`requiereRevision`; el estado de los trabajos vive en Redis, como en `carga`.
