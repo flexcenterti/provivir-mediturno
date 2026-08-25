@@ -26,6 +26,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * cambio de perfil también aplica de inmediato.
    */
   async validate(payload: JwtPayload): Promise<UsuarioAutenticado> {
+    // Un token de refresco tiene la vida de la sesión entera: si sirviera de
+    // `Bearer`, guardarlo en el navegador equivaldría a un access token de 8 horas.
+    if (payload.tipo === 'refresco') throw new UnauthorizedException();
+
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: payload.sub },
       select: {

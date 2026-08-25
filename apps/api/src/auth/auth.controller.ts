@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/commo
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { RefrescarDto } from './dto/refrescar.dto';
 import { Publico } from './decorators/publico.decorator';
 import { UsuarioActual } from './decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from './auth.types';
@@ -24,6 +25,18 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
+  }
+
+  /**
+   * Renovación silenciosa de la sesión. Sin el límite estricto de `login`: aquí no
+   * se prueban contraseñas, y una pantalla con varios paneles puede pedirlo a la
+   * vez. Basta el throttle global.
+   */
+  @Publico()
+  @HttpCode(HttpStatus.OK)
+  @Post('refresh')
+  refrescar(@Body() dto: RefrescarDto) {
+    return this.auth.refrescar(dto.refreshToken);
   }
 
   @Get('yo')

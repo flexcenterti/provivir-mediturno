@@ -44,14 +44,65 @@ export interface RespuestaLogin {
 }
 
 const CLAVE_TOKEN = 'accessToken';
+const CLAVE_REFRESCO = 'refreshToken';
 
+/**
+ * La sesión vive en `sessionStorage` a propósito: al cerrar el navegador se vuelve
+ * a pedir contraseña, que es lo que se decidió para los equipos compartidos del
+ * mostrador. Mientras la pestaña siga abierta y en uso, se renueva sola.
+ */
 export const token = {
   leer: () => sessionStorage.getItem(CLAVE_TOKEN),
-  guardar: (t: string) => sessionStorage.setItem(CLAVE_TOKEN, t),
-  borrar: () => sessionStorage.removeItem(CLAVE_TOKEN),
+  guardar: (acceso: string, refresco: string) => {
+    sessionStorage.setItem(CLAVE_TOKEN, acceso);
+    sessionStorage.setItem(CLAVE_REFRESCO, refresco);
+  },
+  borrar: () => {
+    sessionStorage.removeItem(CLAVE_TOKEN);
+    sessionStorage.removeItem(CLAVE_REFRESCO);
+  },
 };
 
-async function pedir<T>(ruta: string, init?: RequestInit): Promise<T> {
+/**
+ * Un solo refresco en vuelo. Una pantalla con varios paneles lanza varias
+ * peticiones a la vez: sin este cerrojo, todas verían el 401 y pedirían un token
+ * nuevo, y las últimas guardarían un refresco que las primeras ya invalidaron.
+ */
+let refrescoEnVuelo: Promise<boolean> | null = null;
+
+export function refrescarSesion(): Promise<boolean> {
+  const refresco = sessionStorage.getItem(CLAVE_REFRESCO);
+  if (!refresco) return Promise.resolve(false);
+
+  refrescoEnVuelo ??= (async () => {
+    try {
+      const r = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: refresco }),
+      });
+      if (!r.ok) return false;
+      const datos = (await r.json()) as RespuestaLogin;
+      token.guardar(datos.accessToken, datos.refreshToken);
+      return true;
+    } catch {
+      // Sin red no es una sesión caída: se trata como fallo y quien llamó decide.
+      return false;
+    } finally {
+      refrescoEnVuelo = null;
+    }
+  })();
+
+  return refrescoEnVuelo;
+}
+
+/** Se avisa a la aplicación para volver al login sin dejar la vista a medias. */
+let alCaerSesion: (() => void) | null = null;
+export const sesion = {
+  alCaer: (fn: () => void) => { alCaerSesion = fn; },
+};
+
+async function pedir<T>(ruta: string, init?: RequestInit, reintentar = true): Promise<T> {
   const t = token.leer();
   const r = await fetch(`/api${ruta}`, {
     ...init,
@@ -63,7 +114,15 @@ async function pedir<T>(ruta: string, init?: RequestInit): Promise<T> {
   });
 
   if (r.status === 401) {
+    // El 401 normal es "el token de acceso venció": se renueva y se repite la
+    // petición, sin que quien esté trabajando se entere. Solo se cae al login si
+    // el refresco tampoco sirve — 8 h sin usar la plataforma, o usuario desactivado.
+    // Las rutas de `auth` quedan fuera: un login con contraseña mala no se refresca.
+    if (reintentar && !ruta.startsWith('/auth/') && (await refrescarSesion())) {
+      return pedir<T>(ruta, init, false);
+    }
     token.borrar();
+    alCaerSesion?.();
     throw new Error('Sesión expirada');
   }
   if (!r.ok) {

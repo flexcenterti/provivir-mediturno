@@ -29,8 +29,8 @@ REDIS_PASSWORD=CAMBIAR
 
 # JWT · generar con: openssl rand -base64 48
 JWT_SECRET=CAMBIAR
-JWT_ACCESS_TTL=15m
-JWT_REFRESH_TTL=7d
+JWT_ACCESS_TTL=1h
+JWT_REFRESH_TTL=8h
 
 # Dominio público. Temporal: provivir.exagos.co
 # Cambiarlo aquí actualiza Caddy, el QR y el enlace que envía el bot por WhatsApp.

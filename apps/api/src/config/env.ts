@@ -11,8 +11,13 @@ const esquema = z.object({
   REDIS_URL: z.string().url().optional(),
 
   JWT_SECRET: z.string().min(32, 'JWT_SECRET debe tener al menos 32 caracteres'),
-  JWT_ACCESS_TTL: z.string().default('15m'),
-  JWT_REFRESH_TTL: z.string().default('7d'),
+  /**
+   * Respaldo de las duraciones de sesión: mandan `sesion_ttl_acceso` y
+   * `sesion_ttl_inactividad` de la tabla `configuracion`, editables desde
+   * Administración → Reglas. Estos valores rigen si esas claves faltan.
+   */
+  JWT_ACCESS_TTL: z.string().default('1h'),
+  JWT_REFRESH_TTL: z.string().default('8h'),
 
   CORS_ORIGINS: z.string().default('http://localhost:5173'),
 

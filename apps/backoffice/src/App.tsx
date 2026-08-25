@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, token, type UsuarioSesion } from './api';
+import { api, sesion, token, type UsuarioSesion } from './api';
 import { Dashboard } from './vistas/Dashboard';
 import { Consolidada } from './vistas/Consolidada';
 import { Mostrador } from './vistas/Mostrador';
@@ -33,8 +33,14 @@ export function App() {
   const [usuario, setUsuario] = useState<UsuarioSesion | null>(null);
   const [cargando, setCargando] = useState(true);
 
+  // Si el refresco tampoco sirve, se vuelve al login en vez de dejar la vista con
+  // un error y los datos a medias.
+  useEffect(() => sesion.alCaer(() => setUsuario(null)), []);
+
   useEffect(() => {
     if (!token.leer()) { setCargando(false); return; }
+    // Al recargar la pestaña el token de acceso puede estar vencido: `pedir` lo
+    // renueva con el de refresco y la sesión sigue como estaba.
     api.yo()
       .then((u) => setUsuario(u as UsuarioSesion))
       .catch(() => token.borrar())
@@ -121,7 +127,7 @@ function Login({ onEntrar }: { onEntrar: (u: UsuarioSesion) => void }) {
     setError(''); setEnviando(true);
     try {
       const r = await api.login(email, password);
-      token.guardar(r.accessToken);
+      token.guardar(r.accessToken, r.refreshToken);
       onEntrar(r.usuario);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error inesperado');

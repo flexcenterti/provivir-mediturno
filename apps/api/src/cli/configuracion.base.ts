@@ -26,6 +26,20 @@ export const CONFIGURACION_BASE = [
   { clave: 'seguimiento_hora_cierre', valor: '18', descripcion: 'RN-09.9.5 · Hora hasta la que pueden salir mensajes de seguimiento.' },
   { clave: 'seguimiento_comercial_dias_entre', valor: '30', descripcion: 'RN-09.9.7.2 · Días mínimos entre dos secuencias para el mismo paciente y servicio.' },
   {
+    clave: 'sesion_ttl_acceso',
+    valor: '1h',
+    descripcion:
+      'Cada cuánto se renueva la sesión por detrás. Invisible para quien trabaja: el backoffice ' +
+      'la renueva sola. Formato: 15m, 1h, 8h.',
+  },
+  {
+    clave: 'sesion_ttl_inactividad',
+    valor: '8h',
+    descripcion:
+      'Tiempo SIN usar la plataforma tras el cual se vuelve a pedir contraseña. Mientras se ' +
+      'trabaje, la sesión se renueva y no se corta. Formato: 15m, 1h, 8h.',
+  },
+  {
     clave: 'plantilla_recordatorio_24h',
     valor: '',
     descripcion:

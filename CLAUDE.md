@@ -46,6 +46,11 @@ Precedencia si algo se contradice: Lógica de Negocio > Especificación > Arquit
 - **RN-13 · Los artículos se archivan, no se borran.** Archivar los saca del índice en la misma
   transacción; la ficha se conserva porque la auditoría debe poder explicar respuestas ya dadas.
   Borrado físico solo de borradores.
+- **El token de refresco NO es un `Bearer`.** Los dos se firman con el mismo secreto, así que sin
+  la marca `tipo` del payload son intercambiables y guardar el de refresco equivaldría a un token
+  de acceso con la vida de la sesión entera. `JwtStrategy` rechaza los de refresco; el canje
+  rechaza los de acceso. Las duraciones se editan en Administración → Reglas (`sesion_ttl_acceso`,
+  `sesion_ttl_inactividad`), no en el código.
 - **Ventana de 24 h de Meta: todo envío proactivo la respeta.** WhatsApp solo admite texto libre
   dentro de las 24 h que abre el ÚLTIMO mensaje del paciente. Fuera de ellas solo sale una
   **plantilla aprobada**; un texto libre se rechaza con `#131047` y el paciente no recibe nada.
@@ -115,6 +120,7 @@ Borrar migraciones · cambiar el esquema de auditoría · tocar la verificación
 | 6 · Métricas, endurecimiento y piloto | **Completa** — `docs/changelog-fase6.md` |
 | 7 · Base de conocimiento + seguimiento comercial | **Completa** salvo el golden set — `docs/changelog-fase7.md` |
 | 8 · Envíos proactivos y ventana de Meta | **Completa** salvo las plantillas del cliente — `docs/changelog-fase8.md` |
+| 9 · Sesión que no se corta mientras se trabaja | **Completa** — `docs/changelog-fase9.md` |
 
 **Las seis primeras fases están completas.** Lo que falta para producción son credenciales e insumos
 del cliente, no código: ver `docs/checklist-piloto.md` y `despliegue/GUIA-DESPLIEGUE.md`.

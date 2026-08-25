@@ -139,6 +139,67 @@ describe('Auth (e2e)', () => {
     });
   });
 
+  describe('renovación de la sesión', () => {
+    const entrar = async () => {
+      const r = await request(app.getHttpServer())
+        .post('/api/auth/login')
+        .send({ email: 'asistente@provivir.local', password: PASSWORD })
+        .expect(200);
+      return r.body as { accessToken: string; refreshToken: string };
+    };
+
+    it('el refresco devuelve un par nuevo y el acceso nuevo sirve', async () => {
+      const { refreshToken } = await entrar();
+
+      const r = await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken })
+        .expect(200);
+
+      expect(r.body.accessToken).toBeDefined();
+      // Rota: el de refresco también es nuevo, y es lo que corre la ventana de inactividad.
+      expect(r.body.refreshToken).toBeDefined();
+      expect(r.body.refreshToken).not.toBe(refreshToken);
+
+      await request(app.getHttpServer())
+        .get('/api/auth/yo')
+        .set('Authorization', `Bearer ${r.body.accessToken}`)
+        .expect(200);
+    });
+
+    it('el token de refresco NO abre rutas protegidas', async () => {
+      const { refreshToken } = await entrar();
+      await request(app.getHttpServer())
+        .get('/api/auth/yo')
+        .set('Authorization', `Bearer ${refreshToken}`)
+        .expect(401);
+    });
+
+    it('un token de acceso no sirve para refrescar', async () => {
+      const { accessToken } = await entrar();
+      await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: accessToken })
+        .expect(401);
+    });
+
+    it('un refresco ilegible da 401', async () => {
+      await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: 'esto.no.es.un.token.valido.de.ninguna.manera' })
+        .expect(401);
+    });
+
+    it('el refresco no necesita sesión previa: es público', async () => {
+      // Si exigiera token, la renovación sería imposible justo cuando hace falta.
+      const r = await request(app.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: 'x'.repeat(40) });
+      expect(r.status).toBe(401);
+      expect(r.body.message).toBe('Sesión expirada');
+    });
+  });
+
   describe('health', () => {
     it('/api/health responde sin token', async () => {
       const r = await request(app.getHttpServer()).get('/api/health').expect(200);

@@ -74,6 +74,7 @@ lint → prisma generate → migrate deploy → seed → unitarias → e2e → b
 
 - **Redis no está en uso todavía.** Declarado en compose y en `.env.example`; entra con BullMQ en la Fase 1 (carga masiva).
 - **Sin `refresh` endpoint.** El login ya emite refresh token, pero falta la rotación. Fase 1.
+  → Se quedó sin hacer hasta la **fase 9**, y mientras tanto la sesión expulsaba cada 15 minutos.
 - **Auditoría sin escrituras.** La tabla existe; el interceptor que la alimenta entra con el primer CRUD real.
 - El seed borra y recrea agendas y pantallas en cada corrida (`deleteMany`). Es correcto en desarrollo;
   **no debe correrse contra staging con datos del cliente**.

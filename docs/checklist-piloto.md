@@ -99,6 +99,10 @@ También por CLI, para lo que haga falta antes de tener acceso:
     node apps/api/dist/cli/usuarios.js --clave --email …  contraseña nueva
     node apps/api/dist/cli/usuarios.js --desactivar --email …
 
+- ✅ **Duración de la sesión decidida y configurable** (2026-08-25): se renueva sola mientras se
+  trabaje y caduca a las **8 h de inactividad**; al cerrar el navegador se pide contraseña. Se
+  ajusta desde Administración → Reglas con `sesion_ttl_acceso` y `sesion_ttl_inactividad`, sin
+  desplegar. Detalle en `docs/changelog-fase9.md`.
 - ⬜ **Retirar las cuentas de prueba antes de atender pacientes reales**:
   `--purgar-prueba`. Terminan en `@prueba.provivir.local` para poder distinguirlas.
 - ⬜ Crear las cuentas reales del equipo (asistentes, médicos, pantallas).

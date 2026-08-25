@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  api, token, type EstadoKiosko, type Pantalla, type RegistroAuditoria,
+  api, refrescarSesion, token, type EstadoKiosko, type Pantalla, type RegistroAuditoria,
   type Servicio, type TrabajoCarga,
 } from '../api';
 import { Acceso } from './Acceso';
@@ -71,11 +71,19 @@ function CargaMasiva() {
     try {
       const form = new FormData();
       form.append('archivo', archivo);
-      const r = await fetch(`/api${ruta}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token.leer()}` },
-        body: form,
-      });
+      // FormData no pasa por `pedir` —fija Content-Type JSON—, así que la
+      // renovación silenciosa hay que pedirla a mano: subir un CSV de 50.000
+      // contactos justo cuando vence el token no puede costar el archivo.
+      const enviar = async () =>
+        fetch(`/api${ruta}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token.leer()}` },
+          body: form,
+        });
+
+      let r = await enviar();
+      if (r.status === 401 && (await refrescarSesion())) r = await enviar();
+
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
         throw new Error(d.message ?? 'No fue posible cargar el archivo');
