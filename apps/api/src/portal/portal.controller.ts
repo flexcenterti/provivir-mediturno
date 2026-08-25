@@ -82,6 +82,19 @@ export class PortalController {
   }
 
   /**
+   * RN-10.1 · El mismo enlace que codifica el QR, en texto.
+   *
+   * El backoffice lo necesita para mostrarlo y para el botón «Abrir el portal»;
+   * el QR es una imagen y no se puede leer desde el navegador. Es una URL pública
+   * destinada a carteles impresos: no hay nada que proteger, solo que limitar.
+   */
+  @Get('enlace')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  enlace() {
+    return { url: this.config.get<string>('PORTAL_URL') ?? 'http://localhost:5174' };
+  }
+
+  /**
    * RN-10.1 · QR para imprimir en sede y embeber en grupoprovivir.com.
    * Caso de uso: el paciente en la cola lo escanea, agenda desde su celular y se retira.
    */

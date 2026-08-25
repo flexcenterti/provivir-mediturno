@@ -88,7 +88,6 @@ export function Conocimiento({ usuario, onNavegar }: {
     <div className="vista ancha">
       <header className="vista-cab">
         <div>
-          <h2>Base de conocimiento</h2>
           <p className="nota">
             Lo que el bot responde antes de escalar. Si ninguna ficha cubre la pregunta,
             escala en vez de aproximar: nunca inventa horarios, precios ni indicaciones.

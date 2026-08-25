@@ -23,12 +23,11 @@ const SECCIONES: Array<{ id: Seccion; etiqueta: string }> = [
   { id: 'configuracion', etiqueta: 'Reglas' },
 ];
 
-export function Administracion() {
-  const [seccion, setSeccion] = useState<Seccion>('acceso');
+export function Administracion({ inicial = 'acceso' }: { inicial?: Seccion } = {}) {
+  const [seccion, setSeccion] = useState<Seccion>(inicial);
 
   return (
     <div className="vista">
-      <header className="vista-cab"><h2>Administración</h2></header>
       <div className="tabs" style={{ marginBottom: '1rem' }}>
         {SECCIONES.map((s) => (
           <button key={s.id} className={`tab ${seccion === s.id ? 'activa' : ''}`} onClick={() => setSeccion(s.id)}>

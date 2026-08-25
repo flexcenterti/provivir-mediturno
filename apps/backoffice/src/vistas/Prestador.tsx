@@ -36,7 +36,6 @@ export function VistaPrestador({ prestadorId }: { prestadorId: string }) {
 
   return (
     <div className="vista">
-      <header className="vista-cab"><h2>Mi consulta</h2></header>
 
       {error && <div className="error">{error}</div>}
 

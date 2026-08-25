@@ -39,8 +39,13 @@ export class AuthController {
     return this.auth.refrescar(dto.refreshToken);
   }
 
+  /**
+   * La sesión completa, no el contexto del guard: este devolvía `sedeId` y
+   * `permisos` pero ni nombre ni correo, así que al recargar la pestaña el
+   * backoffice se quedaba sin con qué saludar. Misma forma que `login`.
+   */
   @Get('yo')
   yo(@UsuarioActual() usuario: UsuarioAutenticado) {
-    return usuario;
+    return this.auth.sesionDe(usuario.id);
   }
 }

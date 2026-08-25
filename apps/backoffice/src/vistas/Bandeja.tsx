@@ -39,7 +39,6 @@ export function Bandeja() {
     <div className="vista">
       <header className="vista-cab">
         <div>
-          <h2>Bandeja de la asistente</h2>
           <p className="nota">
             Conversaciones que la IA no resolvió. Ordenadas por prioridad y, dentro de ella,
             por quién lleva más tiempo esperando.

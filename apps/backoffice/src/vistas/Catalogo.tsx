@@ -7,12 +7,11 @@ import { api, type PrestadorDetalle, type Servicio } from '../api';
  * Duraciones por prestador y tipo (RN-01.4), ventana de control (RN-01.3),
  * grupo de balanceo (RN-02.1) y servicios de cupo múltiple (RN-04.4).
  */
-export function Catalogo() {
-  const [pestana, setPestana] = useState<'prestadores' | 'servicios'>('prestadores');
+export function Catalogo({ inicial = 'prestadores' }: { inicial?: 'prestadores' | 'servicios' } = {}) {
+  const [pestana, setPestana] = useState<'prestadores' | 'servicios'>(inicial);
 
   return (
     <div className="vista">
-      <header className="vista-cab"><h2>Catálogo</h2></header>
       <div className="tabs" style={{ marginBottom: '1rem' }}>
         <button className={`tab ${pestana === 'prestadores' ? 'activa' : ''}`} onClick={() => setPestana('prestadores')}>
           Prestadores

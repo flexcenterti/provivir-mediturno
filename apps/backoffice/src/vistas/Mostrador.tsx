@@ -29,7 +29,6 @@ export function Mostrador() {
 
   return (
     <div className="vista">
-      <header className="vista-cab"><h2>Mostrador</h2></header>
       <p className="nota">Canal principal de llegada. El paciente paga en recepción y aquí se registra su llegada.</p>
 
       <form className="buscador" onSubmit={registrar}>

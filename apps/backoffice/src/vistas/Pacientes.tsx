@@ -36,7 +36,6 @@ export function Pacientes() {
     <div className="vista">
       <header className="vista-cab">
         <div>
-          <h2>Pacientes</h2>
           <p className="nota">Búsqueda por documento, nombre o teléfono. {total.toLocaleString('es-CO')} registro(s).</p>
         </div>
         <button className="btn btn-primary" onClick={() => setCreando(true)}>Crear paciente</button>
