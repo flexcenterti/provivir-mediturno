@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { CamposFichaComercial, fichaAPayload, fichaDesde } from '../componentes/FichaComercial';
 import { api, type PrestadorDetalle, type Servicio } from '../api';
 
 /**
@@ -374,13 +375,10 @@ function FormServicio({ servicio, idsUsados, onCerrar, onGuardado }: {
     requiereOrden: servicio?.requiereOrden ?? false,
     politicaCosto: servicio?.politicaCosto ?? 'costo_pleno',
     activo: servicio?.activo ?? true,
-    // Ficha comercial (RN-04.5.1) · es lo que el bot usa para vender.
-    descripcionComercial: servicio?.descripcionComercial ?? '',
-    beneficios: (servicio?.beneficios ?? []).join('\n'),
-    preparacion: servicio?.preparacion ?? '',
-    rangoPrecio: servicio?.rangoPrecio ?? '',
-    agendable: servicio?.agendable ?? true,
   });
+  // Ficha comercial (RN-04.5.1) · es lo que el bot usa para vender. Vive en su
+  // propio estado porque el mismo bloque se edita desde Base de conocimiento.
+  const [ficha, setFicha] = useState(fichaDesde(servicio));
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
 
@@ -398,11 +396,7 @@ function FormServicio({ servicio, idsUsados, onCerrar, onGuardado }: {
       nombre: f.nombre, categoria: f.categoria,
       duracionMin: Number(f.duracionMin), cupos: Number(f.cupos),
       requiereOrden: f.requiereOrden, politicaCosto: f.politicaCosto,
-      descripcionComercial: f.descripcionComercial.trim() || undefined,
-      beneficios: f.beneficios.split('\n').map((b) => b.trim()).filter(Boolean),
-      preparacion: f.preparacion.trim() || undefined,
-      rangoPrecio: f.rangoPrecio.trim() || undefined,
-      agendable: f.agendable,
+      ...fichaAPayload(ficha),
     };
     try {
       if (esNuevo) await api.crearServicio({ id, tipo: f.tipo, ...comun });
@@ -507,48 +501,7 @@ function FormServicio({ servicio, idsUsados, onCerrar, onGuardado }: {
           </>
         )}
 
-        <fieldset className="ficha-comercial">
-          <legend>Ficha comercial</legend>
-          <p className="p-ayuda">
-            Es lo que el bot dice de este servicio. Sin descripción ni beneficios no lo ofrece
-            por WhatsApp ni por el portal: no puede venderlo si no sabe qué decir de él.
-          </p>
-
-          <div className="field">
-            <label htmlFor="sv-desc">Descripción</label>
-            <textarea id="sv-desc" rows={2} value={f.descripcionComercial}
-                      placeholder="Qué es y para qué sirve, en palabras de paciente"
-                      onChange={(e) => setF({ ...f, descripcionComercial: e.target.value })} />
-          </div>
-
-          <div className="field">
-            <label htmlFor="sv-benef">Beneficios · uno por línea</label>
-            <textarea id="sv-benef" rows={3} value={f.beneficios}
-                      placeholder={'Resultado el mismo día\nNo requiere remisión externa'}
-                      onChange={(e) => setF({ ...f, beneficios: e.target.value })} />
-            <span className="p-ayuda">El seguimiento usa uno distinto en cada mensaje, para no repetirse.</span>
-          </div>
-
-          <div className="field">
-            <label htmlFor="sv-prep">Preparación</label>
-            <textarea id="sv-prep" rows={2} value={f.preparacion}
-                      placeholder="Ayuno de 6 horas, ropa cómoda…"
-                      onChange={(e) => setF({ ...f, preparacion: e.target.value })} />
-          </div>
-
-          <div className="field">
-            <label htmlFor="sv-precio">Rango de precio</label>
-            <input id="sv-precio" value={f.rangoPrecio}
-                   placeholder="Opcional · el bot lo cita tal cual"
-                   onChange={(e) => setF({ ...f, rangoPrecio: e.target.value })} />
-          </div>
-
-          <label className="p-check">
-            <input type="checkbox" checked={f.agendable}
-                   onChange={(e) => setF({ ...f, agendable: e.target.checked })} />
-            Agendable por WhatsApp y portal
-          </label>
-        </fieldset>
+        <CamposFichaComercial valores={ficha} onCambiar={setFicha} prefijo="sv" />
 
         {!esNuevo && <p className="nota">El tipo de cita no se cambia: define cómo lo trata el motor de agendamiento.</p>}
 
