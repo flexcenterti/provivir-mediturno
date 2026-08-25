@@ -1,3 +1,5 @@
+import { TEMAS_PROHIBIDOS_POR_DEFECTO } from '../conocimiento/conocimiento.temas';
+
 /**
  * Parámetros de reglas fuera del código (Arquitectura §9).
  *
@@ -16,6 +18,13 @@ export const CONFIGURACION_BASE = [
   { clave: 'kb_score_min', valor: '62', descripcion: 'RN-13.3 · Cobertura mínima de la pregunta para que el bot responda en vez de escalar. Calibrar contra el golden set.' },
   { clave: 'kb_top_k', valor: '5', descripcion: 'RN-13 · Fragmentos que se le entregan al modelo por consulta.' },
   {
+    clave: 'kb_temas_prohibidos',
+    valor: JSON.stringify(TEMAS_PROHIBIDOS_POR_DEFECTO),
+    descripcion:
+      'RN-13.4 · Temas que escalan SIEMPRE, sin importar el puntaje. JSON [{tema, senales[]}]. ' +
+      'Se edita en Base de conocimiento; la lista definitiva la aprueba el cliente por escrito (P12).',
+  },
+  {
     clave: 'seguimiento_comercial_activo',
     valor: 'true',
     descripcion:
@@ -25,6 +34,15 @@ export const CONFIGURACION_BASE = [
   { clave: 'seguimiento_hora_apertura', valor: '7', descripcion: 'RN-09.9.5 · Hora desde la que pueden salir mensajes de seguimiento.' },
   { clave: 'seguimiento_hora_cierre', valor: '18', descripcion: 'RN-09.9.5 · Hora hasta la que pueden salir mensajes de seguimiento.' },
   { clave: 'seguimiento_comercial_dias_entre', valor: '30', descripcion: 'RN-09.9.7.2 · Días mínimos entre dos secuencias para el mismo paciente y servicio.' },
+  { clave: 'seguimiento_retraso_1_min', valor: '120', descripcion: 'RN-09.9.2 · Minutos desde el último mensaje hasta el primer seguimiento.' },
+  { clave: 'seguimiento_retraso_2_min', valor: '300', descripcion: 'RN-09.9.2 · Minutos desde el último mensaje hasta el segundo seguimiento.' },
+  {
+    clave: 'seguimiento_retraso_cierre_min',
+    valor: '480',
+    descripcion:
+      'RN-09.9.2 · Minutos hasta el mensaje de cierre. Los tres pasos deben ir en orden y caber ' +
+      'en la ventana de 24 h de Meta (RN-09.9.6); si no, rige la cadencia por defecto.',
+  },
   {
     clave: 'sesion_ttl_acceso',
     valor: '1h',
