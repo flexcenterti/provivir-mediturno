@@ -3,10 +3,14 @@ import {
   IsArray,
   IsDateString,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 const ESTADOS = ['borrador', 'publicado', 'archivado'] as const;
@@ -43,14 +47,26 @@ export class ActualizarArticuloDto {
   @IsOptional() @IsString() @MaxLength(60_000)
   contenidoMd?: string;
 
-  @IsOptional() @IsString() @MaxLength(40)
-  servicioId?: string;
+  /**
+   * `null` explícito desvincula el servicio. Sin esta distinción no había forma
+   * de deshacer un vínculo equivocado: omitir el campo significa «no lo toques»
+   * y cualquier cadena significa «átalo a este», así que faltaba «suéltalo».
+   */
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsString() @MaxLength(40)
+  servicioId?: string | null;
 
   @IsOptional() @IsArray() @IsString({ each: true })
   tags?: string[];
 
-  @IsOptional() @IsDateString()
-  vigenteHasta?: string;
+  /** `null` limpia la fecha de vigencia; ver el comentario de `servicioId`. */
+  @IsOptional() @ValidateIf((_, v) => v !== null) @IsDateString()
+  vigenteHasta?: string | null;
+}
+
+/** Ventana del KPI de resolución sin humano. */
+export class ResumenConocimientoDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(365)
+  dias?: number;
 }
 
 /** Filtros del listado. El estado no se valida como enum de Prisma para no filtrar su tipo al DTO. */

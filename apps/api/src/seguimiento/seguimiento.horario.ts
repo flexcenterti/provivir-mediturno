@@ -9,10 +9,36 @@ import { ZONA_SEDE } from '@provivir/shared';
  */
 
 /** Minutos desde `T0` para cada paso (RN-09.9.2). */
-export const RETRASOS_MIN = { seguimiento_1: 120, seguimiento_2: 300, cierre: 480 } as const;
+export interface Retrasos {
+  seguimiento_1: number;
+  seguimiento_2: number;
+  cierre: number;
+}
+
+/**
+ * Cadencia por defecto. La real vive en `configuracion` —CLAUDE.md la lista entre
+ * los parámetros configurables— y esto es lo que rige mientras nadie la cambie.
+ */
+export const RETRASOS_MIN: Retrasos = { seguimiento_1: 120, seguimiento_2: 300, cierre: 480 };
 
 /** Ventana de atención al cliente de WhatsApp. Fuera de ella solo salen plantillas. */
 export { VENTANA_META_HORAS } from '../whatsapp/ventana-meta';
+import { VENTANA_META_HORAS as HORAS_VENTANA } from '../whatsapp/ventana-meta';
+
+/**
+ * RN-09.9.6 · una cadencia mal configurada no puede sacar la secuencia de la
+ * ventana de 24 h: fuera de ella el mensaje solo saldría como plantilla aprobada,
+ * y no hay ninguna. Los pasos además tienen que ir en orden — un cierre antes del
+ * primer seguimiento dejaría la conversación cerrada antes de empezar.
+ */
+export function retrasosValidos(r: Retrasos): boolean {
+  return (
+    r.seguimiento_1 > 0 &&
+    r.seguimiento_1 < r.seguimiento_2 &&
+    r.seguimiento_2 < r.cierre &&
+    r.cierre <= HORAS_VENTANA * 60
+  );
+}
 
 export interface HorarioSede {
   /** Minutos desde medianoche. */
@@ -85,12 +111,18 @@ export function proximoHabil(momento: Date, horario = HORARIO_POR_DEFECTO, zona 
  */
 export { dentroDeVentanaMeta } from '../whatsapp/ventana-meta';
 
-/** Momento de envío de un paso, ya diferido si cae fuera del horario. */
+/**
+ * Momento de envío de un paso, ya diferido si cae fuera del horario.
+ *
+ * `retrasos` va al final y con valor por defecto para que quien solo quiera la
+ * cadencia estándar siga llamando igual.
+ */
 export function momentoDeEnvio(
   t0: Date,
-  paso: keyof typeof RETRASOS_MIN,
+  paso: keyof Retrasos,
   horario = HORARIO_POR_DEFECTO,
   zona = ZONA_SEDE,
+  retrasos: Retrasos = RETRASOS_MIN,
 ): Date {
-  return proximoHabil(new Date(t0.getTime() + RETRASOS_MIN[paso] * 60_000), horario, zona);
+  return proximoHabil(new Date(t0.getTime() + retrasos[paso] * 60_000), horario, zona);
 }

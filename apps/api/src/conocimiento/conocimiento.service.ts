@@ -3,6 +3,8 @@ import type { EstadoArticulo, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
+import { CLAVE_ACTIVO, SeguimientoService } from '../seguimiento/seguimiento.service';
+import { MetricasService } from '../metricas/metricas.service';
 import { trocear } from './conocimiento.troceado';
 import { parsearTemas, temaProhibido } from './conocimiento.temas';
 import { categoriaDe, dividirDocumentacion, emparejarServicio } from './conocimiento.importacion';
@@ -32,6 +34,8 @@ export class ConocimientoService {
     private readonly prisma: PrismaService,
     private readonly auditoria: AuditoriaService,
     private readonly configuracion: ConfiguracionService,
+    private readonly seguimiento: SeguimientoService,
+    private readonly metricas: MetricasService,
   ) {}
 
   // ─────────────────────────── Consulta ───────────────────────────
@@ -53,11 +57,94 @@ export class ConocimientoService {
     return articulo;
   }
 
+  /**
+   * Todo lo que la pantalla de Base de conocimiento necesita para pintarse, en
+   * una sola petición.
+   *
+   * Va junto a propósito: los cuatro indicadores se leen como una fila y cargarlos
+   * por separado deja la cabecera a medias. Además el umbral y el top-k viven en
+   * `configuracion`, que solo se puede leer con `configuracion.editar`; sirviéndolos
+   * aquí, quien solo tiene `conocimiento.ver` igual ve contra qué se está midiendo.
+   */
+  async resumen(dias = 30) {
+    const hasta = new Date();
+    const desde = new Date(hasta.getTime() - dias * 24 * 60 * 60 * 1000);
+
+    const [porEstado, requierenRevision, pendientesAbiertas, seguimientosActivos, resolucion] =
+      await Promise.all([
+        this.prisma.kbArticulo.groupBy({ by: ['estado'], _count: { _all: true } }),
+        this.prisma.kbArticulo.count({ where: { requiereRevision: true, estado: 'publicado' } }),
+        this.prisma.kbPendiente.count({ where: { estado: 'abierta' } }),
+        this.seguimiento.conteoInteresados(),
+        this.metricas.resolucionSinHumano(desde, hasta),
+      ]);
+
+    const cuenta = (estado: EstadoArticulo) =>
+      porEstado.find((f) => f.estado === estado)?._count._all ?? 0;
+
+    const retrasos = this.seguimiento.retrasos();
+
+    return {
+      articulos: {
+        publicados: cuenta('publicado'),
+        borradores: cuenta('borrador'),
+        archivados: cuenta('archivado'),
+        requierenRevision,
+      },
+      pendientesAbiertas,
+      seguimientosActivos,
+      resolucionSinHumano: { ...resolucion, dias },
+      parametros: {
+        umbral: this.configuracion.numero(CLAVE_UMBRAL, UMBRAL_POR_DEFECTO),
+        topK: this.configuracion.numero(CLAVE_TOP_K, TOP_K_POR_DEFECTO),
+        // Solo los nombres: las señales son largas y la pantalla pinta etiquetas.
+        temas: parsearTemas(this.configuracion.texto(CLAVE_TEMAS, '')).map((t) => t.tema),
+        seguimiento: {
+          activo: this.configuracion.booleano(CLAVE_ACTIVO, true),
+          pasos: [
+            { paso: 'seguimiento_1', minutos: retrasos.seguimiento_1 },
+            { paso: 'seguimiento_2', minutos: retrasos.seguimiento_2 },
+            { paso: 'cierre', minutos: retrasos.cierre },
+          ],
+          horaApertura: this.configuracion.numero('seguimiento_hora_apertura', 7),
+          horaCierre: this.configuracion.numero('seguimiento_hora_cierre', 18),
+        },
+      },
+    };
+  }
+
   // ─────────────────────── Ciclo de vida (RN-13.5) ───────────────────────
+
+  /**
+   * Normaliza lo que manda el formulario antes de que llegue a Prisma.
+   *
+   *  · El `<select>` de «— General» manda cadena vacía, que como clave foránea no
+   *    existe y revienta el insert. Vacío y `null` significan lo mismo: general.
+   *  · El `<input type="date">` manda `YYYY-MM-DD`, que Prisma no acepta como
+   *    `DateTime`: hay que darle el instante completo. Se toma el final del día
+   *    porque la vigencia se cumple *después* de la fecha indicada, no al empezarla.
+   */
+  private normalizar<T extends { servicioId?: string | null; vigenteHasta?: string | null }>(dto: T) {
+    const datos: Record<string, unknown> = { ...dto };
+
+    if ('servicioId' in dto) datos.servicioId = dto.servicioId?.trim() || null;
+    if ('vigenteHasta' in dto) {
+      datos.vigenteHasta = dto.vigenteHasta ? new Date(`${dto.vigenteHasta.slice(0, 10)}T23:59:59.999Z`) : null;
+    }
+    return datos;
+  }
 
   async crear(dto: CrearArticuloDto, usuarioId: string, sedeId: string) {
     const articulo = await this.prisma.kbArticulo.create({
-      data: { ...dto, sedeId, autorId: usuarioId, estado: 'borrador' },
+      data: {
+        ...this.normalizar(dto),
+        titulo: dto.titulo,
+        categoria: dto.categoria,
+        contenidoMd: dto.contenidoMd,
+        sedeId,
+        autorId: usuarioId,
+        estado: 'borrador',
+      },
     });
 
     await this.auditoria.registrar({
@@ -80,7 +167,7 @@ export class ConocimientoService {
     const previo = await this.porId(id);
 
     const articulo = await this.prisma.$transaction(async (tx) => {
-      const actualizado = await tx.kbArticulo.update({ where: { id }, data: dto });
+      const actualizado = await tx.kbArticulo.update({ where: { id }, data: this.normalizar(dto) });
       if (dto.contenidoMd !== undefined && actualizado.estado === 'publicado') {
         await this.reindexar(tx, id, actualizado.contenidoMd, actualizado.titulo);
       }

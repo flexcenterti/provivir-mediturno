@@ -103,6 +103,8 @@ export class MetricasService {
         this.prisma.conversacion.count({ where: { creadoEn: rango, escalada: false, estado: 'resuelta' } }),
       ]);
 
+    const { porcentaje } = await this.resolucionSinHumano(rango.gte, rango.lte);
+
     const servicios = await this.prisma.servicio.findMany({ select: { id: true, nombre: true } });
     const prestadores = await this.prisma.prestador.findMany({ select: { id: true, nombre: true } });
     const nombreServicio = new Map(servicios.map((s) => [s.id, s.nombre]));
@@ -121,10 +123,28 @@ export class MetricasService {
         escaladas,
         resueltasPorIa,
         // La métrica que el cliente va a mirar: qué porcentaje resolvió la IA sola.
-        porcentajeResolucionIa: conversaciones > 0
-          ? Math.round(((conversaciones - escaladas) / conversaciones) * 100)
-          : 0,
+        porcentajeResolucionIa: porcentaje,
       },
+    };
+  }
+
+  /**
+   * RN-08.4 · Qué porcentaje de conversaciones cerró la IA sin pasar por una
+   * persona. Vive aquí y no en cada consumidor porque es la cifra que el cliente
+   * mira: dos definiciones distintas del mismo número serían dos verdades.
+   */
+  async resolucionSinHumano(desde: Date, hasta: Date) {
+    const rango = { gte: desde, lte: hasta };
+    const [conversaciones, escaladas] = await Promise.all([
+      this.prisma.conversacion.count({ where: { creadoEn: rango } }),
+      this.prisma.conversacion.count({ where: { creadoEn: rango, escalada: true } }),
+    ]);
+
+    return {
+      conversaciones,
+      porcentaje: conversaciones > 0
+        ? Math.round(((conversaciones - escaladas) / conversaciones) * 100)
+        : 0,
     };
   }
 

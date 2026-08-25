@@ -13,11 +13,19 @@ import {
   momentoDeEnvio,
   proximoHabil,
   RETRASOS_MIN,
+  retrasosValidos,
+  type Retrasos,
 } from './seguimiento.horario';
 import { textoDelPaso, type FichaParaMensaje } from './seguimiento.mensajes';
 
 export const CLAVE_ACTIVO = 'seguimiento_comercial_activo';
 export const CLAVE_DIAS_ENTRE = 'seguimiento_comercial_dias_entre';
+/** RN-09.9.2 · cadencia de la secuencia, en minutos desde T0. */
+export const CLAVES_RETRASO = {
+  seguimiento_1: 'seguimiento_retraso_1_min',
+  seguimiento_2: 'seguimiento_retraso_2_min',
+  cierre: 'seguimiento_retraso_cierre_min',
+} as const;
 
 const PASOS: PasoSeguimiento[] = ['seguimiento_1', 'seguimiento_2', 'cierre'];
 const DIAS_ENTRE_SECUENCIAS = 30;
@@ -85,10 +93,11 @@ export class SeguimientoService {
     if (await this.yaTieneCita(entrada.telefono, entrada.servicioId, entrada.pacienteId)) return 0;
 
     const horario = this.horario();
+    const retrasos = this.retrasos();
     let programados = 0;
 
     for (const paso of PASOS) {
-      const programadoPara = momentoDeEnvio(t0, paso as keyof typeof RETRASOS_MIN, horario);
+      const programadoPara = momentoDeEnvio(t0, paso, horario, undefined, retrasos);
 
       // RN-09.9.6 · lo que no quepa en la ventana de 24 h no se programa: solo
       // podría salir como plantilla aprobada, y no hay ninguna.
@@ -306,6 +315,40 @@ export class SeguimientoService {
       aperturaMin: this.configuracion.numero('seguimiento_hora_apertura', 7) * 60,
       cierreMin: this.configuracion.numero('seguimiento_hora_cierre', 18) * 60,
     };
+  }
+
+  /**
+   * RN-09.9.2 · cadencia desde `configuracion`. Si lo guardado no cumple
+   * RN-09.9.6 se usa la de por defecto y se avisa: preferimos una secuencia
+   * conservadora a no programar nada y perder al interesado en silencio.
+   */
+  retrasos(): Retrasos {
+    const leidos: Retrasos = {
+      seguimiento_1: this.configuracion.numero(CLAVES_RETRASO.seguimiento_1, RETRASOS_MIN.seguimiento_1),
+      seguimiento_2: this.configuracion.numero(CLAVES_RETRASO.seguimiento_2, RETRASOS_MIN.seguimiento_2),
+      cierre: this.configuracion.numero(CLAVES_RETRASO.cierre, RETRASOS_MIN.cierre),
+    };
+    if (retrasosValidos(leidos)) return leidos;
+
+    this.log.warn(
+      `Cadencia de seguimiento inválida (${leidos.seguimiento_1}/${leidos.seguimiento_2}/${leidos.cierre} min): ` +
+        'los pasos deben ir en orden y caber en la ventana de 24 h. Se usa la cadencia por defecto.',
+    );
+    return RETRASOS_MIN;
+  }
+
+  /**
+   * Conteo de interesados con secuencia viva. Mismo filtro que `interesados()` a
+   * propósito: el número del botón de la base de conocimiento tiene que coincidir
+   * con las filas que la asistente ve en su bandeja.
+   */
+  async conteoInteresados(): Promise<number> {
+    const filas = await this.prisma.seguimiento.findMany({
+      where: { OR: [{ estado: 'programado' }, { estado: 'enviado' }] },
+      distinct: ['conversacionId'],
+      select: { conversacionId: true },
+    });
+    return filas.length;
   }
 
   private ficha(servicio: {

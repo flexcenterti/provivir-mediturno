@@ -7,5 +7,7 @@ import { AgendasModule } from '../agendas/agendas.module';
   imports: [AgendasModule],
   controllers: [MetricasController],
   providers: [MetricasService],
+  // Lo consume la base de conocimiento para su KPI de resolución sin humano.
+  exports: [MetricasService],
 })
 export class MetricasModule {}
