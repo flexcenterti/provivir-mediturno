@@ -1,16 +1,25 @@
+# Dependencias
 node_modules/
+
+# Build
 dist/
+dist-esm/
 build/
+*.tsbuildinfo
 # Frontends compilados que el instalador coloca para Caddy
 despliegue/web/
-coverage/
-*.log
-.DS_Store
 
 # Secretos — nunca al repo
 .env
 .env.*
 !.env.example
+
+# Configuración local de Claude Code (permisos/ajustes de esta máquina)
+.claude/settings.local.json
+
+# Documentación de desarrollo (planeación interna, no normativa)
+docs/*.xls
+docs/*.xlsx
 
 # Prisma
 apps/api/prisma/*.db
@@ -18,7 +27,6 @@ apps/api/prisma/migrations/dev.db*
 
 # Datos de carga masiva (PII de pacientes)
 uploads/
-tmp/
 *.csv
 !docs/**/*.csv
 
@@ -29,7 +37,6 @@ tmp/
 # Salida de las pruebas de navegador
 test-results/
 playwright-report/
-dist-esm/
 e2e/capturas/
 
 # Respaldos de la base: NUNCA en el repositorio.
@@ -37,3 +44,13 @@ e2e/capturas/
 # historial para siempre. El checklist además los quiere fuera del servidor.
 respaldos/
 *.dump.gz.enc
+
+# SO / Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Logs y temporales
+*.log
+coverage/
+tmp/
