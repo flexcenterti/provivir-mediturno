@@ -35,6 +35,14 @@ describe('Configuración · los parámetros nuevos llegan a instalaciones ya des
     ]));
   });
 
+  it('RN-04.6: la anticipación mínima de agendamiento es un parámetro base', () => {
+    const clave = CONFIGURACION_BASE.find((c) => c.clave === 'agendamiento_anticipacion_dias');
+    expect(clave).toBeDefined();
+    // 1 = solo desde mañana. Si el valor por defecto cambiara, el portal y el bot
+    // cambiarían de comportamiento sin que nadie lo pidiera.
+    expect(clave!.valor).toBe('1');
+  });
+
   it('un fallo de base no tumba el arranque: se degrada a los valores por defecto', async () => {
     const prisma = prismaFalso();
     prisma.configuracion.createMany.mockRejectedValue(new Error('sin conexión'));

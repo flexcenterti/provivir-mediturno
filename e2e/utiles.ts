@@ -49,6 +49,15 @@ export const PACIENTE = { documento: '12345678', ultimos4: '1111', nombre: 'Carl
  * sábado por la mañana; usar "hoy" haría que la prueba fallara según la hora a
  * la que se ejecute, porque los cupos pasados no se ofrecen.
  */
+/** RN-04.6 · mañana en la zona de la sede: la primera fecha que el portal ofrece. */
+export function manana(): string {
+  const hoy = new Date(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date()) + 'T12:00:00Z');
+  hoy.setUTCDate(hoy.getUTCDate() + 1);
+  return hoy.toISOString().slice(0, 10);
+}
+
 export function proximoLunes(): string {
   const hoy = new Date(new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit',

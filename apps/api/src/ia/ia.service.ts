@@ -68,6 +68,7 @@ export class IaService {
         : this.configuracion.texto('documentacion_comercial', ''),
       ofrecerWeb: !ctx.yaOfrecioWeb,
       conocimientoDisponible: kbConContenido,
+      primeraFechaAgendable: this.citas.primeraFechaAgendableAutoservicio(),
     });
 
     const mensajes: MensajeLlm[] = [
@@ -327,7 +328,7 @@ export class IaService {
             fecha: String(args.fecha),
             prestadorId: args.prestadorId || undefined,
             limite: 6,
-          } as never);
+          } as never, { autoservicio: true });
 
           return {
             cupos: cupos.map((c) => ({
@@ -355,6 +356,8 @@ export class IaService {
               origen: 'whatsapp',
             } as never,
             'ia',
+            // RN-04.6 · el paciente agenda solo por WhatsApp: no puede tomar cupos de hoy.
+            { autoservicio: true },
           );
 
           if (!r.creada) {

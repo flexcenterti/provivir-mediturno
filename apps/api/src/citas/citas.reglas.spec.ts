@@ -1,7 +1,8 @@
 import fc from 'fast-check';
 import {
-  chocaConAlguna, controlDentroDeVentana, elegirPorMenorCarga, generarCupos,
-  ordenarPorCompactacion, porcentajeOcupacion, seSolapan, violaIntercaladoEnAgenda,
+  chocaConAlguna, controlDentroDeVentana, cumpleAnticipacionMinima, elegirPorMenorCarga,
+  generarCupos, ordenarPorCompactacion, porcentajeOcupacion, primeraFechaAgendable,
+  seSolapan, violaIntercaladoEnAgenda,
   type CitaExistente,
 } from './citas.reglas';
 import { aMinutos } from '@provivir/shared';
@@ -77,6 +78,54 @@ describe('RN-01.3 · ventana de control por prestador', () => {
     const fecha = new Date('2026-08-30T00:00:00Z');
     expect(controlDentroDeVentana(consulta, fecha, 8)).toBe(false);
     expect(controlDentroDeVentana(consulta, fecha, 30)).toBe(true);
+  });
+});
+
+// ────────────────── RN-04.6 · Anticipación mínima ──────────────────
+
+describe('RN-04.6 · anticipación mínima de agendamiento', () => {
+  const hoy = new Date('2026-09-03T00:00:00Z');
+  const dia = (iso: string) => new Date(`${iso}T00:00:00Z`);
+
+  it('RN-04.6: rechaza la fecha de hoy', () => {
+    expect(cumpleAnticipacionMinima(hoy, dia('2026-09-03'), 1)).toBe(false);
+  });
+
+  it('RN-04.6: rechaza fechas pasadas', () => {
+    expect(cumpleAnticipacionMinima(hoy, dia('2026-09-02'), 1)).toBe(false);
+    expect(cumpleAnticipacionMinima(hoy, dia('2026-08-20'), 1)).toBe(false);
+  });
+
+  it('RN-04.6: acepta mañana', () => {
+    expect(cumpleAnticipacionMinima(hoy, dia('2026-09-04'), 1)).toBe(true);
+  });
+
+  it('RN-04.6: acepta cualquier día posterior a mañana', () => {
+    expect(cumpleAnticipacionMinima(hoy, dia('2026-12-24'), 1)).toBe(true);
+  });
+
+  it('RN-04.6: respeta una anticipación configurada mayor a un día', () => {
+    // Con 3 días de anticipación, el día 5 todavía no es agendable y el 6 sí.
+    expect(cumpleAnticipacionMinima(hoy, dia('2026-09-05'), 3)).toBe(false);
+    expect(cumpleAnticipacionMinima(hoy, dia('2026-09-06'), 3)).toBe(true);
+  });
+
+  it('RN-04.6: con anticipación 0 hoy vuelve a ser agendable', () => {
+    // Apagar la regla desde configuración no debe exigir un despliegue.
+    expect(cumpleAnticipacionMinima(hoy, dia('2026-09-03'), 0)).toBe(true);
+    expect(cumpleAnticipacionMinima(hoy, dia('2026-09-02'), 0)).toBe(false);
+  });
+
+  it('RN-04.6: la primera fecha agendable es mañana y cae a medianoche UTC', () => {
+    // Medianoche UTC es como se guardan las fechas; leerla en la zona de la sede
+    // (UTC−5) la correría un día hacia atrás.
+    const primera = primeraFechaAgendable(hoy, 1);
+    expect(primera.toISOString()).toBe('2026-09-04T00:00:00.000Z');
+  });
+
+  it('RN-04.6: cruza el fin de mes sin saltarse un día', () => {
+    expect(primeraFechaAgendable(dia('2026-09-30'), 1).toISOString().slice(0, 10)).toBe('2026-10-01');
+    expect(primeraFechaAgendable(dia('2026-12-31'), 1).toISOString().slice(0, 10)).toBe('2027-01-01');
   });
 });
 

@@ -4,6 +4,7 @@ import { ConflictException } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { CitasService } from '../src/citas/citas.service';
+import { fechaEnZona, SEDE_ID } from '@provivir/shared';
 
 /**
  * Motor de agendamiento contra base real (Guía, FASE 2 — la fase crítica).
@@ -126,6 +127,112 @@ describe('Motor de citas (integración)', () => {
   });
 
   // ─────────────────────── RN-02 · Balanceo ───────────────────────
+
+  describe('RN-06.5 · días no laborables', () => {
+    // Un martes futuro cualquiera: martes hay agenda de medicina general en el seed.
+    const MARTES = '2026-09-08';
+
+    afterEach(async () => {
+      await prisma.diaNoLaborable.deleteMany({ where: { motivo: { startsWith: 'Prueba' } } });
+    });
+
+    it('RN-06.5: un día cerrado no ofrece cupos por ningún canal', async () => {
+      const antes = await citas.cupos({ servicioId: 'mg', fecha: MARTES, prestadorId: 'ao', limite: 5 } as never);
+      expect(antes.length).toBeGreaterThan(0);
+
+      await prisma.diaNoLaborable.create({
+        data: { fecha: new Date(`${MARTES}T00:00:00Z`), motivo: 'Prueba · festivo', tipo: 'festivo', sedeId: SEDE_ID },
+      });
+
+      // Sin excepción de canal: tampoco el mostrador, que sí puede agendar hoy (RN-04.6).
+      await expect(
+        citas.cupos({ servicioId: 'mg', fecha: MARTES, prestadorId: 'ao', limite: 5 } as never),
+      ).rejects.toThrow(/No atendemos el 2026-09-08/);
+      await expect(
+        citas.cupos({ servicioId: 'mg', fecha: MARTES, prestadorId: 'ao' } as never, { autoservicio: true }),
+      ).rejects.toThrow(/No atendemos/);
+    });
+
+    it('RN-06.5: el motivo del cierre viaja en el mensaje', async () => {
+      await prisma.diaNoLaborable.create({
+        data: { fecha: new Date(`${MARTES}T00:00:00Z`), motivo: 'Prueba · Navidad', tipo: 'festivo', sedeId: SEDE_ID },
+      });
+      await expect(
+        citas.cupos({ servicioId: 'mg', fecha: MARTES, prestadorId: 'ao' } as never),
+      ).rejects.toThrow(/Prueba · Navidad/);
+    });
+
+    it('RN-06.5: tampoco se puede crear una cita en un día cerrado', async () => {
+      await prisma.diaNoLaborable.create({
+        data: { fecha: new Date(`${MARTES}T00:00:00Z`), motivo: 'Prueba · cierre', tipo: 'cierre', sedeId: SEDE_ID },
+      });
+      await expect(
+        citas.crear(
+          { pacienteId, servicioId: 'mg', fecha: MARTES, hora: '08:00', prestadorId: 'ao', origen: 'mostrador' } as never,
+          USUARIO,
+        ),
+      ).rejects.toThrow(/No atendemos/);
+    });
+
+    it('RN-06.5: reabrir el día lo vuelve a poner en oferta', async () => {
+      const d = await prisma.diaNoLaborable.create({
+        data: { fecha: new Date(`${MARTES}T00:00:00Z`), motivo: 'Prueba · cierre', tipo: 'cierre', sedeId: SEDE_ID },
+      });
+      await prisma.diaNoLaborable.delete({ where: { id: d.id } });
+
+      const cupos = await citas.cupos({ servicioId: 'mg', fecha: MARTES, prestadorId: 'ao', limite: 5 } as never);
+      expect(cupos.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('RN-04.6 · anticipación mínima por canal', () => {
+    const HOY = fechaEnZona();
+    const sumarDias = (iso: string, d: number) => {
+      const f = new Date(`${iso}T00:00:00Z`);
+      f.setUTCDate(f.getUTCDate() + d);
+      return f.toISOString().slice(0, 10);
+    };
+
+    it('RN-04.6: el autoservicio no puede consultar cupos de hoy', async () => {
+      await expect(
+        citas.cupos({ servicioId: 'mg', fecha: HOY, prestadorId: 'ao', limite: 5 } as never, { autoservicio: true }),
+      ).rejects.toThrow(/más próxima disponible/);
+    });
+
+    it('RN-04.6: el backoffice sí consulta cupos de hoy: la sede gobierna su propio día', async () => {
+      // Misma llamada, sin declararse autoservicio. Es la excepción de canal acordada
+      // con el cliente: al paciente que llega al mostrador hay que poder atenderlo.
+      await expect(
+        citas.cupos({ servicioId: 'mg', fecha: HOY, prestadorId: 'ao', limite: 5 } as never),
+      ).resolves.toBeDefined();
+    });
+
+    it('RN-04.6: el autoservicio tampoco crea una cita para hoy', async () => {
+      await expect(
+        citas.crear(
+          { pacienteId, servicioId: 'mg', fecha: HOY, hora: '08:00', prestadorId: 'ao', origen: 'autoagendamiento' } as never,
+          USUARIO,
+          { autoservicio: true },
+        ),
+      ).rejects.toThrow(/más próxima disponible/);
+    });
+
+    it('RN-04.6: una fecha pasada tampoco pasa por autoservicio', async () => {
+      await expect(
+        citas.cupos({ servicioId: 'mg', fecha: sumarDias(HOY, -1), prestadorId: 'ao' } as never, { autoservicio: true }),
+      ).rejects.toThrow(/más próxima disponible/);
+    });
+
+    it('RN-04.6: mañana sí es consultable desde el autoservicio', async () => {
+      await expect(
+        citas.cupos({ servicioId: 'mg', fecha: sumarDias(HOY, 1), prestadorId: 'ao', limite: 5 } as never, { autoservicio: true }),
+      ).resolves.toBeDefined();
+    });
+
+    it('RN-04.6: la primera fecha agendable que anuncia el motor es mañana', () => {
+      expect(citas.primeraFechaAgendableAutoservicio()).toBe(sumarDias(HOY, 1));
+    });
+  });
 
   describe('RN-02 · balanceo de medicina general', () => {
     it('RN-02: sin preferencia asigna al médico general con menor carga', async () => {

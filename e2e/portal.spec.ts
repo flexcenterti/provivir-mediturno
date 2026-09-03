@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { PACIENTE, proximoLunes } from './utiles';
+import { manana, PACIENTE, proximoLunes } from './utiles';
 
 /**
  * Portal público de autoagendamiento (Fase 5, RN-10).
@@ -32,6 +32,10 @@ test('un paciente registrado agenda de principio a fin', async ({ page }) => {
 
   await page.getByRole('button', { name: /Medicina general · Consulta/ }).click();
   await page.getByRole('button', { name: /Ver horarios|Continuar/ }).click();
+
+  // RN-04.6 · el portal no ofrece hoy: arranca en mañana y no deja elegir antes.
+  await expect(page.locator('#fecha')).toHaveValue(manana());
+  await expect(page.locator('#fecha')).toHaveAttribute('min', manana());
 
   // Una fecha con agenda de verdad: el seed atiende medicina general de lunes a sábado.
   await page.locator('#fecha').fill(proximoLunes());

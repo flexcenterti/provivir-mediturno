@@ -39,7 +39,8 @@ export class PortalService {
     const servicios = await this.prisma.servicio.findMany({
       where: { activo: true },
       orderBy: [{ categoria: 'asc' }, { nombre: 'asc' }],
-      select: { id: true, nombre: true, categoria: true, duracionMin: true, requiereOrden: true },
+      // RN-04.7 · `agendable` decide si el portal ofrece horarios o remite a la asistente.
+      select: { id: true, nombre: true, categoria: true, duracionMin: true, requiereOrden: true, agendable: true },
     });
     return servicios;
   }
@@ -118,7 +119,7 @@ export class PortalService {
       fecha: dto.fecha,
       prestadorId: dto.prestadorId,
       limite: dto.limite ?? 12,
-    } as never);
+    } as never, { autoservicio: true });
   }
 
   /** RN-10.2 · confirmación con código único de atención. */
@@ -135,6 +136,8 @@ export class PortalService {
         origen: 'autoagendamiento',
       } as never,
       'portal',
+      // RN-04.6 · el paciente agenda solo: no puede tomar cupos de hoy.
+      { autoservicio: true },
     );
 
     if (!r.creada) {

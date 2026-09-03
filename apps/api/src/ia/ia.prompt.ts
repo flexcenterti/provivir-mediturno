@@ -22,12 +22,21 @@ export function promptSistema(opciones: {
   /** RN-13 · hay artículos publicados: la información se recupera, no se inyecta. */
   conocimientoDisponible?: boolean;
   ofrecerWeb: boolean;
+  /**
+   * RN-04.6 · Primera fecha agendable por WhatsApp, AAAA-MM-DD. Es un DATO que
+   * calcula el motor, no una regla escrita a mano: la invariante sigue estando en
+   * `citas.service`, que rechaza la fecha aunque el modelo la pida igual. Va aquí
+   * para que el bot no le prometa al paciente un horario de hoy antes de consultar.
+   */
+  primeraFechaAgendable: string;
 }): string {
   const hoy = fechaEnZona();
 
   const bloques = [
     `Eres el asistente de agendamiento de **Grupo Provivir**, sede CDC Oriente (Cali, Colombia).
-Atiendes por WhatsApp. Hoy es ${hoy}.`,
+Atiendes por WhatsApp. Hoy es ${hoy}. La cita más próxima que se puede agendar por este
+canal es del ${opciones.primeraFechaAgendable} en adelante; para hoy mismo, la persona debe
+acercarse a la sede.`,
 
     `## Tu trabajo
 Ayudas a los pacientes a agendar, consultar, reprogramar y cancelar citas médicas.

@@ -51,7 +51,7 @@ const MENU: Array<{ seccion: string; items: Entrada[] }> = [
     seccion: 'Operación',
     items: [
       { id: 'dashboard', etiqueta: 'Dashboard', icono: '📊', permiso: 'metricas.ver',
-        titulo: 'Dashboard operativo', subtitulo: 'Resumen de la operación · CDC Oriente' },
+        titulo: 'Dashboard operativo', subtitulo: 'Resumen de la operación · CPP Principal' },
       { id: 'consolidada', etiqueta: 'Agenda consolidada', icono: '🗓️', permiso: 'citas.gestionar',
         titulo: 'Agenda consolidada', subtitulo: 'Día · semana · mes · citas inmediatas y futuras' },
       { id: 'bandeja', etiqueta: 'Bandeja asistente', icono: '📥', permiso: 'bandeja.operar',
@@ -148,10 +148,10 @@ function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => 
     <div className="consola">
       <aside className="lateral">
         <div className="brand">
-          <div className="brand-mark">GP</div>
+          <div className="brand-mark">CPP</div>
           <div>
-            <strong>Grupo Provivir</strong>
-            <span className="sede">CDC Oriente</span>
+            <strong>Centro de Profesionales & Provivir</strong>
+            <span className="sede">CPP Principal</span>
           </div>
         </div>
 
@@ -189,7 +189,7 @@ function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => 
             <div className="sub">{activa?.subtitulo ?? ''}</div>
           </div>
           <div className="spacer" />
-          <span className="tag t-teal">📍 CDC Oriente</span>
+          <span className="tag t-teal">📍 CPP Principal</span>
           <div className="user-pill">
             <div className="avatar">{usuario.nombre.slice(0, 1).toUpperCase()}</div>
             <div>
@@ -249,10 +249,10 @@ function Login({ onEntrar }: { onEntrar: (u: UsuarioSesion) => void }) {
     <div className="login">
       <form className="login-card" onSubmit={enviar}>
         <div className="brand">
-          <div className="brand-mark">GP</div>
-          <h1>Grupo Provivir</h1>
+          <div className="brand-mark">CPP</div>
+          <h1>Centro de Profesionales & Provivir</h1>
         </div>
-        <p className="login-sub">CDC Oriente · Plataforma de agendamiento</p>
+        <p className="login-sub">CPP Principal · Plataforma de agendamiento</p>
         {error && <div className="error" role="alert">{error}</div>}
         <div className="field">
           <label htmlFor="email">Correo</label>

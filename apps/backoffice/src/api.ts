@@ -223,6 +223,17 @@ export const api = {
     pedir<ResultadoBloqueo>(`/agendas/${id}/bloquear`, { method: 'POST', body: JSON.stringify({ motivo, confirmar }) }),
   desbloquearAgenda: (id: string) => pedir<Agenda>(`/agendas/${id}/desbloquear`, { method: 'POST' }),
 
+  // RN-06.5 · días en que la sede no atiende
+  diasNoLaborables: (anio: number) => pedir<DiaNoLaborable[]>(`/dias-no-laborables?anio=${anio}`),
+  crearDiaNoLaborable: (cuerpo: { fecha: string; motivo: string; confirmar?: boolean }) =>
+    pedir<ResultadoDiaNoLaborable>('/dias-no-laborables', { method: 'POST', body: JSON.stringify(cuerpo) }),
+  importarFestivos: (anio: number) =>
+    pedir<{ anio: number; importados: number; yaEstaban: number }>('/dias-no-laborables/importar-festivos', {
+      method: 'POST', body: JSON.stringify({ anio }),
+    }),
+  eliminarDiaNoLaborable: (id: string) =>
+    pedir<{ eliminado: boolean; fecha: string }>(`/dias-no-laborables/${id}`, { method: 'DELETE' }),
+
   cargas: () => pedir<TrabajoCarga[]>('/carga'),
   carga: (jobId: string) => pedir<TrabajoCarga>(`/carga/${jobId}`),
 
@@ -443,6 +454,26 @@ export interface ResultadoBloqueo {
   simulacion: boolean;
   citasAfectadas: number;
   citas: Cita[];
+  mensaje: string;
+}
+
+/** RN-06.5 · un día en que la sede no atiende. */
+export interface DiaNoLaborable {
+  id: string;
+  fecha: string;
+  motivo: string;
+  tipo: 'festivo' | 'cierre';
+}
+
+export interface ResultadoDiaNoLaborable {
+  simulacion: boolean;
+  citasAfectadas: number;
+  citas: Array<{
+    id: string; codigo: string; horaInicio: number;
+    paciente: { nombres: string; apellidos: string; telefono: string | null };
+    prestador: { nombre: string };
+    servicio: { nombre: string };
+  }>;
   mensaje: string;
 }
 

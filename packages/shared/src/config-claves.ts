@@ -7,6 +7,8 @@ export const CONFIG = {
   HUECO_MAX_MIN: 'hueco_max_min',
   /** RN-01.3 · Ventana de control por defecto cuando el prestador no define la suya. */
   VENTANA_CONTROL_DIAS_DEFECTO: 'ventana_control_dias_defecto',
+  /** RN-04.6 · Días de anticipación que exigen los canales de autoservicio. 1 = desde mañana. */
+  AGENDAMIENTO_ANTICIPACION_DIAS: 'agendamiento_anticipacion_dias',
   /** D3 · El kiosko queda construido pero apagado. */
   KIOSKO_ACTIVO: 'kiosko_activo',
   /** RN-08 · Umbral bajo el cual la IA escala a la asistente. */

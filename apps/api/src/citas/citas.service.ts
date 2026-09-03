@@ -1,13 +1,14 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { aHHMM, aMinutos, CONFIG, SEDE_ID, type TipoCita } from '@provivir/shared';
+import { aHHMM, aMinutos, CONFIG, hoyEnSede, SEDE_ID, type TipoCita } from '@provivir/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { AgendasService, aFechaUtc } from '../agendas/agendas.service';
+import { DiasNoLaborablesService } from '../agendas/dias-no-laborables.service';
 import {
-  chocaConAlguna, controlDentroDeVentana, elegirPorMenorCarga, generarCupos,
-  ordenarPorCompactacion, violaIntercaladoEnAgenda,
+  chocaConAlguna, controlDentroDeVentana, cumpleAnticipacionMinima, elegirPorMenorCarga,
+  generarCupos, ordenarPorCompactacion, primeraFechaAgendable, violaIntercaladoEnAgenda,
   type CitaExistente, type Cupo,
 } from './citas.reglas';
 import { RecordatoriosService } from '../recordatorios/recordatorios.service';
@@ -23,6 +24,15 @@ const ESTADOS_VIVOS = ['pendiente_llegada', 'confirmada', 'llego', 'en_atencion'
  * para una ráfaga: WhatsApp, portal y mostrador pueden coincidir sobre el mismo médico.
  */
 const OPCIONES_TX = { maxWait: 15_000, timeout: 20_000 } as const;
+
+/**
+ * RN-04.6 · Quién pide el cupo. La fija el servicio que atiende al canal (portal, IA),
+ * nunca el cliente HTTP: si viajara en el DTO, el navegador podría desactivar la regla.
+ */
+export interface OpcionesAgendamiento {
+  /** El paciente actúa solo, sin asistente que lo corrija: portal público y bot de WhatsApp. */
+  autoservicio?: boolean;
+}
 
 export interface CupoOfrecido {
   prestadorId: string;
@@ -46,6 +56,7 @@ export class CitasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly agendas: AgendasService,
+    private readonly diasNoLaborables: DiasNoLaborablesService,
     private readonly auditoria: AuditoriaService,
     private readonly configuracion: ConfiguracionService,
     private readonly recordatorios: RecordatoriosService,
@@ -58,8 +69,10 @@ export class CitasService {
    * intercalado (RN-01), cupos múltiples (RN-04) y ordenados por compactación (RN-03).
    * En medicina general sin preferencia de prestador, ordena por menor carga (RN-02).
    */
-  async cupos(dto: ConsultarCuposDto): Promise<CupoOfrecido[]> {
+  async cupos(dto: ConsultarCuposDto, opciones?: OpcionesAgendamiento): Promise<CupoOfrecido[]> {
     const fecha = aFechaUtc(dto.fecha);
+    await this.validarDiaLaborable(fecha);
+    this.validarAnticipacion(fecha, opciones);
     const servicio = await this.prisma.servicio.findUnique({ where: { id: dto.servicioId } });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
     /*
@@ -69,6 +82,7 @@ export class CitasService {
      * mostrador y desde la IA. Las citas ya creadas no se tocan.
      */
     if (!servicio.activo) throw new NotFoundException('El servicio ya no está disponible');
+    this.validarAgendablePorAutoservicio(servicio, opciones);
 
     const tipo = (dto.tipo ?? servicio.tipo) as TipoCita;
     const limite = dto.limite ?? 10;
@@ -157,7 +171,7 @@ export class CitasService {
    * y de paso evita la doble asignación del mismo cupo entre WhatsApp, portal y mostrador.
    * A 400+ citas/día el costo de serializar por fecha es despreciable.
    */
-  async crear(dto: CrearCitaDto, usuarioId: string) {
+  async crear(dto: CrearCitaDto, usuarioId: string, opciones?: OpcionesAgendamiento) {
     const fecha = aFechaUtc(dto.fecha);
     const horaInicio = aMinutos(dto.hora);
 
@@ -170,6 +184,8 @@ export class CitasService {
      * mostrador y desde la IA. Las citas ya creadas no se tocan.
      */
     if (!servicio.activo) throw new NotFoundException('El servicio ya no está disponible');
+
+    this.validarAgendablePorAutoservicio(servicio, opciones);
 
     const paciente = await this.prisma.paciente.findUnique({ where: { id: dto.pacienteId } });
     if (!paciente) throw new NotFoundException('Paciente no encontrado');
@@ -191,7 +207,10 @@ export class CitasService {
       const duracionMin = await this.duracionEfectiva(prestadorId, servicio);
       const cupo: Cupo = { horaInicio, duracionMin };
 
-      await this.validarCupo(tx, { prestadorId, fecha, cupo, tipo, servicioId: dto.servicioId, citaOrigenId: dto.citaOrigenId });
+      await this.validarCupo(tx, {
+        prestadorId, fecha, cupo, tipo, servicioId: dto.servicioId,
+        citaOrigenId: dto.citaOrigenId, opciones,
+      });
 
       await this.lockFecha(tx, dto.fecha);
       const codigo = await this.generarCodigo(tx, fecha, servicio.categoria, tipo);
@@ -234,9 +253,9 @@ export class CitasService {
    * Cuando el cupo se ocupa a mitad de conversación, la IA y el portal necesitan
    * alternativas inmediatas en vez de un error seco (Arquitectura §6).
    */
-  async crearConAlternativas(dto: CrearCitaDto, usuarioId: string) {
+  async crearConAlternativas(dto: CrearCitaDto, usuarioId: string, opciones?: OpcionesAgendamiento) {
     try {
-      return { creada: true as const, cita: await this.crear(dto, usuarioId) };
+      return { creada: true as const, cita: await this.crear(dto, usuarioId, opciones) };
     } catch (e) {
       if (!(e instanceof ConflictException)) throw e;
 
@@ -247,7 +266,7 @@ export class CitasService {
         tipo: dto.tipo,
         citaOrigenId: dto.citaOrigenId,
         limite: 5,
-      } as ConsultarCuposDto);
+      } as ConsultarCuposDto, opciones);
 
       return { creada: false as const, motivo: e.message, alternativas };
     }
@@ -256,12 +275,14 @@ export class CitasService {
   // ─────────────────────── Reprogramación y cancelación ───────────────────────
 
   /** Si cambia el día, se emite un código nuevo: el código es único por sede y día. */
-  async reprogramar(id: string, dto: ReprogramarCitaDto, usuarioId: string) {
+  async reprogramar(id: string, dto: ReprogramarCitaDto, usuarioId: string, opciones?: OpcionesAgendamiento) {
     const original = await this.prisma.cita.findUnique({ where: { id }, include: { servicio: true } });
     if (!original) throw new NotFoundException('Cita no encontrada');
     if (original.estado === 'cancelada' || original.estado === 'atendida') {
       throw new BadRequestException(`No se puede reprogramar una cita ${original.estado}`);
     }
+
+    this.validarAgendablePorAutoservicio(original.servicio, opciones);
 
     const fecha = aFechaUtc(dto.fecha);
     const horaInicio = aMinutos(dto.hora);
@@ -275,7 +296,7 @@ export class CitasService {
       await this.validarCupo(tx, {
         prestadorId, fecha, cupo: { horaInicio, duracionMin },
         tipo: original.tipo as TipoCita, servicioId: original.servicioId,
-        citaOrigenId: original.citaOrigenId ?? undefined, excluirCitaId: id,
+        citaOrigenId: original.citaOrigenId ?? undefined, excluirCitaId: id, opciones,
       });
 
       let codigo = original.codigo;
@@ -523,8 +544,14 @@ export class CitasService {
     args: {
       prestadorId: string; fecha: Date; cupo: Cupo; tipo: TipoCita;
       servicioId: string; citaOrigenId?: string; excluirCitaId?: string;
+      opciones?: OpcionesAgendamiento;
     },
   ): Promise<void> {
+    // Antes que nada: si la fecha no es agendable, el resto sobra y "no hay agenda
+    // ese día" seria un motivo falso.
+    await this.validarDiaLaborable(args.fecha);
+    this.validarAnticipacion(args.fecha, args.opciones);
+
     const agendasDelDia = await this.agendas.vigentesEnFecha(args.prestadorId, args.fecha);
     if (agendasDelDia.length === 0) {
       throw new ConflictException('El prestador no tiene agenda disponible en esa fecha');
@@ -557,6 +584,77 @@ export class CitasService {
     if (args.tipo === 'control') {
       await this.validarVentanaControl(args.citaOrigenId, args.fecha, [args.prestadorId]);
     }
+  }
+
+  /**
+   * RN-04.6 · Los canales de autoservicio no agendan para hoy ni para atrás.
+   *
+   * El personal en sede sí puede: un paciente que llega al mostrador necesita cita
+   * el mismo día y la clínica gobierna su propia agenda. La excepción se decide aquí
+   * y no en el portal ni en el bot, para que no diverja entre canales (ADR A3).
+   */
+  private validarAnticipacion(fecha: Date, opciones?: OpcionesAgendamiento): void {
+    if (!opciones?.autoservicio) return;
+
+    const dias = this.configuracion.numero(CONFIG.AGENDAMIENTO_ANTICIPACION_DIAS, 1);
+    if (cumpleAnticipacionMinima(hoyEnSede(), fecha, dias)) return;
+
+    throw new BadRequestException(
+      'No se puede agendar para esa fecha. La cita más próxima disponible es a partir del ' +
+        `${this.primeraFechaAgendableAutoservicio()}.`,
+    );
+  }
+
+  /**
+   * RN-04.7 · Hay servicios que la clínica coordina a mano y el paciente no agenda solo:
+   * laboratorio, rayos X, ecografías, los especialistas que vienen por fechas sueltas y
+   * el control de medicina general, que exige una consulta previa (RN-01).
+   *
+   * El marcador vive en el catálogo (`Servicio.agendable`) para que la clínica pueda
+   * abrir o cerrar un servicio al autoservicio desde el backoffice, sin desplegar.
+   * La asistente sí los agenda: es exactamente para eso que se marcan.
+   */
+  private validarAgendablePorAutoservicio(
+    servicio: { nombre: string; agendable: boolean },
+    opciones?: OpcionesAgendamiento,
+  ): void {
+    if (!opciones?.autoservicio || servicio.agendable) return;
+
+    throw new BadRequestException(
+      `${servicio.nombre} no se agenda por este medio. Comunícate con una asistente y te ayudamos a coordinarlo.`,
+    );
+  }
+
+  /**
+   * RN-06.5 · La sede no atiende domingos ni festivos.
+   *
+   * A diferencia de RN-04.6, esto NO tiene excepción de canal: si la clínica está
+   * cerrada no hay nadie que atienda, así que tampoco puede agendar el mostrador. Si
+   * deciden abrir un festivo, administración quita esa fecha del calendario.
+   */
+  private async validarDiaLaborable(fecha: Date): Promise<void> {
+    const motivo = await this.diasNoLaborables.motivoDeCierre(fecha);
+    if (!motivo) return;
+
+    // La fecha se guarda como medianoche UTC: se lee en UTC, no con fechaEnZona().
+    const dia = fecha.toISOString().slice(0, 10);
+    throw new BadRequestException(`No atendemos el ${dia}: ${motivo}.`);
+  }
+
+  /**
+   * RN-04.6 · La primera fecha que un canal de autoservicio puede ofrecer, AAAA-MM-DD.
+   *
+   * La expone el motor para que el bot no tenga que recalcularla con su propia copia
+   * del parámetro: si alguien cambia la anticipación en Administración → Reglas, el
+   * mensaje y la validación se mueven juntos.
+   *
+   * Se formatea en UTC a propósito: `primeraFechaAgendable` devuelve medianoche UTC,
+   * que es como se guardan las fechas, y leerla con `fechaEnZona` la correría un día
+   * hacia atrás (UTC−5).
+   */
+  primeraFechaAgendableAutoservicio(): string {
+    const dias = this.configuracion.numero(CONFIG.AGENDAMIENTO_ANTICIPACION_DIAS, 1);
+    return primeraFechaAgendable(hoyEnSede(), dias).toISOString().slice(0, 10);
   }
 
   /** RN-01.3 · el control exige consulta origen y debe caer dentro de la ventana del prestador. */

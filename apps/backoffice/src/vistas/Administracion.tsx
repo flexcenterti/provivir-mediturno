@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  api, refrescarSesion, token, type EstadoKiosko, type Pantalla, type RegistroAuditoria,
-  type Servicio, type TrabajoCarga,
+  aHora, api, refrescarSesion, token, type DiaNoLaborable, type EstadoKiosko, type Pantalla,
+  type RegistroAuditoria, type ResultadoDiaNoLaborable, type Servicio, type TrabajoCarga,
 } from '../api';
 import { Acceso } from './Acceso';
 import { interpretarYoutube } from '@provivir/shared';
 
-type Seccion = 'acceso' | 'carga' | 'auditoria' | 'pantallas' | 'kiosko' | 'configuracion';
+type Seccion = 'acceso' | 'carga' | 'auditoria' | 'pantallas' | 'kiosko' | 'festivos' | 'configuracion';
 
 /**
  * En producción las tres apps comparten dominio y la TV vive en /tv.
@@ -20,6 +20,7 @@ const SECCIONES: Array<{ id: Seccion; etiqueta: string }> = [
   { id: 'auditoria', etiqueta: 'Auditoría' },
   { id: 'pantallas', etiqueta: 'Pantallas' },
   { id: 'kiosko', etiqueta: 'Kiosko' },
+  { id: 'festivos', etiqueta: 'Días no laborables' },
   { id: 'configuracion', etiqueta: 'Reglas' },
 ];
 
@@ -41,6 +42,7 @@ export function Administracion({ inicial = 'acceso' }: { inicial?: Seccion } = {
       {seccion === 'auditoria' && <Auditoria />}
       {seccion === 'pantallas' && <Pantallas />}
       {seccion === 'kiosko' && <Kiosko />}
+      {seccion === 'festivos' && <DiasNoLaborables />}
       {seccion === 'configuracion' && <Configuracion />}
     </div>
   );
@@ -457,9 +459,138 @@ function Kiosko() {
   );
 }
 
+/**
+ * RN-06.5 · Días en que la sede no atiende.
+ *
+ * Los festivos nacionales se importan calculados (son 18 al año y doce se mueven);
+ * los cierres propios —inventario, capacitación— se añaden a mano. Cerrar un día con
+ * pacientes citados muestra primero a cuántos afecta, igual que bloquear una agenda.
+ */
+function DiasNoLaborables() {
+  const ahora = new Date().getFullYear();
+  const [anio, setAnio] = useState(ahora);
+  const [dias, setDias] = useState<DiaNoLaborable[]>([]);
+  const [fecha, setFecha] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [impacto, setImpacto] = useState<ResultadoDiaNoLaborable | null>(null);
+  const [error, setError] = useState('');
+  const [aviso, setAviso] = useState('');
+
+  const recargar = (a: number) => { api.diasNoLaborables(a).then(setDias).catch(() => undefined); };
+  useEffect(() => { recargar(anio); }, [anio]);
+
+  async function importar() {
+    setError(''); setAviso('');
+    try {
+      const r = await api.importarFestivos(anio);
+      setAviso(`${r.importados} festivo(s) añadido(s); ${r.yaEstaban} ya estaban.`);
+      recargar(anio);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Error'); }
+  }
+
+  /** Primero simula: cerrar un día con citas es una decisión informada. */
+  async function cerrar(confirmar: boolean) {
+    setError(''); setAviso('');
+    if (!fecha || !motivo.trim()) { setError('Indica la fecha y el motivo'); return; }
+    try {
+      const r = await api.crearDiaNoLaborable({ fecha, motivo, confirmar });
+      if (r.simulacion) { setImpacto(r); return; }
+      setImpacto(null); setAviso(r.mensaje); setFecha(''); setMotivo('');
+      recargar(anio);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Error'); }
+  }
+
+  async function reabrir(d: DiaNoLaborable) {
+    setError(''); setAviso('');
+    try {
+      await api.eliminarDiaNoLaborable(d.id);
+      setAviso(`El ${d.fecha} vuelve a ser laborable.`);
+      recargar(anio);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Error'); }
+  }
+
+  return (
+    <div>
+      <p className="sub" style={{ marginBottom: '1rem' }}>
+        Ningún canal ofrece ni agenda citas en estos días: ni el portal, ni WhatsApp, ni el
+        mostrador. La clínica no atiende domingos, que no se programan en las agendas.
+      </p>
+
+      {error && <div className="error" role="alert">{error}</div>}
+      {aviso && <div className="aviso" role="status">{aviso}</div>}
+
+      <div className="fila" style={{ gap: '.6rem', alignItems: 'end', marginBottom: '1rem' }}>
+        <label className="campo">
+          Año
+          <input type="number" min={2020} max={2100} value={anio}
+                 onChange={(e) => setAnio(Number(e.target.value))} />
+        </label>
+        <button className="btn btn-ghost" onClick={importar}>Importar festivos de {anio}</button>
+      </div>
+
+      <div className="fila" style={{ gap: '.6rem', alignItems: 'end', marginBottom: '1rem' }}>
+        <label className="campo">
+          Cerrar un día
+          <input type="date" value={fecha} onChange={(e) => { setFecha(e.target.value); setImpacto(null); }} />
+        </label>
+        <label className="campo" style={{ flex: 1 }}>
+          Motivo
+          <input value={motivo} maxLength={120} placeholder="Inventario, capacitación…"
+                 onChange={(e) => { setMotivo(e.target.value); setImpacto(null); }} />
+        </label>
+        <button className="btn btn-primary" onClick={() => cerrar(false)}>Revisar impacto</button>
+      </div>
+
+      {impacto && (
+        <div className="tarjeta" style={{ marginBottom: '1rem' }}>
+          <p>{impacto.mensaje}</p>
+          {impacto.citas.length > 0 && (
+            <table className="tabla">
+              <thead><tr><th>Código</th><th>Hora</th><th>Paciente</th><th>Prestador</th><th>Servicio</th></tr></thead>
+              <tbody>
+                {impacto.citas.map((c) => (
+                  <tr key={c.id}>
+                    <td>{c.codigo}</td>
+                    <td>{aHora(c.horaInicio)}</td>
+                    <td>{c.paciente.nombres} {c.paciente.apellidos}</td>
+                    <td>{c.prestador.nombre}</td>
+                    <td>{c.servicio.nombre}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {/* Las citas no se cancelan solas: las reprograma una asistente (RN-06.3). */}
+          <button className="btn btn-primary" onClick={() => cerrar(true)}>
+            Confirmar cierre del {fecha}
+          </button>
+        </div>
+      )}
+
+      <table className="tabla">
+        <thead><tr><th>Fecha</th><th>Motivo</th><th>Tipo</th><th /></tr></thead>
+        <tbody>
+          {dias.map((d) => (
+            <tr key={d.id}>
+              <td>{d.fecha.slice(0, 10)}</td>
+              <td>{d.motivo}</td>
+              <td><span className={`tag ${d.tipo === 'festivo' ? 't-teal' : ''}`}>{d.tipo}</span></td>
+              <td><button className="btn btn-ghost" onClick={() => reabrir(d)}>Reabrir</button></td>
+            </tr>
+          ))}
+          {dias.length === 0 && (
+            <tr><td colSpan={4} className="sub">Sin días cerrados en {anio}. Importa los festivos nacionales.</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 const DESCRIPCION: Record<string, string> = {
   hueco_max_min: 'Hueco máximo tolerado entre citas al recomendar horarios. 0 compacta al máximo.',
   ventana_control_dias_defecto: 'Ventana de control por defecto cuando el prestador no define la suya.',
+  agendamiento_anticipacion_dias: 'Días de anticipación que exigen el portal y WhatsApp. 1 = solo desde mañana; 0 permite hoy. No aplica al personal en sede.',
   kiosko_activo: 'Activa el módulo de kiosko de llegada.',
   umbral_confianza_ia: 'Bajo este umbral de confianza, la IA escala a la asistente.',
   intervalo_institucional_min: 'Cada cuántos minutos se interrumpe el canal para el video institucional.',

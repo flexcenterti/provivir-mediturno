@@ -6,6 +6,7 @@ import { json } from 'express';
 import type { IncomingMessage } from 'node:http';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { fechaEnZona } from '@provivir/shared';
 import { ConversacionService } from '../src/whatsapp/conversacion.service';
 import { CLIENTE_LLM } from '../src/ia/ia.service';
 import { MetaCliente } from '../src/whatsapp/meta.cliente';
@@ -305,6 +306,22 @@ describe('Canal WhatsApp (e2e)', () => {
       expect(ultimoMensaje.rol).toBe('herramienta');
       expect(JSON.stringify(ultimoMensaje)).toMatch(/error/i);
       expect(enviados.at(-1)!.texto).toMatch(/consulta previa/i);
+    });
+
+    it('RN-04.6: pedir cupos de hoy le devuelve al modelo el error con la primera fecha agendable', async () => {
+      // El bot puede intentarlo — el motor es quien manda. Lo que se comprueba es que
+      // el rechazo viaja hasta el modelo con el motivo útil, no que el prompt lo evite.
+      const hoy = fechaEnZona();
+      llm.programar(
+        usaHerramienta('ofrecer_cupos', { servicioId: 'mg', fecha: hoy }),
+        texto('Para hoy no puedo agendarte, pero desde mañana sí.'),
+      );
+
+      await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'necesito que me vean hoy mismo' }) as never);
+
+      const ultimoMensaje = llm.llamadas.at(-1)!.mensajes.at(-1)!;
+      expect(ultimoMensaje.rol).toBe('herramienta');
+      expect(JSON.stringify(ultimoMensaje)).toMatch(/más próxima disponible/);
     });
 
     it('el paciente nuevo se registra con origen whatsapp', async () => {
