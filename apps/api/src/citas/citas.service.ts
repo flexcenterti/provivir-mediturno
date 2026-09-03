@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { AgendasService, aFechaUtc } from '../agendas/agendas.service';
+import { DiasNoLaborablesService } from '../agendas/dias-no-laborables.service';
 import {
   chocaConAlguna, controlDentroDeVentana, cumpleAnticipacionMinima, elegirPorMenorCarga,
   generarCupos, ordenarPorCompactacion, primeraFechaAgendable, violaIntercaladoEnAgenda,
@@ -55,6 +56,7 @@ export class CitasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly agendas: AgendasService,
+    private readonly diasNoLaborables: DiasNoLaborablesService,
     private readonly auditoria: AuditoriaService,
     private readonly configuracion: ConfiguracionService,
     private readonly recordatorios: RecordatoriosService,
@@ -69,6 +71,7 @@ export class CitasService {
    */
   async cupos(dto: ConsultarCuposDto, opciones?: OpcionesAgendamiento): Promise<CupoOfrecido[]> {
     const fecha = aFechaUtc(dto.fecha);
+    await this.validarDiaLaborable(fecha);
     this.validarAnticipacion(fecha, opciones);
     const servicio = await this.prisma.servicio.findUnique({ where: { id: dto.servicioId } });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
@@ -539,8 +542,9 @@ export class CitasService {
       opciones?: OpcionesAgendamiento;
     },
   ): Promise<void> {
-    // Antes que nada: si la fecha no es agendable por este canal, el resto sobra
-    // y "no hay agenda ese día" seria un motivo falso.
+    // Antes que nada: si la fecha no es agendable, el resto sobra y "no hay agenda
+    // ese día" seria un motivo falso.
+    await this.validarDiaLaborable(args.fecha);
     this.validarAnticipacion(args.fecha, args.opciones);
 
     const agendasDelDia = await this.agendas.vigentesEnFecha(args.prestadorId, args.fecha);
@@ -594,6 +598,22 @@ export class CitasService {
       'No se puede agendar para esa fecha. La cita más próxima disponible es a partir del ' +
         `${this.primeraFechaAgendableAutoservicio()}.`,
     );
+  }
+
+  /**
+   * RN-06.5 · La sede no atiende domingos ni festivos.
+   *
+   * A diferencia de RN-04.6, esto NO tiene excepción de canal: si la clínica está
+   * cerrada no hay nadie que atienda, así que tampoco puede agendar el mostrador. Si
+   * deciden abrir un festivo, administración quita esa fecha del calendario.
+   */
+  private async validarDiaLaborable(fecha: Date): Promise<void> {
+    const motivo = await this.diasNoLaborables.motivoDeCierre(fecha);
+    if (!motivo) return;
+
+    // La fecha se guarda como medianoche UTC: se lee en UTC, no con fechaEnZona().
+    const dia = fecha.toISOString().slice(0, 10);
+    throw new BadRequestException(`No atendemos el ${dia}: ${motivo}.`);
   }
 
   /**

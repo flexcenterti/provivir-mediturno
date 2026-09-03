@@ -61,3 +61,70 @@ tocó aquí porque es otro asunto; queda para corregir aparte, con su prueba.
 que fijan la distinción de canal (`citas.e2e-spec.ts`), 2 del portal por HTTP, 1 del canal de
 WhatsApp que comprueba que el rechazo llega al modelo con el motivo útil, 1 de configuración, y la
 comprobación del selector en la prueba de navegador del portal.
+
+## 3 · RN-06.5 · Días no laborables (festivos)
+
+Al cargar los horarios reales apareció la nota del cliente: «no atendemos domingos ni festivos».
+Los domingos salen solos —no se programan agendas para el día 7— pero **los festivos no existían
+como concepto**: el sistema ofrecía cupos el 25 de diciembre igual que cualquier viernes.
+
+El bloqueo de agenda no servía de parche: `bloqueada` es un booleano sobre la fila, sin fecha, así
+que apagaría todos los lunes en vez de un lunes. La regla completa está en
+[`docs/rn-06-5-dias-no-laborables.md`](rn-06-5-dias-no-laborables.md).
+
+**Sin excepción de canal**, a diferencia de RN-04.6: si la clínica está cerrada tampoco agenda el
+mostrador. Para abrir un festivo, administración quita la fecha del calendario.
+
+Los 18 festivos colombianos se **calculan** (`packages/shared/src/festivos.ts`): doce se mueven
+cada año, entre la Ley Emiliani y los derivados de la Pascua. Un detalle que apareció escribiendo
+las pruebas: **dos festivos pueden caer el mismo día** —en 2025 San Pedro y el Sagrado Corazón se
+corren ambos al lunes 30 de junio— y entonces son un solo día cerrado, no dos.
+
+## 4 · El catálogo real de la clínica
+
+Sustituye al catálogo de demostración: 10 profesionales, 7 servicios de consulta y 26 franjas de
+jornada, transcritos de las tablas que envió Gerencia.
+
+Viven en `apps/api/src/cli/catalogo.clinica.ts` y se aplican con
+`node apps/api/dist/cli/cargar-catalogo.js`. Se hizo así, y no a mano por el backoffice, porque
+son 26 franjas y **la interfaz no permite corregir ni borrar una agenda** —solo bloquearla—, así
+que una franja mal tecleada se quedaría para siempre. De paso el horario de la clínica queda en
+git, con su historial.
+
+### Dos cosas que el catálogo real estrena
+
+**Jornada partida.** Casi todos los médicos atienden mañana y tarde, y el catálogo demo nunca tuvo
+un caso: son dos franjas de agenda distintas, no una con hueco. El motor ya lo soportaba pero
+nunca se había ejercido con datos; ahora hay prueba de que la hora del almuerzo no existe como
+cupo y de que tampoco se puede agendar a la fuerza dentro de ella.
+
+**Duraciones distintas sobre el mismo servicio.** Katherin Rodriguez atiende medicina general en
+10 minutos y el resto en 15, con un solo servicio en el catálogo.
+
+### Un hallazgo al escribir las pruebas
+
+La clínica registró a Ingrit Perea también en medicina ocupacional (20 min) pero **dejó su horario
+en blanco**. Habilitarla parecía inofensivo y no lo era: el servicio que declara una agenda es
+informativo, no una restricción, así que el motor ofrecía medicina ocupacional en **toda** su
+jornada de medicina general —doce horas semanales que nadie autorizó, compitiendo además con sus
+cupos de consulta.
+
+Se dejó el servicio en el catálogo (con `agendable: false`, RN-13.9, para que el bot lo describa
+sin ofrecer horas) pero **sin habilitar a nadie**, que es lo que hace que de verdad no se pueda
+agendar. Cuando la clínica defina las horas, el comentario en el archivo dice exactamente qué
+tocar.
+
+### Lo que quedó pendiente del cliente
+
+- **Consultorios**: no los envió. Es el dato que se le dice al paciente al llamarlo en sala.
+- **Jornada de medicina ocupacional** de Ingrit Perea.
+- **Confirmar `ctrl`**: la consulta de control no aparece en su lista, pero RN-01 entera depende
+  de que exista, así que se conserva.
+- El archivo de Gerencia tiene **más personal** que las tablas enviadas (Hernandez Amaris, Romero
+  Ramirez, Exámenes Cardiovasculares). Se cargó solo lo pedido: «iniciamos con estos servicios».
+
+### Pruebas
+
+9 unitarias del cálculo de festivos, 4 de integración del día cerrado en el motor, y 12 del
+catálogo real que fijan jornada partida, duraciones por profesional, los horarios que cambian
+según el día y que nadie ofrece cupos en domingo.

@@ -50,6 +50,14 @@ enum ModoAgenda {
   calendario
 }
 
+/// RN-06.5 · Por qué la sede no atiende ese día.
+enum TipoDiaNoLaborable {
+  /// Festivo nacional colombiano. Se precargan calculados por año.
+  festivo
+  /// Cierre propio de la clínica: inventario, capacitación, mantenimiento.
+  cierre
+}
+
 enum EstadoCita {
   pendiente_llegada
   confirmada
@@ -176,6 +184,7 @@ model Sede {
   perfiles       Perfil[]
   articulos      KbArticulo[]
   seguimientos   Seguimiento[]
+  diasNoLaborables DiaNoLaborable[]
 
   @@map("sede")
 }
@@ -344,6 +353,25 @@ model Agenda {
   @@index([prestadorId, activa])
   @@index([fecha])
   @@map("agenda")
+}
+
+/// RN-06.5 · Día en que la sede no atiende: ningún canal ofrece ni agenda cupos.
+///
+/// No se resuelve con `Agenda.bloqueada` porque ese campo no tiene fecha: bloquear
+/// una agenda semanal la apagaría todos los lunes, no un lunes concreto.
+model DiaNoLaborable {
+  id       String             @id @default(uuid())
+  fecha    DateTime           @db.Date
+  motivo   String
+  tipo     TipoDiaNoLaborable @default(festivo)
+  sedeId   String             @map("sede_id")
+  creadoEn DateTime           @default(now()) @map("creado_en")
+
+  sede Sede @relation(fields: [sedeId], references: [id])
+
+  @@unique([sedeId, fecha])
+  @@index([fecha])
+  @@map("dia_no_laborable")
 }
 
 // ─────────────────────────── Citas · el núcleo (RN-01 a RN-04) ───────────────────────────

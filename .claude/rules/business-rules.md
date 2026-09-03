@@ -15,8 +15,15 @@ reemplazo de la fuente normativa.
   (`agendamiento_anticipacion_dias`); **el backoffice sí puede agendar hoy** y esa excepción se
   decide en el motor, no en cada canal. El canal se declara con `{ autoservicio: true }` al llamar
   al motor — nunca desde un DTO, o el navegador podría apagar la regla.
+- **RN-06.5 · Nadie agenda en un día no laborable**, y aquí **no hay excepción de canal**: si la
+  clínica está cerrada, tampoco el mostrador. Los domingos no se marcan — simplemente no se
+  programan agendas para el día 7. Los festivos colombianos se calculan (`festivosColombia()` de
+  `@provivir/shared`), nunca se escriben a mano: doce de los dieciocho se mueven cada año.
 - **RN-06 · El prestador ve su agenda en solo lectura.** Solo administración crea/bloquea/modifica disponibilidad.
 - **RN-08 · Foto de orden médica manuscrita → escala inmediato, sin OCR.** La imagen queda adjunta como soporte.
+- **Una fecha ya almacenada se lee en UTC, no con `fechaEnZona()`.** Las fechas se guardan como
+  medianoche UTC; leerlas en la zona de la sede (UTC−5) las corre **un día hacia atrás**. Usar
+  `fechaEnZona()` para convertir un INSTANTE a la fecha de la sede, nunca sobre un `cita.fecha`.
 - **Zona horaria:** "hoy" se calcula SIEMPRE con `hoyEnSede()`/`fechaEnZona()` de `@provivir/shared`.
   La clínica opera en Cali (UTC−5) y el servidor puede estar en otra zona; usar la del servidor
   desplaza el día entero. Nunca `new Date().toISOString().slice(0,10)`.
