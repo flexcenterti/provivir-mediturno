@@ -55,8 +55,8 @@ export function Mostrador() {
 function Ticket({ turno }: { turno: Turno }) {
   const texto = [
     '━━━━━━━━━━━━━━━━━━',
-    '  GRUPO PROVIVIR',
-    '  CDC Oriente',
+    '  CENTRO DE PROFESIONALES & PROVIVIR',
+    '  CPP Principal',
     '━━━━━━━━━━━━━━━━━━',
     `Código      ${turno.cita.codigo}`,
     `Paciente    ${turno.cita.paciente.nombres} ${turno.cita.paciente.apellidos}`,

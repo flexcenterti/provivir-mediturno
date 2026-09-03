@@ -58,10 +58,10 @@ export function App() {
   return (
     <div className="portal">
       <header className="p-cab">
-        <div className="brand-mark">GP</div>
+        <div className="brand-mark">CPP</div>
         <div>
-          <strong>Grupo Provivir</strong>
-          <span>CDC Oriente</span>
+          <strong>Centro de Profesionales & Provivir</strong>
+          <span>CPP Principal</span>
         </div>
       </header>
 

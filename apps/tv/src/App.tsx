@@ -64,8 +64,8 @@ export function App() {
   return (
     <div className="tv">
       <header className="tv-cab">
-        <div className="brand-mark">GP</div>
-        <h1>Grupo Provivir · CDC Oriente</h1>
+        <div className="brand-mark">CPP</div>
+        <h1>Centro de Profesionales & Provivir · CPP Principal</h1>
         <span className="tv-sala">{config.nombre}</span>
       </header>
 
@@ -212,7 +212,7 @@ function FrameMultimedia({ config }: { config: ConfigPantalla }) {
         </div>
       )}
       <span className="tv-media-etiqueta">
-        {emitiendo === 'directo' ? 'En vivo' : 'Grupo Provivir'}
+        {emitiendo === 'directo' ? 'En vivo' : 'Centro de Profesionales & Provivir'}
       </span>
     </section>
   );
