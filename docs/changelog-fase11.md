@@ -1,6 +1,6 @@
 # Changelog · FASE 11 — Ajustes de retroalimentación del cliente
 
-**Estado:** en curso. Recoge los cambios que pide el cliente tras revisar el prototipo desplegado
+**Estado:** desplegado en producción el 2026-09-03. Recoge los cambios que pide el cliente tras revisar el prototipo desplegado
 en `provivir.exagos.co`, numerados como los fue enviando.
 
 ## 1 · Cambio de marca
@@ -180,3 +180,47 @@ mostrador: el motor exige franja.
 6 de integración de la regla por canal (incluida la que fija que **la asistente sí puede**), y la
 del catálogo público del portal, que ahora expone `agendable` — el campo estaba fijado a propósito
 en esa prueba para que nadie filtre datos internos sin darse cuenta.
+
+
+---
+
+## 6 · El despliegue, y lo que enseñó
+
+Desplegado el 2026-09-03 sobre `provivir.exagos.co`. Migración aplicada, catálogo real cargado
+(21 servicios, 19 profesionales, 26 franjas) y los 18 festivos de 2026 más los 18 de 2027.
+
+### La purga se rompió a mitad, en producción
+
+`purgarCatalogo()` se escribió en la fase 1 y **no sabía de las tablas de la fase 7**. Al llegar a
+borrar los servicios chocó con `seguimiento_servicio_id_fkey` — pero para entonces ya había
+borrado citas, agendas y prestadores. Producción quedó en el peor estado posible: **sin médicos y
+con los servicios en pie**.
+
+Se arregló en el código, no parcheando la base a mano, y el arreglo distingue lo que puede
+perderse de lo que no: los seguimientos se borran (su `servicioId` es obligatorio y no pueden
+sobrevivir al servicio), mientras que los artículos de la base de conocimiento y las
+conversaciones de WhatsApp conservan la fila y solo sueltan el puntero.
+
+**La lección para la próxima tabla que apunte a `servicio`:** hay que añadirla a la purga en el
+mismo commit. Hoy le apuntan seis: `prestador_servicio`, `agenda`, `cita`,
+`conversacion.interes_servicio_id`, `kb_articulo.servicio_id` y `seguimiento.servicio_id`.
+
+### Efectos colaterales atendidos
+
+- **Las tres pantallas de sala eran las de demostración** —con el canal de YouTube ya
+  personalizado por la clínica— así que la purga se las llevó. Se recrean con los servicios del
+  catálogo real; el reparto por sala es una suposición razonable y se ajusta desde el backoffice.
+- **Cinco artículos recuperaron su servicio** (`eco`, `ecod`, `gin`, `nut`, `lab`), que vuelven a
+  existir con el mismo identificador. **Dos quedaron huérfanos**: «Dermatología» y «Suero de
+  vitamina C» siguen publicados pero describen servicios que ya no están en el catálogo, así que
+  el bot podría seguir ofreciéndolos. Decidir si se archivan.
+- Los 200 contactos de demostración y los 7 pacientes marcados `DEMO` se retiraron. Los 3
+  pacientes reales y las 9 conversaciones de WhatsApp siguen ahí.
+
+### Verificado en vivo
+
+Título nuevo en las tres aplicaciones · `/api/health/ready` en `ok` · pedir cupos para hoy
+responde «la cita más próxima disponible es a partir del 2026-09-04» · el 25 de diciembre responde
+«No atendemos: Navidad» · el domingo no ofrece nada · Katherin atiende de 10 en 10 y Cesar Osorio
+de 15 en 15 sobre el mismo servicio · la hora del almuerzo no existe como cupo · el catálogo
+público marca cuáles se agendan solos y cuáles los coordina la asistente.
