@@ -93,12 +93,19 @@ export function App() {
             <h2>Hola, {nombre}</h2>
             <p className="p-sub">¿Qué servicio necesitas?</p>
             <div className="p-servicios">
+              {/*
+                RN-04.7 · Los que coordina la asistente se muestran igual, pero sin
+                horarios. Ocultarlos haría creer que la clínica no los presta; dejarlos
+                seleccionables llevaría al paciente a una pantalla vacía.
+              */}
               {servicios.map((s) => (
-                <button key={s.id} className={`p-servicio ${servicioId === s.id ? 'sel' : ''}`}
+                <button key={s.id} disabled={!s.agendable}
+                        className={`p-servicio ${servicioId === s.id ? 'sel' : ''} ${s.agendable ? '' : 'p-no-agendable'}`}
                         onClick={() => setServicioId(s.id)}>
                   <strong>{s.nombre}</strong>
                   <span>{s.categoria} · {s.duracionMin} min</span>
                   {s.requiereOrden && <span className="p-aviso">Requiere orden médica</span>}
+                  {!s.agendable && <span className="p-aviso">Se agenda con una asistente</span>}
                 </button>
               ))}
             </div>

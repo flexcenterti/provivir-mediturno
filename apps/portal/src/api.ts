@@ -1,5 +1,7 @@
 export interface Servicio {
   id: string; nombre: string; categoria: string; duracionMin: number; requiereOrden: boolean;
+  /** RN-04.7 · false = lo coordina una asistente; el portal no ofrece horarios. */
+  agendable: boolean;
 }
 export interface Cupo {
   prestadorId: string; prestadorNombre: string; fecha: string; hora: string;

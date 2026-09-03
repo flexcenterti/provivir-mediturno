@@ -47,6 +47,39 @@ export const SERVICIOS: ServicioClinica[] = [
   { id: 'odo',  nombre: 'Odontología adultos',         categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false },
   { id: 'otr',  nombre: 'Otorrinolaringología',        categoria: 'Especialista',     tipo: 'general', duracionMin: 15, requiereOrden: false },
   { id: 'psi',  nombre: 'Psicología',                  categoria: 'Especialista',     tipo: 'general', duracionMin: 60, requiereOrden: false },
+
+  /*
+   * RN-04.7 · Lo que NO se agenda solo.
+   *
+   * El paciente los ve en el portal y el bot los describe, pero para agendarlos hay
+   * que hablar con una asistente. Son de dos clases:
+   *
+   *   · servicios que la clínica coordina a mano (laboratorio, rayos X, droguería,
+   *     valoración odontológica, ecografías);
+   *   · el control de medicina general, que exige una consulta previa (RN-01) y no
+   *     es algo que el paciente pueda resolver solo;
+   *   · los especialistas que vienen por fechas sueltas, no en jornada semanal.
+   *
+   * Duraciones marcadas con «?»: la clínica no las envió. No afectan a nadie mientras
+   * no haya agenda, pero conviene confirmarlas antes de que la asistente empiece a
+   * agendarlos.
+   */
+  { id: 'ctrl', nombre: 'Medicina general · Control',   categoria: 'Medicina general', tipo: 'control', duracionMin: 10, requiereOrden: false, agendable: false },
+  { id: 'lab',  nombre: 'Laboratorio clínico',          categoria: 'Laboratorio',      tipo: 'examen',  duracionMin: 10, requiereOrden: true,  agendable: false },
+  { id: 'rx',   nombre: 'Rayos X',                      categoria: 'Diagnóstico',      tipo: 'examen',  duracionMin: 15, requiereOrden: true,  agendable: false }, // duración ?
+  { id: 'eco',  nombre: 'Ecografía',                    categoria: 'Diagnóstico',      tipo: 'examen',  duracionMin: 20, requiereOrden: true,  agendable: false },
+  { id: 'ecod', nombre: 'Ecografía Doppler',            categoria: 'Diagnóstico',      tipo: 'examen',  duracionMin: 40, requiereOrden: true,  agendable: false },
+  { id: 'drog', nombre: 'Droguería',                    categoria: 'Otros',            tipo: 'general', duracionMin: 15, requiereOrden: false, agendable: false }, // duración ?
+  { id: 'odov', nombre: 'Valoración odontológica',      categoria: 'Especialista',     tipo: 'general', duracionMin: 20, requiereOrden: false, agendable: false }, // duración ?
+
+  // Especialistas que vienen por fechas sueltas (lista 2 del cliente).
+  { id: 'gin',  nombre: 'Ginecología',                  categoria: 'Especialista',     tipo: 'general', duracionMin: 15, requiereOrden: false, agendable: false },
+  { id: 'oft',  nombre: 'Oftalmología',                 categoria: 'Especialista',     tipo: 'general', duracionMin: 20, requiereOrden: false, agendable: false },
+  { id: 'ped',  nombre: 'Pediatría',                    categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false, agendable: false },
+  { id: 'uro',  nombre: 'Urología',                     categoria: 'Especialista',     tipo: 'general', duracionMin: 15, requiereOrden: false, agendable: false },
+  { id: 'opt',  nombre: 'Optometría',                   categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false, agendable: false },
+  { id: 'nut',  nombre: 'Nutrición',                    categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false, agendable: false },
+  { id: 'tra',  nombre: 'Traumatología',                categoria: 'Especialista',     tipo: 'general', duracionMin: 20, requiereOrden: false, agendable: false },
 ];
 
 interface PrestadorClinica {
@@ -83,6 +116,33 @@ export const PRESTADORES: PrestadorClinica[] = [
   { id: 'cam',  nombre: 'Carlos Alberto Moreno',          especialidad: 'Odontología',          grupoBalanceo: false, vinculacion: 'Interno', duraciones: { odo: 30 } },
   { id: 'rebr', nombre: 'Rafael Enrique Barrios Rendon',  especialidad: 'Otorrinolaringología', grupoBalanceo: false, vinculacion: 'Interno', duraciones: { otr: 15 } },
   { id: 'sloq', nombre: 'Sandra Liliana Osorio Quintero', especialidad: 'Psicología',           grupoBalanceo: false, vinculacion: 'Interno', duraciones: { psi: 60 } },
+
+  /*
+   * RN-04.7 · Especialistas que vienen por fechas sueltas, no en jornada semanal.
+   *
+   * Se crean SIN agenda: las fechas que envió la clínica son de agosto y ya pasaron,
+   * y cargar fechas caducadas no le sirve a nadie. La asistente las va creando cada
+   * mes en Agendas → Programación mensual, conforme la clínica confirma.
+   *
+   * Hasta que exista esa agenda no se les puede agendar por ningún canal, ni siquiera
+   * desde el mostrador: el motor exige franja (RN-06).
+   */
+  { id: 'ama',  nombre: 'Ana Maria Arias',                especialidad: 'Ginecología',          grupoBalanceo: false, vinculacion: 'Externo', duraciones: { gin: 15 } },
+  { id: 'cegg', nombre: 'Carlos Eduardo Gonima Giraldo',  especialidad: 'Oftalmología',         grupoBalanceo: false, vinculacion: 'Externo', duraciones: { oft: 20 } },
+  { id: 'cqg',  nombre: 'Catalina Quintero Gomez',        especialidad: 'Pediatría',            grupoBalanceo: false, vinculacion: 'Externo', duraciones: { ped: 30 } },
+  { id: 'dfbh', nombre: 'Diego Fernando Barragan Herrera', especialidad: 'Pediatría',           grupoBalanceo: false, vinculacion: 'Externo', duraciones: { ped: 20 } },
+  { id: 'dfcc', nombre: 'Diego Fernando Castillo Cobaleda', especialidad: 'Urología',           grupoBalanceo: false, vinculacion: 'Externo', duraciones: { uro: 15 } },
+  /*
+   * Ojo: comparte servicio (`mint`) con Henry Maya, que sí tiene jornada semanal y sí
+   * se agenda solo. Como `agendable` es del servicio y no del prestador, `mint` queda
+   * agendable — hoy da igual porque Trujillo no tiene franja, pero el día que la
+   * asistente le cargue fechas, esas horas SÍ serán agendables por el portal.
+   * Confirmar con la clínica si eso está bien o si hay que separarlos en dos servicios.
+   */
+  { id: 'jats', nombre: 'Jaime Andres Trujillo Santander', especialidad: 'Medicina Interna',    grupoBalanceo: false, vinculacion: 'Externo', duraciones: { mint: 20 } },
+  { id: 'lfvp', nombre: 'Luis Fernando Veloza Pacheco',   especialidad: 'Optometría',           grupoBalanceo: false, vinculacion: 'Externo', duraciones: { opt: 30 } },
+  { id: 'lmbg', nombre: 'Luis Miguel Becerra Granados',   especialidad: 'Nutrición',            grupoBalanceo: false, vinculacion: 'Externo', duraciones: { nut: 30 } },
+  { id: 'rjd',  nombre: 'Roberto Jose Dulce',             especialidad: 'Traumatología',        grupoBalanceo: false, vinculacion: 'Externo', duraciones: { tra: 20 } },
 ];
 
 interface AgendaClinica {

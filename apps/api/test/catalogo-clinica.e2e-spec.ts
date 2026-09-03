@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { CitasService } from '../src/citas/citas.service';
 import { cargarCatalogoClinica, PRESTADORES, SERVICIOS } from '../src/cli/catalogo.clinica';
+import { SERVICIOS as SERVICIOS_DEMO } from '../src/cli/catalogo.demo';
 
 /**
  * El catálogo real de la clínica, contra base de verdad.
@@ -49,10 +50,20 @@ describe('Catálogo real de la clínica (integración)', () => {
     await prisma.agenda.deleteMany({ where: { prestadorId: { in: ids } } });
     await prisma.prestadorServicio.deleteMany({ where: { prestadorId: { in: ids } } });
     await prisma.prestador.deleteMany({ where: { id: { in: ids } } });
-    // `mg` es del catálogo de demostración y se queda: solo se retiran los nuevos.
+    /*
+     * Siete servicios existen en los dos catálogos (mg, ctrl, gin, nut, eco, ecod, lab)
+     * y el real los pisa con sus propios valores. Se borran solo los que son
+     * exclusivamente suyos y se devuelven los compartidos a como los deja la demo,
+     * que es lo que esperan el resto de suites.
+     */
+    const deDemo = new Set(SERVICIOS_DEMO.map((s) => s.id));
     await prisma.servicio.deleteMany({
-      where: { id: { in: SERVICIOS.map((s) => s.id).filter((id) => id !== 'mg') } },
+      where: { id: { in: SERVICIOS.map((s) => s.id).filter((id) => !deDemo.has(id)) } },
     });
+    for (const s of SERVICIOS_DEMO) {
+      // `agendable` explícito: el catálogo demo no lo declara y se quedaría en false.
+      await prisma.servicio.upsert({ where: { id: s.id }, update: { ...s, agendable: true }, create: s });
+    }
     await app.close();
   });
 
@@ -148,6 +159,61 @@ describe('Catálogo real de la clínica (integración)', () => {
       ]) {
         const cupos = await citas.cupos({ servicioId, fecha: DOMINGO, prestadorId, limite: 5 } as never);
         expect(cupos).toEqual([]);
+      }
+    });
+  });
+
+  describe('RN-04.7 · servicios que solo agenda la asistente', () => {
+    it('RN-04.7: el portal y el bot no pueden pedir cupos de laboratorio', async () => {
+      await expect(
+        citas.cupos({ servicioId: 'lab', fecha: LUNES, limite: 5 } as never, { autoservicio: true }),
+      ).rejects.toThrow(/Comunícate con una asistente/);
+    });
+
+    it('RN-04.7: el control de medicina general tampoco se agenda solo', async () => {
+      // Exige consulta previa (RN-01): no es algo que el paciente resuelva por su cuenta.
+      await expect(
+        citas.cupos({ servicioId: 'ctrl', fecha: LUNES, prestadorId: 'co', limite: 5 } as never, { autoservicio: true }),
+      ).rejects.toThrow(/Comunícate con una asistente/);
+    });
+
+    it('RN-04.7: la asistente sí puede, desde el backoffice', async () => {
+      // Misma llamada sin declararse autoservicio: es exactamente para eso que se marcan.
+      await expect(
+        citas.cupos({ servicioId: 'lab', fecha: LUNES, limite: 5 } as never),
+      ).resolves.toBeDefined();
+    });
+
+    it('RN-04.7: crear una cita de un servicio marcado tampoco pasa por autoservicio', async () => {
+      const paciente = await prisma.paciente.upsert({
+        where: { documento: '96000002' },
+        update: {},
+        create: { documento: '96000002', nombres: 'Prueba', apellidos: 'Asistente', sedeId: SEDE_ID },
+      });
+
+      await expect(
+        citas.crear(
+          { pacienteId: paciente.id, servicioId: 'eco', fecha: LUNES, hora: '08:00', origen: 'autoagendamiento' } as never,
+          'test-catalogo',
+          { autoservicio: true },
+        ),
+      ).rejects.toThrow(/Comunícate con una asistente/);
+    });
+
+    it('RN-04.7: los servicios de consulta con jornada semanal sí se agendan solos', async () => {
+      const cupos = await citas.cupos(
+        { servicioId: 'mg', fecha: LUNES, prestadorId: 'co', limite: 5 } as never,
+        { autoservicio: true },
+      );
+      expect(cupos.length).toBeGreaterThan(0);
+    });
+
+    it('RN-04.7: los especialistas por fechas existen pero aún no tienen jornada', async () => {
+      // La asistente les carga las fechas cada mes; hasta entonces no hay nada que ofrecer.
+      for (const id of ['ama', 'cegg', 'cqg', 'dfbh', 'dfcc', 'jats', 'lfvp', 'lmbg', 'rjd']) {
+        const p = await prisma.prestador.findUnique({ where: { id }, include: { agendas: true } });
+        expect(p).not.toBeNull();
+        expect(p!.agendas).toEqual([]);
       }
     });
   });

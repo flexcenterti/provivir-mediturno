@@ -128,3 +128,55 @@ tocar.
 9 unitarias del cálculo de festivos, 4 de integración del día cerrado en el motor, y 12 del
 catálogo real que fijan jornada partida, duraciones por profesional, los horarios que cambian
 según el día y que nadie ofrece cupos en domingo.
+
+## 5 · RN-04.7 · Servicios que solo agenda la asistente
+
+El cliente revisó la lista del portal y marcó qué **no** debe agendar el paciente por su cuenta.
+Son tres situaciones con la misma consecuencia:
+
+- servicios que la clínica coordina a mano: **laboratorio, rayos X, ecografías, droguería,
+  valoración odontológica**;
+- el **control de medicina general**, que exige consulta previa dentro de una ventana (RN-01) —
+  esto además cierra el pendiente que quedaba de si `ctrl` seguía existiendo: sigue, pero no se
+  autoservicia;
+- los **nueve especialistas que vienen por fechas sueltas** (ginecología, oftalmología, pediatría,
+  urología, optometría, nutrición, traumatología).
+
+Antes, quien elegía laboratorio en el portal llegaba a una pantalla de horarios vacía, sin saber
+si no había cupo o si el sistema estaba roto.
+
+La regla está en [`docs/rn-04-7-agenda-con-asistente.md`](rn-04-7-agenda-con-asistente.md).
+
+### No hizo falta mecanismo nuevo
+
+Se apoya en dos piezas que ya estaban: el marcador `Servicio.agendable` —que RN-13.9 usaba para
+que el bot describiera un servicio sin ofrecer agendarlo— y la opción `{ autoservicio: true }` que
+introdujo RN-04.6. El resultado es que **la asistente sí los agenda** desde el backoffice, que es
+justo para lo que se marcan.
+
+En el portal esos servicios se siguen viendo, atenuados y con la nota «Se agenda con una
+asistente». Ocultarlos haría creer que la clínica no los presta.
+
+### Los especialistas por fechas se crean sin fechas
+
+Las que envió la clínica son de agosto y ya pasaron. Se dan de alta los nueve profesionales y sus
+servicios, y la asistente les carga cada mes las fechas confirmadas desde Agendas → Programación
+mensual. Hasta que exista esa agenda no se les puede agendar por ningún canal, tampoco desde el
+mostrador: el motor exige franja.
+
+### Pendientes que deja
+
+- Rayos X, droguería y valoración odontológica llevan **duraciones provisionales**: la clínica no
+  las envió.
+- Los servicios coordinados a mano **no tienen prestador ni agenda**: hoy son informativos. Para
+  que la asistente pueda agendarlos hay que dar de alta quién los realiza.
+- **Medicina interna tiene dos regímenes**: Henry Maya en jornada semanal (se agenda solo) y Jaime
+  Trujillo por fechas. Como `agendable` es del servicio y no del prestador, el servicio queda
+  agendable; hoy da igual porque Trujillo no tiene franja, pero cuando se le carguen fechas serán
+  agendables por el portal. Confirmar si conviene separarlos en dos servicios.
+
+### Pruebas
+
+6 de integración de la regla por canal (incluida la que fija que **la asistente sí puede**), y la
+del catálogo público del portal, que ahora expone `agendable` — el campo estaba fijado a propósito
+en esa prueba para que nadie filtre datos internos sin darse cuenta.

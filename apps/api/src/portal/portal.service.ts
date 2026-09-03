@@ -39,7 +39,8 @@ export class PortalService {
     const servicios = await this.prisma.servicio.findMany({
       where: { activo: true },
       orderBy: [{ categoria: 'asc' }, { nombre: 'asc' }],
-      select: { id: true, nombre: true, categoria: true, duracionMin: true, requiereOrden: true },
+      // RN-04.7 · `agendable` decide si el portal ofrece horarios o remite a la asistente.
+      select: { id: true, nombre: true, categoria: true, duracionMin: true, requiereOrden: true, agendable: true },
     });
     return servicios;
   }

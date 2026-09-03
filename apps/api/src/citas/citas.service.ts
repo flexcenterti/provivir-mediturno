@@ -82,6 +82,7 @@ export class CitasService {
      * mostrador y desde la IA. Las citas ya creadas no se tocan.
      */
     if (!servicio.activo) throw new NotFoundException('El servicio ya no está disponible');
+    this.validarAgendablePorAutoservicio(servicio, opciones);
 
     const tipo = (dto.tipo ?? servicio.tipo) as TipoCita;
     const limite = dto.limite ?? 10;
@@ -184,6 +185,8 @@ export class CitasService {
      */
     if (!servicio.activo) throw new NotFoundException('El servicio ya no está disponible');
 
+    this.validarAgendablePorAutoservicio(servicio, opciones);
+
     const paciente = await this.prisma.paciente.findUnique({ where: { id: dto.pacienteId } });
     if (!paciente) throw new NotFoundException('Paciente no encontrado');
 
@@ -278,6 +281,8 @@ export class CitasService {
     if (original.estado === 'cancelada' || original.estado === 'atendida') {
       throw new BadRequestException(`No se puede reprogramar una cita ${original.estado}`);
     }
+
+    this.validarAgendablePorAutoservicio(original.servicio, opciones);
 
     const fecha = aFechaUtc(dto.fecha);
     const horaInicio = aMinutos(dto.hora);
@@ -597,6 +602,26 @@ export class CitasService {
     throw new BadRequestException(
       'No se puede agendar para esa fecha. La cita más próxima disponible es a partir del ' +
         `${this.primeraFechaAgendableAutoservicio()}.`,
+    );
+  }
+
+  /**
+   * RN-04.7 · Hay servicios que la clínica coordina a mano y el paciente no agenda solo:
+   * laboratorio, rayos X, ecografías, los especialistas que vienen por fechas sueltas y
+   * el control de medicina general, que exige una consulta previa (RN-01).
+   *
+   * El marcador vive en el catálogo (`Servicio.agendable`) para que la clínica pueda
+   * abrir o cerrar un servicio al autoservicio desde el backoffice, sin desplegar.
+   * La asistente sí los agenda: es exactamente para eso que se marcan.
+   */
+  private validarAgendablePorAutoservicio(
+    servicio: { nombre: string; agendable: boolean },
+    opciones?: OpcionesAgendamiento,
+  ): void {
+    if (!opciones?.autoservicio || servicio.agendable) return;
+
+    throw new BadRequestException(
+      `${servicio.nombre} no se agenda por este medio. Comunícate con una asistente y te ayudamos a coordinarlo.`,
     );
   }
 

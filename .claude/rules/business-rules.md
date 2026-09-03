@@ -15,6 +15,10 @@ reemplazo de la fuente normativa.
   (`agendamiento_anticipacion_dias`); **el backoffice sí puede agendar hoy** y esa excepción se
   decide en el motor, no en cada canal. El canal se declara con `{ autoservicio: true }` al llamar
   al motor — nunca desde un DTO, o el navegador podría apagar la regla.
+- **RN-04.7 · `Servicio.agendable = false` = no lo agenda el autoservicio**, pero la asistente sí
+  desde el backoffice. Es restricción de canal, no del servicio, y se apoya en el mismo
+  `{ autoservicio: true }` de RN-04.6. El servicio se sigue mostrando en el portal, marcado:
+  ocultarlo haría creer que la clínica no lo presta.
 - **RN-06.5 · Nadie agenda en un día no laborable**, y aquí **no hay excepción de canal**: si la
   clínica está cerrada, tampoco el mostrador. Los domingos no se marcan — simplemente no se
   programan agendas para el día 7. Los festivos colombianos se calculan (`festivosColombia()` de

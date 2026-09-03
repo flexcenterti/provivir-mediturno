@@ -61,9 +61,13 @@ describe('Portal público (e2e)', () => {
     it('el catálogo de servicios es público', async () => {
       const r = await request(http).get('/api/portal/servicios').expect(200);
       expect(r.body.length).toBeGreaterThan(0);
-      // Sin datos internos: el portal no expone políticas de costo ni cupos.
+      /*
+       * Sin datos internos: el portal no expone políticas de costo ni cupos.
+       * `agendable` sí sale (RN-04.7): es lo que le dice al paciente que ese servicio
+       * lo coordina una asistente en vez de mostrarle una pantalla de horarios vacía.
+       */
       expect(Object.keys(r.body[0]).sort()).toEqual(
-        ['categoria', 'duracionMin', 'id', 'nombre', 'requiereOrden'],
+        ['agendable', 'categoria', 'duracionMin', 'id', 'nombre', 'requiereOrden'],
       );
     });
 

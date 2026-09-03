@@ -44,6 +44,7 @@ Los documentos v2.0 están **congelados**. Las reglas acordadas después viven e
 | `docs/rn-09-9-seguimiento-comercial.md` | **RN-09.9.** Secuencia de 3 mensajes al interesado que no agenda (extiende RN-09.8) |
 | `docs/rn-04-5-catalogo-comercial.md` | **RN-04.5.** Ficha comercial del servicio y gobierno del catálogo |
 | `docs/rn-04-6-anticipacion-minima.md` | **RN-04.6.** El autoservicio agenda desde mañana; la sede sí puede agendar hoy |
+| `docs/rn-04-7-agenda-con-asistente.md` | **RN-04.7.** Servicios que el paciente no agenda solo; los coordina la asistente |
 | `docs/rn-06-5-dias-no-laborables.md` | **RN-06.5.** Festivos y cierres: ningún canal agenda en un día cerrado |
 | `docs/rn-13-base-conocimiento.md` | **RN-13.** Base de conocimiento del bot: artículos versionados con recuperación |
 | `docs/adr-a5-proveedor-ia.md` | **ADR A5 revisado.** Proveedor de IA por configuración, dos adaptadores |

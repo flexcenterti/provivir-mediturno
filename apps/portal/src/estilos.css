@@ -78,6 +78,9 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
 .p-servicio strong { display: block; font-size: .95rem; }
 .p-servicio span { color: var(--muted); font-size: .8rem; }
 .p-aviso { display: block; color: var(--amber); font-weight: 600; }
+/* RN-04.7 · lo coordina la asistente: se ve, pero no se elige. */
+.p-no-agendable { opacity: .62; cursor: not-allowed; }
+.p-no-agendable:hover { border-color: var(--line); }
 
 .p-fecha { display: flex; flex-direction: column; gap: .3rem; font-size: .78rem;
   font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
