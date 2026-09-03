@@ -308,7 +308,30 @@ export async function purgarCatalogo(prisma: PrismaClient): Promise<Record<strin
   const citas = await prisma.cita.deleteMany({ where: { prestadorId: { in: ids } } });
   const agenda = await prisma.agenda.deleteMany({ where: { prestadorId: { in: ids } } });
   const prestadores = await prisma.prestador.deleteMany({ where: { id: { in: ids } } });
-  const servicios = await prisma.servicio.deleteMany({ where: { id: { in: SERVICIOS.map((s) => s.id) } } });
+
+  /*
+   * Antes de retirar los servicios hay que soltar lo que apunta a ellos desde la fase 7,
+   * que es posterior a esta purga y por eso no estaba contemplado: sin esto, la purga se
+   * cae a mitad con `seguimiento_servicio_id_fkey` y deja el catálogo desmontado a medias
+   * —prestadores borrados, servicios en pie— que es justo el estado peor.
+   *
+   * Los seguimientos SÍ se borran: su `servicioId` es obligatorio, así que no pueden
+   * sobrevivir al servicio, y son secuencias comerciales sobre algo que ya no se presta.
+   * Los artículos y las conversaciones NO: son contenido y historial de verdad, así que
+   * solo se les suelta el puntero.
+   */
+  const serviciosIds = SERVICIOS.map((s) => s.id);
+  const seguimientos = await prisma.seguimiento.deleteMany({ where: { servicioId: { in: serviciosIds } } });
+  await prisma.kbArticulo.updateMany({
+    where: { servicioId: { in: serviciosIds } },
+    data: { servicioId: null },
+  });
+  await prisma.conversacion.updateMany({
+    where: { interesServicioId: { in: serviciosIds } },
+    data: { interesServicioId: null },
+  });
+
+  const servicios = await prisma.servicio.deleteMany({ where: { id: { in: serviciosIds } } });
   const pantallas = await prisma.pantalla.deleteMany({ where: { nombre: { in: PANTALLAS.map((p) => p.nombre) } } });
   const contactos = await prisma.contacto.deleteMany({ where: { origen: 'demo' } });
   // Solo los marcados: si alguien de verdad se registró, no se toca.
@@ -316,6 +339,7 @@ export async function purgarCatalogo(prisma: PrismaClient): Promise<Record<strin
 
   return {
     citas: citas.count, agendas: agenda.count, prestadores: prestadores.count,
+    seguimientos: seguimientos.count,
     servicios: servicios.count, pantallas: pantallas.count,
     contactos: contactos.count, pacientes: pacientes.count,
   };
