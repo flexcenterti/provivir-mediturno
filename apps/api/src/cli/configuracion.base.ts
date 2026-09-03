@@ -10,6 +10,13 @@ import { TEMAS_PROHIBIDOS_POR_DEFECTO } from '../conocimiento/conocimiento.temas
 export const CONFIGURACION_BASE = [
   { clave: 'hueco_max_min', valor: '0', descripcion: 'RN-03.2 · Hueco máximo tolerado al recomendar cupos. 0 = compactar al máximo.' },
   { clave: 'ventana_control_dias_defecto', valor: '10', descripcion: 'RN-01.3 · Ventana de control por defecto si el prestador no define la suya.' },
+  {
+    clave: 'agendamiento_anticipacion_dias',
+    valor: '1',
+    descripcion:
+      'RN-04.6 · Días de anticipación que exigen el portal y el bot de WhatsApp. 1 = solo desde ' +
+      'mañana. 0 apaga la regla. El personal en sede no queda sujeto a este parámetro.',
+  },
   { clave: 'kiosko_activo', valor: 'false', descripcion: 'D3 · El kiosko queda construido pero apagado.' },
   { clave: 'umbral_confianza_ia', valor: '70', descripcion: 'RN-08 · Bajo este umbral la IA escala a la asistente.' },
   { clave: 'intervalo_institucional_min', valor: '10', descripcion: 'RN-11.2 · Cada cuántos minutos se interrumpe el canal para el video institucional.' },

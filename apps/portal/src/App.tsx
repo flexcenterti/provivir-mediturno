@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, fechaLarga, hoyEnSede, type Confirmacion, type Cupo, type Servicio } from './api';
+import { api, fechaLarga, primeraFechaAgendable, type Confirmacion, type Cupo, type Servicio } from './api';
 
 type Paso = 'inicio' | 'registrado' | 'nuevo' | 'servicio' | 'cupos' | 'confirmada';
 
@@ -15,7 +15,7 @@ export function App() {
   const [nombre, setNombre] = useState('');
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [servicioId, setServicioId] = useState('');
-  const [fecha, setFecha] = useState(hoyEnSede());
+  const [fecha, setFecha] = useState(primeraFechaAgendable());
   const [cupos, setCupos] = useState<Cupo[]>([]);
   const [confirmacion, setConfirmacion] = useState<Confirmacion | null>(null);
   const [error, setError] = useState('');
@@ -113,7 +113,7 @@ export function App() {
             <h2>{servicio?.nombre}</h2>
             <label className="p-fecha">
               Fecha
-              <input id="fecha" type="date" value={fecha} min={hoyEnSede()} onChange={(e) => setFecha(e.target.value)} />
+              <input id="fecha" type="date" value={fecha} min={primeraFechaAgendable()} onChange={(e) => setFecha(e.target.value)} />
             </label>
             <p className="p-sub">{fechaLarga(fecha)}</p>
 

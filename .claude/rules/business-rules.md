@@ -11,6 +11,10 @@ reemplazo de la fuente normativa.
 - **RN-02 · Dos métricas distintas que coexisten:** el **conteo comparativo** entre médicos generales **excluye controles**; el **% de ocupación** del dashboard **sí los cuenta** (ocupan tiempo). No unificarlas.
 - **RN-02 · Balanceo solo en medicina general.** Especialistas nunca balancean. Si el paciente pide médico específico, se respeta sin balancear.
 - **RN-04 · Cupos múltiples:** un servicio puede ocupar N slots (ecografía Doppler = 2).
+- **RN-04.6 · El autoservicio no agenda para hoy.** Portal y WhatsApp solo desde mañana
+  (`agendamiento_anticipacion_dias`); **el backoffice sí puede agendar hoy** y esa excepción se
+  decide en el motor, no en cada canal. El canal se declara con `{ autoservicio: true }` al llamar
+  al motor — nunca desde un DTO, o el navegador podría apagar la regla.
 - **RN-06 · El prestador ve su agenda en solo lectura.** Solo administración crea/bloquea/modifica disponibilidad.
 - **RN-08 · Foto de orden médica manuscrita → escala inmediato, sin OCR.** La imagen queda adjunta como soporte.
 - **Zona horaria:** "hoy" se calcula SIEMPRE con `hoyEnSede()`/`fechaEnZona()` de `@provivir/shared`.
@@ -46,4 +50,4 @@ reemplazo de la fuente normativa.
 
 ## Parámetros configurables (nunca en código)
 
-`hueco_max` (RN-03) · ventana de control por prestador (RN-01.3) · duraciones por prestador y tipo · umbrales de confianza de la IA · `KIOSKO_ACTIVO=false` (D3) · intervalo del video institucional (RN-11.2) · `whatsapp_seguimiento_portal_min` (RN-09.8.4) · `whatsapp_botones_interactivos` (RN-09.2) · `kb_score_min` y la lista de temas de escalamiento obligatorio (RN-13.3, RN-13.4) · encendido y cadencia del seguimiento comercial (RN-09.9). Van en tabla de configuración.
+`hueco_max` (RN-03) · `agendamiento_anticipacion_dias` (RN-04.6) · ventana de control por prestador (RN-01.3) · duraciones por prestador y tipo · umbrales de confianza de la IA · `KIOSKO_ACTIVO=false` (D3) · intervalo del video institucional (RN-11.2) · `whatsapp_seguimiento_portal_min` (RN-09.8.4) · `whatsapp_botones_interactivos` (RN-09.2) · `kb_score_min` y la lista de temas de escalamiento obligatorio (RN-13.3, RN-13.4) · encendido y cadencia del seguimiento comercial (RN-09.9). Van en tabla de configuración.

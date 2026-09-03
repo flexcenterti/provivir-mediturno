@@ -4,6 +4,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { CitasService } from '../src/citas/citas.service';
+import { fechaEnZona } from '@provivir/shared';
 
 /**
  * Portal público de autoagendamiento (Guía, FASE 5).
@@ -137,6 +138,20 @@ describe('Portal público (e2e)', () => {
       }).expect(400);
       expect(r.body.message).toMatch(/Paciente registrado/);
       expect(r.body.message).not.toMatch(/Rosa|Quintero/);
+    });
+  });
+
+  describe('RN-04.6 · el portal no agenda para hoy', () => {
+    it('RN-04.6: pedir cupos de hoy devuelve 400 y dice desde cuándo se puede', async () => {
+      const r = await post('/cupos', { servicioId: 'mg', fecha: fechaEnZona(), prestadorId: 'ao', limite: 5 })
+        .expect(400);
+      // El motivo real, no un "no hay horarios" que sería falso.
+      expect(r.body.message).toMatch(/más próxima disponible/);
+    });
+
+    it('RN-04.6: una fecha futura sigue devolviendo cupos', async () => {
+      const r = await post('/cupos', { servicioId: 'mg', fecha: LUNES, prestadorId: 'ao', limite: 5 }).expect(201);
+      expect(r.body.length).toBeGreaterThan(0);
     });
   });
 

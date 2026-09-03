@@ -80,6 +80,31 @@ export function controlDentroDeVentana(
 }
 
 /**
+ * RN-04.6 · Primera fecha que un canal de autoservicio puede agendar.
+ *
+ * Recibe "hoy" en vez de calcularlo: este archivo no toca reloj ni zona horaria,
+ * así se mantiene puro y probable. Quien llama ya resolvió el día de la sede con
+ * `hoyEnSede()`. Ambas fechas son medianoche UTC, así que la aritmética de días
+ * es exacta — el mismo criterio que `controlDentroDeVentana`.
+ */
+export function primeraFechaAgendable(hoy: Date, anticipacionDias: number): Date {
+  return new Date(hoy.getTime() + anticipacionDias * 86_400_000);
+}
+
+/**
+ * RN-04.6 · El paciente no puede agendarse solo para hoy ni para una fecha pasada:
+ * la agenda del día ya está comprometida y la administra la sede. Con anticipación
+ * 0 la regla queda apagada y hoy vuelve a ser agendable, sin desplegar nada.
+ */
+export function cumpleAnticipacionMinima(
+  hoy: Date,
+  fechaSolicitada: Date,
+  anticipacionDias: number,
+): boolean {
+  return fechaSolicitada.getTime() >= primeraFechaAgendable(hoy, anticipacionDias).getTime();
+}
+
+/**
  * Genera los cupos candidatos de una franja, respetando la duración pedida.
  *
  * RN-04.4 · un servicio de N cupos ocupa N × slot: la duración efectiva ya viene

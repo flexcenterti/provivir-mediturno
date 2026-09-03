@@ -460,6 +460,7 @@ function Kiosko() {
 const DESCRIPCION: Record<string, string> = {
   hueco_max_min: 'Hueco máximo tolerado entre citas al recomendar horarios. 0 compacta al máximo.',
   ventana_control_dias_defecto: 'Ventana de control por defecto cuando el prestador no define la suya.',
+  agendamiento_anticipacion_dias: 'Días de anticipación que exigen el portal y WhatsApp. 1 = solo desde mañana; 0 permite hoy. No aplica al personal en sede.',
   kiosko_activo: 'Activa el módulo de kiosko de llegada.',
   umbral_confianza_ia: 'Bajo este umbral de confianza, la IA escala a la asistente.',
   intervalo_institucional_min: 'Cada cuántos minutos se interrumpe el canal para el video institucional.',

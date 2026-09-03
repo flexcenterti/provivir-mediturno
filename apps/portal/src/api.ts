@@ -61,6 +61,19 @@ export const hoyEnSede = (): string =>
     timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date());
 
+/**
+ * RN-04.6 · Primera fecha que el portal puede ofrecer: por defecto mañana.
+ *
+ * Es solo comodidad de interfaz — el `min` de un input no impide teclear una fecha,
+ * y el navegador no manda aquí. La garantía está en el motor, que rechaza la fecha
+ * y devuelve el motivo real.
+ */
+export const primeraFechaAgendable = (): string => {
+  const manana = new Date(`${hoyEnSede()}T00:00:00Z`);
+  manana.setUTCDate(manana.getUTCDate() + 1);
+  return manana.toISOString().slice(0, 10);
+};
+
 export const fechaLarga = (iso: string): string =>
   new Date(`${iso}T12:00:00`).toLocaleDateString('es-CO', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',

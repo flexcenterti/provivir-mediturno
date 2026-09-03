@@ -44,8 +44,10 @@ import { ConfigService } from '@nestjs/config';
 import { OpenAiAdaptador } from '../src/ia/adaptadores/openai.adaptador';
 import { HERRAMIENTAS } from '../src/ia/ia.herramientas';
 import { promptSistema } from '../src/ia/ia.prompt';
+import { primeraFechaAgendable } from '../src/citas/citas.reglas';
 import { DOCUMENTACION_COMERCIAL } from '../src/cli/catalogo.demo';
 import type { MensajeLlm, RespuestaLlm } from '../src/ia/ia.tipos';
+import { hoyEnSede } from '@provivir/shared';
 
 const URL_PORTAL = process.env.PORTAL_URL ?? 'https://provivir.exagos.co/citas';
 
@@ -230,6 +232,8 @@ async function evaluar(modelo: string, casos: Caso[], concurrencia: number, repe
       documentacionComercial: SIN_CONOCIMIENTO ? DOCUMENTACION_COMERCIAL : undefined,
       conocimientoDisponible: !SIN_CONOCIMIENTO,
       ofrecerWeb,
+      // RN-04.6 · el arnés corre sin BD: usa el valor por defecto del parámetro.
+      primeraFechaAgendable: primeraFechaAgendable(hoyEnSede(), 1).toISOString().slice(0, 10),
     });
 
   // Dos, porque el bloque del portal cambia lo que el modelo debe hacer en el turno:

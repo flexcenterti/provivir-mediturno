@@ -118,7 +118,7 @@ export class PortalService {
       fecha: dto.fecha,
       prestadorId: dto.prestadorId,
       limite: dto.limite ?? 12,
-    } as never);
+    } as never, { autoservicio: true });
   }
 
   /** RN-10.2 · confirmación con código único de atención. */
@@ -135,6 +135,8 @@ export class PortalService {
         origen: 'autoagendamiento',
       } as never,
       'portal',
+      // RN-04.6 · el paciente agenda solo: no puede tomar cupos de hoy.
+      { autoservicio: true },
     );
 
     if (!r.creada) {
