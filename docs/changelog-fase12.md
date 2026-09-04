@@ -1,6 +1,7 @@
 # Changelog · FASE 12 — Consentimiento de datos en WhatsApp
 
-**Estado:** en verde, sin desplegar. 274 unitarias + 238 e2e.
+**Estado:** en verde, sin desplegar. Incluye también RN-08.1, el adjunto visible en la bandeja
+(al final). Los totales de pruebas de esta rama están en el changelog de la fase 13, que va encima.
 
 ## Por qué
 
@@ -57,6 +58,34 @@ decisión legal no puede depender de que un título traducible coincida palabra 
 
 Se corrigieron los últimos textos que seguían con el nombre viejo: la identidad en el prompt, la
 cabecera del ticket de WhatsApp y el `responsable` del aviso de privacidad del portal.
+
+## RN-08.1 · el adjunto, visible de verdad
+
+Cae en esta fase porque es el mismo asunto desde el otro lado: el aviso de datos antecede al
+escalamiento por adjunto, y de poco sirve autorizarlo si luego la asistente no puede abrirlo.
+
+La burbuja solo decía «📎 imagen». La asistente sabía que había una orden médica y no podía
+leerla — que es exactamente lo que RN-08 le pide hacer: el escalamiento llegaba sin el soporte con
+el que hay que trabajar.
+
+`GET /bandeja/mensajes/:id/media` lo sirve con el mismo permiso `bandeja.operar` del controlador
+—quien atiende la conversación es quien ve su soporte— y deja constancia en auditoría de quién lo
+abrió, porque es un dato del paciente.
+
+**La ruta nunca llega del cliente:** se direcciona por id de mensaje y sale de la base, así que la
+travesía de rutas no es posible por construcción; la comprobación contra `DIR_MEDIA` es defensa en
+profundidad por si un valor almacenado se corrompiera. El nombre del archivo lo escribe el
+paciente, así que se limpia antes de ponerlo en `Content-Disposition`: un salto de línea ahí
+permitiría inyectar cabeceras. Lo desconocido se sirve como `application/octet-stream` y con
+`nosniff`, para que un archivo inesperado no pueda ejecutarse en el navegador de la asistente.
+
+`extensionDe` sale de `meta.cliente` a `media.tipos` porque ahora se recorre en los dos sentidos:
+al descargar hace falta la extensión, y al servir, el tipo de vuelta.
+
+En el frontend hizo falta `pedirBlob()` aparte de `pedir()`: un `<img src>` no puede llevar la
+cabecera del token. Comparte el refresco de sesión —si no, abrir un adjunto tras un rato inactivo
+echaría al login— y revoca el object URL al desmontar, o cada conversación abierta dejaría una
+copia del archivo colgada en memoria.
 
 ## Al desplegar
 
