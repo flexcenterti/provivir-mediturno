@@ -592,7 +592,7 @@ describe('Canal WhatsApp (e2e)', () => {
       const token = await tokenAsistente();
 
       const r = await request(http).get('/api/bandeja').set('Authorization', `Bearer ${token}`).expect(200);
-      const mia = r.body.find((c: { telefono: string }) => c.telefono === TEL);
+      const mia = r.body.datos.find((c: { telefono: string }) => c.telefono === TEL);
 
       expect(mia).toBeDefined();
       expect(mia.motivo).toMatch(/sin lectura por IA/i);
@@ -624,6 +624,150 @@ describe('Canal WhatsApp (e2e)', () => {
       expect(resuelta.estado).toBe('resuelta');
       expect(resuelta.resueltaTs).not.toBeNull();
       expect(enviados.some((e) => e.texto === 'Hola, soy Paula.')).toBe(true);
+    });
+
+    it('la respuesta de la asistente queda firmada con su nombre', async () => {
+      await conversaciones.procesar(entrante({ tipo: 'imagen', mediaId: 'm1', mimeType: 'image/jpeg' }) as never);
+      const token = await tokenAsistente();
+      const c = await prisma.conversacion.findFirstOrThrow({ where: { telefono: TEL } });
+
+      await request(http).post(`/api/bandeja/${c.id}/responder`)
+        .set('Authorization', `Bearer ${token}`).send({ texto: 'Te confirmo yo.' }).expect(201);
+
+      const r = await request(http).get(`/api/bandeja/${c.id}`)
+        .set('Authorization', `Bearer ${token}`).expect(200);
+      const suyo = r.body.mensajes.find((m: { contenido: string }) => m.contenido === 'Te confirmo yo.');
+
+      // Sin autor no habría forma de distinguirla del bot, que escribe por el mismo sitio.
+      expect(suyo.autor).not.toBeNull();
+      expect(typeof suyo.autor.nombre).toBe('string');
+    });
+
+    /**
+     * Lo que hace falta para que una conversación cerrada no desaparezca para siempre.
+     */
+    describe('conversaciones cerradas', () => {
+      /** Deja la conversación cerrada y decide si el paciente escribió hace poco. */
+      async function cerrada(ultimoEntranteHaceHoras: number) {
+        await conversaciones.procesar(entrante({ texto: 'buenas' }) as never);
+        const c = await prisma.conversacion.findFirstOrThrow({ where: { telefono: TEL } });
+        await prisma.mensaje.updateMany({
+          where: { conversacionId: c.id, direccion: 'entrante' },
+          data: { ts: new Date(Date.now() - ultimoEntranteHaceHoras * 3600_000) },
+        });
+        // Se devuelve la fila YA actualizada: leerla antes deja `escaladaTs` stale y
+        // la comparación de después no compararía nada.
+        return prisma.conversacion.update({
+          where: { id: c.id },
+          data: { estado: 'resuelta', resueltaTs: new Date(), escalada: true, escaladaTs: new Date() },
+        });
+      }
+
+      it('no salen entre los pendientes, pero sí en el histórico', async () => {
+        const c = await cerrada(1);
+        const token = await tokenAsistente();
+
+        const pend = await request(http).get('/api/bandeja')
+          .set('Authorization', `Bearer ${token}`).expect(200);
+        expect(pend.body.datos.some((x: { id: string }) => x.id === c.id)).toBe(false);
+
+        const hist = await request(http).get('/api/bandeja?vista=cerradas')
+          .set('Authorization', `Bearer ${token}`).expect(200);
+        expect(hist.body.datos.some((x: { id: string }) => x.id === c.id)).toBe(true);
+      });
+
+      it('se reabre y vuelve a la bandeja, a nombre de quien la reabrió', async () => {
+        const c = await cerrada(1);
+        const token = await tokenAsistente();
+
+        await request(http).patch(`/api/bandeja/${c.id}/reabrir`)
+          .set('Authorization', `Bearer ${token}`).expect(200);
+
+        const reabierta = await prisma.conversacion.findUniqueOrThrow({ where: { id: c.id } });
+        expect(reabierta.resueltaTs).toBeNull();
+        expect(reabierta.estado).toBe('en_gestion');
+        expect(reabierta.tomadaPor).not.toBeNull();
+        expect(reabierta.reaperturas).toBe(1);
+        // Las métricas se calculan sobre el estado actual: pisar esto reescribiría
+        // las escalaciones de un mes ya reportado.
+        expect(reabierta.escalada).toBe(true);
+        expect(reabierta.escaladaTs).toEqual(c.escaladaTs);
+
+        const pend = await request(http).get('/api/bandeja')
+          .set('Authorization', `Bearer ${token}`).expect(200);
+        expect(pend.body.datos.some((x: { id: string }) => x.id === c.id)).toBe(true);
+      });
+
+      it('reabrir una que no está cerrada no hace nada', async () => {
+        await conversaciones.procesar(entrante({ texto: 'buenas' }) as never);
+        const c = await prisma.conversacion.findFirstOrThrow({ where: { telefono: TEL } });
+        const token = await tokenAsistente();
+
+        await request(http).patch(`/api/bandeja/${c.id}/reabrir`)
+          .set('Authorization', `Bearer ${token}`).expect(400);
+      });
+
+      /**
+       * El fallo que hoy se ve como un «500» con el error crudo de Meta. Tiene que
+       * ser un 409 que diga qué hacer, y no debe salir nada.
+       */
+      it('fuera de la ventana de 24 h no se envía, y se explica por qué', async () => {
+        const c = await cerrada(30);
+        const token = await tokenAsistente();
+        await request(http).patch(`/api/bandeja/${c.id}/reabrir`)
+          .set('Authorization', `Bearer ${token}`).expect(200);
+
+        const antes = enviados.length;
+        const r = await request(http).post(`/api/bandeja/${c.id}/responder`)
+          .set('Authorization', `Bearer ${token}`).send({ texto: 'hola' }).expect(409);
+
+        expect(r.body.message).toMatch(/ventana de 24 h/i);
+        expect(enviados).toHaveLength(antes);
+      });
+
+      it('dentro de la ventana sí se puede responder tras reabrir', async () => {
+        const c = await cerrada(1);
+        const token = await tokenAsistente();
+        await request(http).patch(`/api/bandeja/${c.id}/reabrir`)
+          .set('Authorization', `Bearer ${token}`).expect(200);
+
+        await request(http).post(`/api/bandeja/${c.id}/responder`)
+          .set('Authorization', `Bearer ${token}`).send({ texto: 'seguimos' }).expect(201);
+        expect(enviados.some((e) => e.texto === 'seguimos')).toBe(true);
+      });
+
+      /** Sin plantilla configurada no se intenta: Meta lo rechazaría igual. */
+      it('sin plantilla configurada, el envío no se intenta y lo dice', async () => {
+        const c = await cerrada(30);
+        const token = await tokenAsistente();
+
+        const antes = enviados.length;
+        const r = await request(http).post(`/api/bandeja/${c.id}/plantilla`)
+          .set('Authorization', `Bearer ${token}`).expect(409);
+
+        expect(r.body.message).toMatch(/plantilla/i);
+        expect(enviados).toHaveLength(antes);
+      });
+
+      it('con la ventana abierta, la plantilla se rechaza: se responde con texto', async () => {
+        const c = await cerrada(1);
+        const token = await tokenAsistente();
+
+        await request(http).post(`/api/bandeja/${c.id}/plantilla`)
+          .set('Authorization', `Bearer ${token}`).expect(409);
+      });
+
+      it('el detalle dice si se puede escribir y hasta cuándo', async () => {
+        const c = await cerrada(1);
+        const token = await tokenAsistente();
+
+        const r = await request(http).get(`/api/bandeja/${c.id}`)
+          .set('Authorization', `Bearer ${token}`).expect(200);
+
+        expect(r.body.ventana.dentro).toBe(true);
+        expect(r.body.ventana.expiraTs).not.toBeNull();
+        expect(r.body.ventana.plantillaConfigurada).toBe(false);
+      });
     });
 
     /**

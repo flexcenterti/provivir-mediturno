@@ -1,30 +1,59 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type Conversacion, type ConversacionDetalle, type Interesado } from '../api';
+import {
+  api, type Conversacion, type ConversacionDetalle, type Interesado, type VentanaMeta,
+} from '../api';
+
+type Vista = 'pendientes' | 'cerradas';
+
+const fechaCorta = (iso: string) =>
+  new Date(iso).toLocaleString('es-CO', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
 
 /**
  * Especificación §2.9 · Bandeja de la asistente.
  * Muestra motivo, prioridad y tiempo esperando; la asistente toma la conversación
  * y responde por WhatsApp sin salir de la plataforma (RN-08.3).
+ *
+ * La pestaña de cerradas existe porque una conversación resuelta desaparecía para
+ * siempre: si el paciente volvía a llamar por lo mismo, no había forma de leer qué
+ * se le había dicho.
  */
-export function Bandeja() {
-  const [pendientes, setPendientes] = useState<Conversacion[]>([]);
+export function Bandeja({ usuarioId }: { usuarioId: string }) {
+  const [vista, setVista] = useState<Vista>('pendientes');
+  const [q, setQ] = useState('');
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
+  const [pagina, setPagina] = useState(1);
+  const [soloMias, setSoloMias] = useState(false);
+
+  const [filas, setFilas] = useState<Conversacion[]>([]);
+  const [paginas, setPaginas] = useState(1);
+  const [total, setTotal] = useState(0);
   const [interesados, setInteresados] = useState<Interesado[]>([]);
   const [abierta, setAbierta] = useState<ConversacionDetalle | null>(null);
   const [error, setError] = useState('');
 
   const recargar = useCallback(() => {
-    api.bandeja().then(setPendientes).catch((e: Error) => setError(e.message));
+    api.bandeja({ vista, q: q.trim() || undefined, desde: desde || undefined, hasta: hasta || undefined, pagina })
+      .then((p) => { setFilas(p.datos); setPaginas(p.paginas); setTotal(p.total); })
+      .catch((e: Error) => setError(e.message));
     // RN-09.9.8 · los interesados van aquí y no en un tablero aparte: es donde la
     // asistente ya trabaja, y un listado en otra pantalla no lo mira nadie.
     api.interesados().then(setInteresados).catch(() => undefined);
-  }, []);
+  }, [vista, q, desde, hasta, pagina]);
 
   useEffect(() => {
     recargar();
-    // El tiempo de espera avanza aunque no pase nada: se refresca solo.
+    // El tiempo de espera avanza aunque no pase nada: se refresca solo. En el
+    // histórico no, que ahí nada corre y recargar le movería la lista a quien lee.
+    if (vista !== 'pendientes') return;
     const id = setInterval(recargar, 20_000);
     return () => clearInterval(id);
-  }, [recargar]);
+  }, [recargar, vista]);
+
+  /** Cambiar de filtro con la página 4 puesta deja la lista vacía sin explicación. */
+  const cambiar = (fn: () => void) => { fn(); setPagina(1); };
 
   async function abrir(id: string) {
     setError('');
@@ -35,16 +64,49 @@ export function Bandeja() {
     }
   }
 
+  // "Solo las mías" se resuelve aquí y no en la API: la lista ya está en memoria y
+  // el backend no tiene por qué saber quién pregunta para poder filtrar.
+  const visibles = soloMias ? filas.filter((c) => c.tomadaPor === usuarioId) : filas;
+
   return (
     <div className="vista">
       <header className="vista-cab">
         <div>
+          <div className="tabs">
+            <button className={`tab ${vista === 'pendientes' ? 'activa' : ''}`}
+                    onClick={() => cambiar(() => setVista('pendientes'))}>
+              Pendientes
+            </button>
+            <button className={`tab ${vista === 'cerradas' ? 'activa' : ''}`}
+                    onClick={() => cambiar(() => setVista('cerradas'))}>
+              Cerradas
+            </button>
+          </div>
           <p className="nota">
-            Conversaciones que la IA no resolvió. Ordenadas por prioridad y, dentro de ella,
-            por quién lleva más tiempo esperando.
+            {vista === 'pendientes'
+              ? 'Conversaciones que la IA no resolvió. Ordenadas por prioridad y, dentro de ella, por quién lleva más tiempo esperando.'
+              : 'Conversaciones ya cerradas, de la más reciente a la más antigua. Se pueden reabrir para seguir atendiéndolas.'}
           </p>
         </div>
       </header>
+
+      <div className="buscador">
+        <input
+          placeholder="Teléfono, nombre o documento…"
+          value={q}
+          onChange={(e) => cambiar(() => setQ(e.target.value))}
+        />
+        {vista === 'cerradas' && (
+          <>
+            <label>Desde <input type="date" value={desde} onChange={(e) => cambiar(() => setDesde(e.target.value))} /></label>
+            <label>Hasta <input type="date" value={hasta} onChange={(e) => cambiar(() => setHasta(e.target.value))} /></label>
+          </>
+        )}
+        <label className="p-check">
+          <input type="checkbox" checked={soloMias} onChange={(e) => setSoloMias(e.target.checked)} />
+          Solo las mías
+        </label>
+      </div>
 
       {error && <div className="error">{error}</div>}
 
@@ -53,11 +115,12 @@ export function Bandeja() {
           <thead>
             <tr>
               <th>Paciente</th><th>Motivo</th><th>Prioridad</th>
-              <th>Tiempo esperando</th><th>Estado</th><th></th>
+              <th>{vista === 'pendientes' ? 'Tiempo esperando' : 'Cerrada'}</th>
+              <th>Atiende</th><th></th>
             </tr>
           </thead>
           <tbody>
-            {pendientes.map((c) => (
+            {visibles.map((c) => (
               <tr key={c.id} className="fila-clickable" onClick={() => abrir(c.id)}>
                 <td>
                   {c.paciente ? `${c.paciente.apellidos}, ${c.paciente.nombres}` : <span className="muted">Sin registrar</span>}
@@ -70,19 +133,44 @@ export function Bandeja() {
                     {c.prioridad}
                   </span>
                 </td>
-                {/* RN-08.3 · para que la espera no "se vuelva paisaje" */}
-                <td className={c.minutosEsperando > 30 ? 'espera-larga' : ''}>
-                  {c.minutosEsperando} min
+                {vista === 'pendientes' ? (
+                  /* RN-08.3 · para que la espera no "se vuelva paisaje" */
+                  <td className={c.minutosEsperando > 30 ? 'espera-larga' : ''}>
+                    {c.minutosEsperando} min
+                    {c.reaperturas > 0 && <span className="muted"> · reabierta</span>}
+                  </td>
+                ) : (
+                  <td>{c.resueltaTs ? fechaCorta(c.resueltaTs) : '—'}</td>
+                )}
+                <td>
+                  {c.asistente
+                    ? <>{c.asistente.nombre}{c.tomadaPor === usuarioId && <span className="muted"> · tú</span>}</>
+                    : <span className="muted">Sin tomar</span>}
                 </td>
-                <td>{c.tomadaPor ? 'En gestión' : 'Sin tomar'}</td>
                 <td><button className="btn btn-ghost">Abrir</button></td>
               </tr>
             ))}
-            {pendientes.length === 0 && (
-              <tr><td colSpan={6} className="muted">No hay conversaciones pendientes</td></tr>
+            {visibles.length === 0 && (
+              <tr>
+                <td colSpan={6} className="muted">
+                  {soloMias && filas.length > 0
+                    ? 'Ninguna a tu nombre. Quita "Solo las mías" para ver el resto.'
+                    : vista === 'pendientes'
+                      ? 'No hay conversaciones pendientes'
+                      : 'Ninguna conversación cerrada con esos filtros'}
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
+
+        {paginas > 1 && (
+          <div className="acciones">
+            <button className="btn btn-ghost" disabled={pagina <= 1} onClick={() => setPagina(pagina - 1)}>Anterior</button>
+            <span className="muted">Página {pagina} de {paginas} · {total} conversaciones</span>
+            <button className="btn btn-ghost" disabled={pagina >= paginas} onClick={() => setPagina(pagina + 1)}>Siguiente</button>
+          </div>
+        )}
       </div>
 
       <Interesados filas={interesados} onAbrir={(id) => void abrir(id)} />
@@ -90,6 +178,7 @@ export function Bandeja() {
       {abierta && (
         <ModalConversacion
           conversacion={abierta}
+          usuarioId={usuarioId}
           onCerrar={() => setAbierta(null)}
           onCambio={() => { recargar(); void abrir(abierta.id); }}
           onResuelta={() => { setAbierta(null); recargar(); }}
@@ -99,8 +188,43 @@ export function Bandeja() {
   );
 }
 
-function ModalConversacion({ conversacion, onCerrar, onCambio, onResuelta }: {
+/**
+ * Qué se puede hacer con esta conversación, en una sola frase.
+ *
+ * Se calcula aquí y no en cada botón para que el aviso y lo que está habilitado no
+ * puedan contradecirse: la asistente tiene que saber por qué no puede escribir antes
+ * de redactar, no después de pulsar enviar.
+ */
+function situacion(cerrada: boolean, v: VentanaMeta) {
+  if (v.dentro) {
+    return cerrada
+      ? { puedeEscribir: false, reabrir: true, plantilla: false,
+          aviso: 'Cerrada, pero el paciente escribió hace menos de 24 h: reábrela y respóndele con normalidad.' }
+      : { puedeEscribir: true, reabrir: false, plantilla: false, aviso: '' };
+  }
+  if (v.plantillaConfigurada) {
+    return {
+      puedeEscribir: false, reabrir: cerrada, plantilla: true,
+      aviso: 'Pasaron más de 24 h desde el último mensaje del paciente. WhatsApp ya no admite texto libre: '
+        + 'envíale la plantilla aprobada. Ojo, la plantilla no reabre la ventana — la reabre su respuesta.',
+    };
+  }
+  return {
+    puedeEscribir: false, reabrir: cerrada, plantilla: false,
+    aviso: 'Pasaron más de 24 h desde el último mensaje del paciente y no hay plantilla configurada, '
+      + 'así que WhatsApp no dejará salir nada. Se configura en Administración → Reglas, con el nombre aprobado en Meta.',
+  };
+}
+
+/** Quién escribió un saliente. Vacío = no fue una persona. */
+function firma(autor: { nombre: string } | null, tipo: string): string {
+  if (autor) return autor.nombre;
+  return tipo === 'plantilla' ? 'Automático' : 'Asistente virtual';
+}
+
+function ModalConversacion({ conversacion, usuarioId, onCerrar, onCambio, onResuelta }: {
   conversacion: ConversacionDetalle;
+  usuarioId: string;
   onCerrar: () => void;
   onCambio: () => void;
   onResuelta: () => void;
@@ -109,19 +233,27 @@ function ModalConversacion({ conversacion, onCerrar, onCambio, onResuelta }: {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
 
-  async function enviar() {
-    if (!texto.trim()) return;
+  const cerrada = conversacion.resueltaTs !== null;
+  const { puedeEscribir, reabrir, plantilla, aviso } = situacion(cerrada, conversacion.ventana);
+
+  /** Toda acción sobre la conversación falla igual: se pinta y no se pierde el texto. */
+  async function accion(fn: () => Promise<unknown>, despues: () => void = onCambio) {
     setEnviando(true); setError('');
     try {
-      await api.responderBandeja(conversacion.id, texto.trim());
-      setTexto('');
-      onCambio();
+      await fn();
+      despues();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error');
     } finally {
       setEnviando(false);
     }
   }
+
+  const enviar = () =>
+    accion(async () => {
+      await api.responderBandeja(conversacion.id, texto.trim());
+      setTexto('');
+    });
 
   return (
     <div className="modal-fondo" onClick={onCerrar}>
@@ -132,9 +264,18 @@ function ModalConversacion({ conversacion, onCerrar, onCambio, onResuelta }: {
             : conversacion.telefono}
         </h3>
         <p className="nota">
-          {conversacion.motivo} · esperando {conversacion.minutosEsperando} min
+          {conversacion.motivo}
+          {cerrada
+            ? <> · cerrada el {fechaCorta(conversacion.resueltaTs!)}</>
+            : <> · esperando {conversacion.minutosEsperando} min</>}
+          {conversacion.asistente && (
+            <> · atiende <b>{conversacion.asistente.nombre}</b>
+              {conversacion.tomadaPor === usuarioId ? ' (tú)' : ''}</>
+          )}
+          {conversacion.reaperturas > 0 && <> · reabierta {conversacion.reaperturas} vez(ces)</>}
         </p>
 
+        {aviso && <div className="aviso-ventana">{aviso}</div>}
         {error && <div className="error">{error}</div>}
 
         <div className="chat">
@@ -143,7 +284,11 @@ function ModalConversacion({ conversacion, onCerrar, onCambio, onResuelta }: {
               {/* RN-09.2 · el adjunto del paciente se le muestra a la asistente como soporte */}
               {m.mediaPath && <Adjunto mensajeId={m.id} tipo={m.tipo} nombre={m.contenido} />}
               <span>{m.transcripcion ?? m.contenido ?? (m.mediaPath ? '' : `[${m.tipo}]`)}</span>
-              <time>{new Date(m.ts).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</time>
+              <time>
+                {/* Quién lo escribió: antes el bot y una persona eran indistinguibles. */}
+                {m.direccion === 'saliente' && <>{firma(m.autor, m.tipo)} · </>}
+                {new Date(m.ts).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+              </time>
             </div>
           ))}
         </div>
@@ -153,22 +298,50 @@ function ModalConversacion({ conversacion, onCerrar, onCambio, onResuelta }: {
             rows={3}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
-            placeholder="Escribe tu respuesta al paciente…"
+            disabled={!puedeEscribir}
+            placeholder={puedeEscribir
+              ? 'Escribe tu respuesta al paciente…'
+              : 'No se puede escribir ahora mismo — mira el aviso de arriba.'}
           />
         </div>
 
         <div className="acciones">
-          <button className="btn btn-primary" onClick={enviar} disabled={enviando || !texto.trim()}>
-            {enviando ? 'Enviando…' : 'Responder por WhatsApp'}
-          </button>
-          {!conversacion.tomadaPor && (
-            <button className="btn btn-ghost" onClick={() => api.tomarBandeja(conversacion.id).then(onCambio)}>
+          {puedeEscribir && (
+            <button className="btn btn-primary" onClick={enviar} disabled={enviando || !texto.trim()}>
+              {enviando ? 'Enviando…' : 'Responder por WhatsApp'}
+            </button>
+          )}
+          {reabrir && (
+            <button className="btn btn-primary" disabled={enviando}
+                    onClick={() => accion(() => api.reabrirBandeja(conversacion.id))}>
+              Reabrir y atender
+            </button>
+          )}
+          {plantilla && (
+            <button className="btn btn-primary" disabled={enviando}
+                    onClick={() => accion(() => api.plantillaBandeja(conversacion.id))}>
+              Enviar plantilla para que responda
+            </button>
+          )}
+          {!cerrada && !conversacion.tomadaPor && (
+            <button className="btn btn-ghost" disabled={enviando}
+                    onClick={() => accion(() => api.tomarBandeja(conversacion.id))}>
               Tomar
             </button>
           )}
-          <button className="btn btn-ghost" onClick={() => api.resolverBandeja(conversacion.id).then(onResuelta)}>
-            Marcar como resuelta
-          </button>
+          {/* Sin esto, quien toma un hilo y se va lo deja bloqueado para las demás. */}
+          {!cerrada && conversacion.tomadaPor === usuarioId && (
+            <button className="btn btn-ghost" disabled={enviando}
+                    onClick={() => accion(() => api.soltarBandeja(conversacion.id))}>
+              Devolver a la bandeja
+            </button>
+          )}
+          {!cerrada && (
+            <button className="btn btn-ghost" disabled={enviando}
+                    onClick={() => accion(() => api.resolverBandeja(conversacion.id), onResuelta)}>
+              Marcar como resuelta
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -54,6 +54,34 @@ export function parametrosTicket(d: DatosTicket): string[] {
   return [d.codigo, d.servicio, d.fecha, d.hora];
 }
 
+/**
+ * Plantilla para retomar una conversación que ya se cerró, con **una sola variable
+ * de cuerpo**: `{{1}}` el nombre del paciente.
+ *
+ * Una sola, a propósito. No hay cita de la que hablar —por eso no sirven las cuatro
+ * de `parametrosTicket`— y la plantilla tiene un único trabajo: que la persona
+ * conteste. En cuanto conteste se abre la ventana y la asistente escribe con todo el
+ * detalle que quiera. Cuantas más variables, más formas de cruzarlas.
+ *
+ * Meta rechaza los parámetros vacíos y los que llevan saltos de línea, así que el
+ * respaldo no es cortesía: es lo que evita que el envío falle con un paciente que
+ * escribió antes de identificarse, que es el caso normal en un primer contacto.
+ *
+ * El respaldo es «de nuevo» porque encaja en la misma frase que un nombre y suena a
+ * lo que de verdad está pasando:
+ *
+ *   Hola María, te escribimos de…      ← con nombre
+ *   Hola de nuevo, te escribimos de…   ← sin él
+ *
+ * Cualquier genérico del tipo «paciente» delata que la clínica no sabe con quién
+ * habla, y «hola» de respaldo daría «Hola hola».
+ */
+export function parametrosReapertura(nombrePaciente: string | null): string[] {
+  // Solo el primer nombre: la plantilla saluda, no rellena una ficha.
+  const limpio = (nombrePaciente ?? '').replace(/\s+/g, ' ').trim().split(' ')[0] ?? '';
+  return [limpio.slice(0, 60) || 'de nuevo'];
+}
+
 export function ticketRecordatorio(d: DatosTicket, cuando: '24h' | 'hoy'): string {
   const encabezado = cuando === '24h'
     ? 'Te recordamos tu cita de mañana 🗓️'

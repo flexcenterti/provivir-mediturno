@@ -41,6 +41,9 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
 .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
 .error { background: var(--red-soft); color: var(--red); padding: .55rem .75rem;
   border-radius: 9px; font-size: .85rem; margin-bottom: .9rem; }
+/* No es un error: es que WhatsApp no deja escribir ahora. Ámbar, no rojo. */
+.aviso-ventana { background: var(--amber-soft); color: var(--amber); padding: .55rem .75rem;
+  border-radius: 9px; font-size: .82rem; line-height: 1.5; margin-bottom: .9rem; }
 .panel { padding: 2rem; max-width: 720px; margin: 0 auto; }
 .panel .card { background: var(--card); border-radius: var(--r); box-shadow: var(--shadow);
   padding: 1.4rem; margin-top: 1rem; }

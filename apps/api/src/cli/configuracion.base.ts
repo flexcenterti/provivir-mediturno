@@ -94,6 +94,14 @@ export const CONFIGURACION_BASE = [
     descripcion: 'RN-05 · Plantilla aprobada en Meta para el recordatorio del mismo día.',
   },
   {
+    clave: 'plantilla_reapertura_conversacion',
+    valor: '',
+    descripcion:
+      'Plantilla aprobada en Meta para retomar una conversación cerrada hace más de 24 h. UNA sola ' +
+      'variable de cuerpo: {{1}} el nombre del paciente. No reutiliza las de cita porque aquí no hay ' +
+      'cita que contar. Sin este nombre la bandeja no ofrece el envío, y lo dice en pantalla.',
+  },
+  {
     clave: 'plantilla_confirmacion_cita',
     valor: '',
     descripcion:

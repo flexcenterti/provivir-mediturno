@@ -415,12 +415,17 @@ export class ConversacionService {
    * `kb` guarda qué artículos sustentaron la respuesta (RN-13.7.3). Cuando el bot
    * responde mal, esto es lo que permite ir al artículo culpable en vez de discutir
    * sobre el prompt.
+   *
+   * `autorId` es quién lo escribió. Va vacío cuando responde el bot, que es lo que
+   * permite distinguirlos en el chat: por aquí salen los mensajes del modelo y los
+   * de la asistente, y hasta ahora eran indistinguibles.
    */
   async enviar(
     conversacionId: string,
     telefono: string,
     texto: string,
     kb?: { articulos: string[]; score?: number },
+    autorId?: string,
   ): Promise<void> {
     const waMessageId = await this.meta.enviarTexto(telefono, texto);
 
@@ -433,6 +438,7 @@ export class ConversacionService {
         waMessageId: waMessageId || null,
         kbArticulosUsados: kb?.articulos ?? [],
         kbScore: kb?.score ?? null,
+        autorId: autorId ?? null,
       },
     });
   }

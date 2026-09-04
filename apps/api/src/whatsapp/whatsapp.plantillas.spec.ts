@@ -1,4 +1,7 @@
-import { avisoReprogramacion, ticketCancelacion, ticketConfirmacion, ticketRecordatorio } from './whatsapp.plantillas';
+import {
+  avisoReprogramacion, parametrosReapertura, ticketCancelacion, ticketConfirmacion,
+  ticketRecordatorio,
+} from './whatsapp.plantillas';
 
 const datos = {
   codigo: 'M0104',
@@ -57,5 +60,34 @@ describe('RN-09.3 · plantillas de texto formateado', () => {
       avisoReprogramacion(datos),
     ].join(' ');
     expect(todas).not.toMatch(/urgencia/i);
+  });
+});
+
+/**
+ * La plantilla de reapertura es lo único que Meta acepta cuando la ventana de 24 h
+ * ya se cerró, y solo tiene un trabajo: que el paciente conteste. Un parámetro vacío
+ * o con saltos de línea hace que Meta rechace el envío entero.
+ */
+describe('parametrosReapertura', () => {
+  it('lleva exactamente una variable: el nombre', () => {
+    expect(parametrosReapertura('María Fernanda')).toEqual(['María']);
+  });
+
+  it('sin nombre, un respaldo que encaja en la misma frase', () => {
+    // "Hola de nuevo, te escribimos de…" — y nunca "Hola hola".
+    expect(parametrosReapertura(null)).toEqual(['de nuevo']);
+    expect(parametrosReapertura('   ')).toEqual(['de nuevo']);
+  });
+
+  it('nunca sale vacío ni con saltos de línea: Meta rechazaría el envío', () => {
+    for (const entrada of [null, '', '\n', '  \n \t ', 'Ana\nMaría']) {
+      const [p] = parametrosReapertura(entrada);
+      expect(p).toBeTruthy();
+      expect(p).not.toMatch(/[\n\r]/);
+    }
+  });
+
+  it('un nombre desmedido no desborda la plantilla', () => {
+    expect(parametrosReapertura('A'.repeat(200))[0]!.length).toBe(60);
   });
 });

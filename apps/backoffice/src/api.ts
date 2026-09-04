@@ -214,10 +214,19 @@ export const api = {
   crearPaciente: (cuerpo: unknown) => pedir<Paciente>('/pacientes', { method: 'POST', body: JSON.stringify(cuerpo) }),
   historial: (id: string) => pedir<HistorialItem[]>(`/pacientes/${id}/historial`),
 
-  bandeja: () => pedir<Conversacion[]>('/bandeja'),
+  bandeja: (f: FiltrosBandeja = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(f)) if (v) q.set(k, String(v));
+    return pedir<Pagina<Conversacion>>(`/bandeja${q.size ? `?${q}` : ''}`);
+  },
   bandejaConteo: () => pedir<{ pendientes: number; sonido: boolean }>('/bandeja/pendientes/conteo'),
   conversacion: (id: string) => pedir<ConversacionDetalle>(`/bandeja/${id}`),
   tomarBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/tomar`, { method: 'PATCH' }),
+  soltarBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/soltar`, { method: 'PATCH' }),
+  reabrirBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/reabrir`, { method: 'PATCH' }),
+  /** Con la ventana cerrada, lo único que Meta acepta. No la abre: la abre su respuesta. */
+  plantillaBandeja: (id: string) =>
+    pedir<{ enviado: boolean; plantilla: string }>(`/bandeja/${id}/plantilla`, { method: 'POST' }),
   responderBandeja: (id: string, texto: string) =>
     pedir<{ enviado: boolean }>(`/bandeja/${id}/responder`, { method: 'POST', body: JSON.stringify({ texto }) }),
   resolverBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/resolver`, { method: 'PATCH' }),
@@ -420,6 +429,21 @@ export interface Reporte extends Resumen {
   };
 }
 
+/** Forma de todo listado paginado del backend (`armarPagina`). */
+export interface Pagina<T> {
+  datos: T[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+  paginas: number;
+}
+
+/** Quién atiende o quién escribió. Solo el nombre: no hace falta su ficha. */
+export interface Asistente {
+  id: string;
+  nombre: string;
+}
+
 export interface Conversacion {
   id: string;
   telefono: string;
@@ -428,7 +452,12 @@ export interface Conversacion {
   prioridad: string;
   intencion: string | null;
   tomadaPor: string | null;
+  /** Con nombre: con el id suelto la lista solo podía decir "En gestión". */
+  asistente: Asistente | null;
   estado: string;
+  resueltaTs: string | null;
+  reabiertaTs: string | null;
+  reaperturas: number;
   /** RN-08.3 - para que la espera no se vuelva paisaje. */
   minutosEsperando: number;
   ultimoMensaje: string | null;
@@ -442,10 +471,32 @@ export interface MensajeConversacion {
   transcripcion: string | null;
   mediaPath: string | null;
   ts: string;
+  /** Nulo en un saliente = no lo escribió una persona: el bot o un automatismo. */
+  autor: Asistente | null;
+}
+
+/**
+ * Lo que decide si se puede escribir. Viene en el detalle para poder decirlo ANTES
+ * de que la asistente redacte: enterarse al pulsar enviar es enterarse tarde.
+ */
+export interface VentanaMeta {
+  dentro: boolean;
+  ultimoEntranteTs: string | null;
+  expiraTs: string | null;
+  plantillaConfigurada: boolean;
 }
 
 export interface ConversacionDetalle extends Omit<Conversacion, 'ultimoMensaje'> {
   mensajes: MensajeConversacion[];
+  ventana: VentanaMeta;
+}
+
+export interface FiltrosBandeja {
+  vista?: 'pendientes' | 'cerradas' | 'todas';
+  q?: string;
+  desde?: string;
+  hasta?: string;
+  pagina?: number;
 }
 
 export interface PrestadorDetalle extends Prestador {

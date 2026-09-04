@@ -201,7 +201,7 @@ function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => 
 
         {vista === 'dashboard' && <Dashboard />}
         {vista === 'consolidada' && <Consolidada />}
-        {vista === 'bandeja' && <Bandeja />}
+        {vista === 'bandeja' && <Bandeja usuarioId={usuario.id} />}
         {vista === 'mostrador' && <Mostrador />}
         {vista === 'pacientes' && <Pacientes />}
         {vista === 'agendas' && <Agendas />}

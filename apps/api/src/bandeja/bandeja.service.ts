@@ -1,15 +1,51 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException, ConflictException, Injectable, Logger, NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Prisma } from '@prisma/client';
 import { existsSync } from 'node:fs';
 import { basename, resolve, sep } from 'node:path';
+import { finDelDiaEnZona, inicioDelDiaEnZona } from '@provivir/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
+import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { TurnosGateway } from '../turnos/turnos.gateway';
 import { ConversacionService } from '../whatsapp/conversacion.service';
-import { minutosEsperando } from '../turnos/turnos.reglas';
+import { FueraDeVentanaMeta, MetaCliente } from '../whatsapp/meta.cliente';
+import { VentanaService } from '../whatsapp/ventana.service';
 import { mimeDeExtension } from '../whatsapp/media.tipos';
+import { parametrosReapertura } from '../whatsapp/whatsapp.plantillas';
+import { variantesDeTelefono } from '../whatsapp/whatsapp.normalizador';
+import { armarPagina } from '../comun/paginacion';
+import { esperaEnMinutos, ordenarPendientes } from './bandeja.orden';
+import type { BuscarBandejaDto } from './dto/bandeja.dto';
 
-const PESO: Record<string, number> = { alta: 0, media: 1, baja: 2 };
+/** Nombre de la plantilla aprobada en Meta para retomar una conversación cerrada. */
+const CLAVE_PLANTILLA_REAPERTURA = 'plantilla_reapertura_conversacion';
+
+/**
+ * Pendiente = sin resolver y esperando a una persona.
+ *
+ * `reabiertaTs` entra en el OR porque una conversación que el bot resolvió solo
+ * (`escalada: false`) y una asistente reabre tiene que aparecer aquí. La alternativa
+ * —ponerle `escalada: true` al reabrir— falsearía el contador de escalaciones de un
+ * mes ya reportado, porque las métricas se calculan sobre el estado actual.
+ *
+ * Vive en una constante porque el listado y el conteo lo tenían duplicado
+ * literalmente, y dos copias del mismo filtro acaban divergiendo: la burbuja diría
+ * un número y la lista mostraría otro.
+ */
+const PENDIENTES: Prisma.ConversacionWhereInput = {
+  resueltaTs: null,
+  OR: [{ escalada: true }, { reabiertaTs: { not: null } }],
+};
+
+const PACIENTE_RESUMIDO = {
+  select: { id: true, nombres: true, apellidos: true, documento: true },
+} as const;
+
+/** Solo el nombre: la bandeja necesita saber quién atiende, no su ficha. */
+const ASISTENTE = { select: { id: true, nombre: true } } as const;
 
 /**
  * Bandeja de la asistente (RN-08.3, Especificación §2.9).
@@ -27,45 +63,115 @@ export class BandejaService {
     private readonly auditoria: AuditoriaService,
     private readonly gateway: TurnosGateway,
     private readonly config: ConfigService,
+    private readonly configuracion: ConfiguracionService,
+    private readonly ventana: VentanaService,
+    private readonly meta: MetaCliente,
   ) {}
 
   /**
-   * RN-05.3 · mientras el cliente no defina los criterios de prioridad (P4),
-   * la columna operativa dominante es el TIEMPO DE ESPERA. Por eso el orden es
-   * prioridad y, dentro de ella, quien lleva más esperando primero.
+   * RN-05.3 · mientras el cliente no defina los criterios de prioridad (P4), la
+   * columna operativa dominante es el TIEMPO DE ESPERA. Por eso los pendientes van
+   * por prioridad y, dentro de ella, quien lleva más esperando primero.
+   *
+   * El histórico no: en una conversación cerrada la prioridad ya no significa nada,
+   * así que se ordena por cuándo se cerró y se pagina de verdad contra la base.
    */
-  async pendientes() {
-    const conversaciones = await this.prisma.conversacion.findMany({
-      where: { escalada: true, resueltaTs: null },
-      include: {
-        paciente: { select: { id: true, nombres: true, apellidos: true, documento: true } },
-        mensajes: { orderBy: { ts: 'desc' }, take: 1 },
-      },
-    });
+  async listar(dto: BuscarBandejaDto) {
+    const where = this.filtro(dto);
+    const include = {
+      paciente: PACIENTE_RESUMIDO,
+      asistente: ASISTENTE,
+      mensajes: { orderBy: { ts: 'desc' }, take: 1 },
+    } satisfies Prisma.ConversacionInclude;
 
-    return conversaciones
-      .map((c) => ({
-        id: c.id,
-        telefono: c.telefono,
-        paciente: c.paciente,
-        motivo: c.motivo,
-        prioridad: c.prioridad,
-        intencion: c.intencion,
-        tomadaPor: c.tomadaPor,
-        estado: c.estado,
-        // RN-08.3 · para que la espera "no se vuelva paisaje".
-        minutosEsperando: c.escaladaTs ? minutosEsperando(c.escaladaTs) : 0,
-        ultimoMensaje: c.mensajes[0]?.contenido ?? null,
-      }))
-      .sort(
-        (a, b) =>
-          (PESO[a.prioridad] ?? 9) - (PESO[b.prioridad] ?? 9) ||
-          b.minutosEsperando - a.minutosEsperando,
+    if (dto.vista === 'pendientes') {
+      // Ordenar por prioridad y espera exige materializar los minutos, que no son
+      // una columna. Son decenas de filas: se traen y se ordenan en memoria.
+      const filas = await this.prisma.conversacion.findMany({ where, include });
+      const ordenadas = ordenarPendientes(filas.map((c) => this.resumir(c)));
+      return armarPagina(
+        ordenadas.slice(dto.salto, dto.salto + dto.porPagina),
+        ordenadas.length,
+        dto,
       );
+    }
+
+    const orderBy: Prisma.ConversacionOrderByWithRelationInput =
+      dto.vista === 'cerradas' ? { resueltaTs: 'desc' } : { creadoEn: 'desc' };
+
+    const [filas, total] = await Promise.all([
+      this.prisma.conversacion.findMany({
+        where, include, orderBy, skip: dto.salto, take: dto.porPagina,
+      }),
+      this.prisma.conversacion.count({ where }),
+    ]);
+
+    return armarPagina(filas.map((c) => this.resumir(c)), total, dto);
+  }
+
+  private filtro(dto: BuscarBandejaDto): Prisma.ConversacionWhereInput {
+    const condiciones: Prisma.ConversacionWhereInput[] = [];
+
+    if (dto.vista === 'pendientes') condiciones.push(PENDIENTES);
+    if (dto.vista === 'cerradas') condiciones.push({ resueltaTs: { not: null } });
+
+    const texto = dto.q?.trim();
+    if (texto) {
+      const digitos = texto.replace(/\D/g, '');
+      const o: Prisma.ConversacionWhereInput[] = [
+        { paciente: { nombres: { contains: texto, mode: 'insensitive' } } },
+        { paciente: { apellidos: { contains: texto, mode: 'insensitive' } } },
+        { paciente: { documento: { contains: texto, mode: 'insensitive' } } },
+      ];
+      /*
+       * Se busca por subcadena de dígitos en vez de con `variantesDeTelefono()`:
+       * esa función espera un identificador ya normalizado, y con texto libre mete
+       * la cadena vacía entre las variantes — `telefono IN ('')` casaría con
+       * cualquier conversación sin número.
+       */
+      if (digitos.length >= 3) o.push({ telefono: { contains: digitos } });
+      condiciones.push({ OR: o });
+    }
+
+    // El histórico se busca por cuándo se cerró; lo demás, por cuándo empezó.
+    const campo = dto.vista === 'cerradas' ? 'resueltaTs' : 'creadoEn';
+    if (dto.desde) condiciones.push({ [campo]: { gte: inicioDelDiaEnZona(dto.desde) } });
+    // `finDelDiaEnZona` es el inicio del día siguiente: el límite es `<`, así que
+    // `hasta` queda incluido entero sin jugar con milisegundos.
+    if (dto.hasta) condiciones.push({ [campo]: { lt: finDelDiaEnZona(dto.hasta) } });
+
+    return condiciones.length > 0 ? { AND: condiciones } : {};
+  }
+
+  private resumir(c: Prisma.ConversacionGetPayload<{
+    include: {
+      paciente: typeof PACIENTE_RESUMIDO;
+      asistente: typeof ASISTENTE;
+      mensajes: true;
+    };
+  }>) {
+    return {
+      id: c.id,
+      telefono: c.telefono,
+      paciente: c.paciente,
+      motivo: c.motivo,
+      prioridad: c.prioridad,
+      intencion: c.intencion,
+      tomadaPor: c.tomadaPor,
+      /** Quién la atiende, con nombre: con el id suelto solo se podía decir "En gestión". */
+      asistente: c.asistente,
+      estado: c.estado,
+      resueltaTs: c.resueltaTs,
+      reabiertaTs: c.reabiertaTs,
+      reaperturas: c.reaperturas,
+      // RN-08.3 · para que la espera "no se vuelva paisaje".
+      minutosEsperando: esperaEnMinutos(c),
+      ultimoMensaje: c.mensajes[0]?.contenido ?? null,
+    };
   }
 
   async conteoPendientes(): Promise<number> {
-    return this.prisma.conversacion.count({ where: { escalada: true, resueltaTs: null } });
+    return this.prisma.conversacion.count({ where: PENDIENTES });
   }
 
   /** Historial completo, con la media adjunta que el paciente envió (RN-09.2). */
@@ -74,22 +180,49 @@ export class BandejaService {
       where: { id },
       include: {
         paciente: true,
-        mensajes: { orderBy: { ts: 'asc' } },
+        asistente: ASISTENTE,
+        mensajes: { orderBy: { ts: 'asc' }, include: { autor: ASISTENTE } },
       },
     });
     if (!conversacion) throw new NotFoundException('Conversación no encontrada');
 
     return {
       ...conversacion,
-      minutosEsperando: conversacion.escaladaTs ? minutosEsperando(conversacion.escaladaTs) : 0,
+      minutosEsperando: esperaEnMinutos(conversacion),
+      /**
+       * Lo que decide si se puede escribir. Va en el detalle para que la interfaz lo
+       * diga ANTES de que la asistente redacte: enterarse al pulsar enviar es
+       * enterarse tarde.
+       */
+      ventana: await this.estadoDeVentana(conversacion.telefono),
     };
   }
 
+  private async estadoDeVentana(telefono: string) {
+    const { dentro, ultimoEntranteTs, expiraTs } = await this.ventana.estado(telefono);
+    return {
+      dentro,
+      ultimoEntranteTs,
+      expiraTs,
+      plantillaConfigurada: this.nombrePlantillaReapertura() !== '',
+    };
+  }
+
+  private nombrePlantillaReapertura(): string {
+    return this.configuracion.texto(CLAVE_PLANTILLA_REAPERTURA, '').trim();
+  }
+
   async tomar(id: string, usuarioId: string) {
-    const conversacion = await this.prisma.conversacion.findUnique({ where: { id } });
+    const conversacion = await this.prisma.conversacion.findUnique({
+      where: { id },
+      include: { asistente: ASISTENTE },
+    });
     if (!conversacion) throw new NotFoundException('Conversación no encontrada');
     if (conversacion.tomadaPor && conversacion.tomadaPor !== usuarioId) {
-      throw new BadRequestException('Otra asistente ya tomó esta conversación');
+      // Con nombre: "otra asistente" obliga a preguntar por el pasillo quién es.
+      throw new ConflictException(
+        `${conversacion.asistente?.nombre ?? 'Otra asistente'} ya está atendiendo esta conversación`,
+      );
     }
 
     const actualizada = await this.prisma.conversacion.update({
@@ -101,7 +234,7 @@ export class BandejaService {
       usuario: usuarioId,
       accion: 'Conversación tomada',
       entidad: `conversacion/${id}`,
-      estadoPrev: 'escalada',
+      estadoPrev: conversacion.estado,
       estadoNext: 'en_gestion',
     });
 
@@ -109,12 +242,134 @@ export class BandejaService {
     return actualizada;
   }
 
-  /** La asistente responde por WhatsApp sin salir de la plataforma (RN-08.3). */
+  /**
+   * Devuelve la conversación a la bandeja.
+   *
+   * Sin esto, quien toma un hilo y se va a almorzar lo deja bloqueado para todas las
+   * demás: `tomar()` rechaza a cualquier otra persona y no había forma de soltarlo.
+   * Vuelve a `escalada` y no a `ia_activa` porque sigue necesitando a una persona;
+   * devolvérsela al bot sería otra decisión, y no la que se pidió.
+   */
+  async soltar(id: string, usuarioId: string) {
+    const conversacion = await this.prisma.conversacion.findUnique({ where: { id } });
+    if (!conversacion) throw new NotFoundException('Conversación no encontrada');
+    if (conversacion.resueltaTs) throw new BadRequestException('La conversación está cerrada');
+    if (!conversacion.tomadaPor) return conversacion;
+
+    const soltada = await this.prisma.conversacion.update({
+      where: { id },
+      data: { tomadaPor: null, estado: 'escalada' },
+    });
+
+    await this.auditoria.registrar({
+      usuario: usuarioId,
+      accion: 'Conversación devuelta a la bandeja',
+      entidad: `conversacion/${id}`,
+      estadoPrev: conversacion.estado,
+      estadoNext: 'escalada',
+    });
+
+    this.gateway.emitirPendientesBandeja(await this.conteoPendientes());
+    return soltada;
+  }
+
+  /**
+   * Reabre una conversación cerrada para poder seguir atendiéndola.
+   *
+   * Se reabre la MISMA fila (`resueltaTs: null`) en vez de crear una nueva enlazada:
+   * lo que se quiere es continuidad, y así `obtenerOCrear` vuelve a encontrar este
+   * hilo si el paciente responde, sin tocar el camino caliente del webhook.
+   *
+   * Queda `en_gestion` y a nombre de quien la reabre: el bot corta en ese estado, y
+   * reabrir es un acto deliberado —quien reabre es quien va a atender—. Si volviera a
+   * `ia_activa`, el bot y la persona contestarían a la vez sobre el mismo hilo.
+   *
+   * `escalada` y `escaladaTs` NO se tocan: alimentan las métricas, que se calculan
+   * sobre el estado actual, y pisarlas reescribiría meses ya reportados.
+   *
+   * No rearma el seguimiento comercial, y es lo correcto: se cancela cuando hay
+   * `tomadaPor`, que es justo lo que esto pone. Si hay una persona hablando, la
+   * plataforma no le escribe encima.
+   *
+   * Reabrir NO depende de la ventana de 24 h. La ventana decide qué se puede enviar,
+   * no si se puede retomar: atarlas dejaría conversaciones imposibles de recuperar.
+   */
+  async reabrir(id: string, usuarioId: string) {
+    const conversacion = await this.prisma.conversacion.findUnique({ where: { id } });
+    if (!conversacion) throw new NotFoundException('Conversación no encontrada');
+    if (!conversacion.resueltaTs) {
+      throw new BadRequestException('La conversación no está cerrada');
+    }
+
+    const reabierta = await this.prisma.$transaction(async (tx) => {
+      /*
+       * El paciente pudo escribir entre la lectura y esta escritura, y entonces ya
+       * existe un hilo vivo para su número. Reabrir aquí dejaría dos conversaciones
+       * sin resolver y el historial partido en dos sin que nadie se entere.
+       */
+      const viva = await tx.conversacion.findFirst({
+        where: {
+          id: { not: id },
+          telefono: { in: variantesDeTelefono(conversacion.telefono) },
+          resueltaTs: null,
+        },
+        select: { id: true },
+      });
+      if (viva) {
+        throw new ConflictException({
+          message: 'El paciente ya tiene una conversación abierta',
+          conversacionId: viva.id,
+        });
+      }
+
+      return tx.conversacion.update({
+        where: { id },
+        data: {
+          resueltaTs: null,
+          estado: 'en_gestion',
+          tomadaPor: usuarioId,
+          reabiertaTs: new Date(),
+          reaperturas: { increment: 1 },
+        },
+      });
+    });
+
+    await this.auditoria.registrar({
+      usuario: usuarioId,
+      accion: 'Conversación reabierta',
+      entidad: `conversacion/${id}`,
+      // El dato que `reabiertaTs` desplaza: sin esto se pierde cuándo se había
+      // cerrado y cuánto se esperó la primera vez.
+      detalle:
+        `Cerrada el ${conversacion.resueltaTs.toISOString()}` +
+        (conversacion.escaladaTs
+          ? ` · escalada el ${conversacion.escaladaTs.toISOString()}`
+          : '') +
+        ` · reapertura n.º ${reabierta.reaperturas}`,
+      estadoPrev: 'resuelta',
+      estadoNext: 'en_gestion',
+    });
+
+    this.gateway.emitirPendientesBandeja(await this.conteoPendientes());
+    return reabierta;
+  }
+
+  /**
+   * La asistente responde por WhatsApp sin salir de la plataforma (RN-08.3).
+   *
+   * El orden importa: se comprueba la ventana, se toma la conversación y solo
+   * entonces se envía. Antes se tomaba DESPUÉS de enviar, así que un envío fallido
+   * dejaba la conversación sin dueño y sin rastro de que alguien la había intentado.
+   */
   async responder(id: string, texto: string, usuarioId: string) {
     const conversacion = await this.prisma.conversacion.findUnique({ where: { id } });
     if (!conversacion) throw new NotFoundException('Conversación no encontrada');
+    if (conversacion.resueltaTs) {
+      throw new ConflictException('La conversación está cerrada: reábrela para responder');
+    }
 
-    await this.conversaciones.enviar(id, conversacion.telefono, texto);
+    const ventana = await this.estadoDeVentana(conversacion.telefono);
+    if (!ventana.dentro) throw this.ventanaCerrada(conversacion.id, ventana, usuarioId);
 
     if (!conversacion.tomadaPor) {
       await this.prisma.conversacion.update({
@@ -123,7 +378,125 @@ export class BandejaService {
       });
     }
 
+    try {
+      await this.conversaciones.enviar(id, conversacion.telefono, texto, undefined, usuarioId);
+    } catch (e) {
+      // La comprobación previa pudo desincronizarse: un entrante todavía en la cola,
+      // un desfase de reloj. Que el aviso siga diciendo qué hacer.
+      if (e instanceof FueraDeVentanaMeta) throw this.ventanaCerrada(conversacion.id, ventana, usuarioId);
+      throw e;
+    }
+
     return { enviado: true };
+  }
+
+  /**
+   * Un 409 con la salida concreta, no un 500 con el error crudo de Meta.
+   *
+   * Se registra en auditoría igual que un recordatorio descartado: el mensaje no
+   * salió, y eso tiene que poder investigarse cuando el paciente diga que nunca le
+   * contestaron.
+   */
+  private ventanaCerrada(
+    conversacionId: string,
+    ventana: { plantillaConfigurada: boolean },
+    usuarioId: string,
+  ): ConflictException {
+    const motivo = ventana.plantillaConfigurada
+      ? 'La ventana de 24 h de WhatsApp está cerrada. Envía la plantilla aprobada para que el paciente pueda responder.'
+      : 'La ventana de 24 h de WhatsApp está cerrada y no hay plantilla configurada. Configúrala en Administración → Reglas.';
+
+    void this.auditoria.registrar({
+      usuario: usuarioId,
+      accion: 'Respuesta no enviada',
+      entidad: `conversacion/${conversacionId}`,
+      detalle: 'Fuera de la ventana de 24 h de Meta',
+    });
+
+    return new ConflictException({ message: motivo, plantillaConfigurada: ventana.plantillaConfigurada });
+  }
+
+  /**
+   * Manda la plantilla aprobada que le pide al paciente que responda.
+   *
+   * La plantilla NO abre la ventana: solo la abre la respuesta del paciente. Es lo
+   * único que Meta acepta cuando ya se cerró, y sirve para pedir esa respuesta.
+   */
+  async enviarPlantillaReapertura(id: string, usuarioId: string) {
+    const conversacion = await this.prisma.conversacion.findUnique({
+      where: { id },
+      include: { paciente: { select: { nombres: true } } },
+    });
+    if (!conversacion) throw new NotFoundException('Conversación no encontrada');
+
+    const ventana = await this.ventana.estado(conversacion.telefono);
+    if (ventana.dentro) {
+      // Las plantillas se pagan, y Meta penaliza usarlas donde vale el texto libre.
+      throw new ConflictException('La ventana está abierta: responde con un mensaje normal');
+    }
+
+    const plantilla = this.nombrePlantillaReapertura();
+    if (!plantilla) {
+      // Sin plantilla no se intenta: Meta lo rechazaría y reintentar no cambia nada.
+      await this.auditoria.registrar({
+        usuario: usuarioId,
+        accion: 'Plantilla de reapertura no enviada',
+        entidad: `conversacion/${id}`,
+        detalle: `Sin nombre en la configuración ${CLAVE_PLANTILLA_REAPERTURA}`,
+      });
+      throw new ConflictException(
+        'No hay plantilla de reapertura configurada. Se define en Administración → Reglas con el nombre aprobado en Meta.',
+      );
+    }
+
+    // Una plantilla al día por conversación: si el paciente no contesta a la
+    // primera, insistir con la misma no lo cambia y a Meta le consta como spam.
+    const yaEnviada = await this.prisma.mensaje.findFirst({
+      where: {
+        conversacionId: id,
+        direccion: 'saliente',
+        tipo: 'plantilla',
+        ts: { gte: new Date(Date.now() - 24 * 60 * 60_000) },
+      },
+      select: { id: true },
+    });
+    if (yaEnviada) {
+      throw new ConflictException('Ya se le envió una plantilla en las últimas 24 h');
+    }
+
+    const waMessageId = await this.meta.enviarPlantilla(
+      conversacion.telefono,
+      plantilla,
+      parametrosReapertura(conversacion.paciente?.nombres ?? null),
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.mensaje.create({
+        data: {
+          conversacionId: id,
+          direccion: 'saliente',
+          tipo: 'plantilla',
+          contenido: `Plantilla «${plantilla}»`,
+          waMessageId: waMessageId || null,
+          autorId: usuarioId,
+        },
+      }),
+      // Quien manda la plantilla, atiende: es quien espera la respuesta.
+      this.prisma.conversacion.update({
+        where: { id },
+        data: { tomadaPor: usuarioId, estado: 'en_gestion' },
+      }),
+    ]);
+
+    await this.auditoria.registrar({
+      usuario: usuarioId,
+      accion: 'Plantilla de reapertura enviada',
+      entidad: `conversacion/${id}`,
+      detalle: `Plantilla ${plantilla}`,
+    });
+
+    this.gateway.emitirPendientesBandeja(await this.conteoPendientes());
+    return { enviado: true, plantilla };
   }
 
   async resolver(id: string, usuarioId: string) {
@@ -135,12 +508,13 @@ export class BandejaService {
       data: { estado: 'resuelta', resueltaTs: new Date() },
     });
 
+    const desde = conversacion.reabiertaTs ?? conversacion.escaladaTs;
     await this.auditoria.registrar({
       usuario: usuarioId,
       accion: 'Conversación resuelta',
       entidad: `conversacion/${id}`,
-      detalle: conversacion.escaladaTs
-        ? `Atendida tras ${minutosEsperando(conversacion.escaladaTs)} min de espera`
+      detalle: desde
+        ? `Atendida tras ${esperaEnMinutos(conversacion)} min de espera`
         : undefined,
       estadoPrev: conversacion.estado,
       estadoNext: 'resuelta',

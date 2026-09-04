@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Patch, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { createReadStream } from 'node:fs';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { BandejaService } from './bandeja.service';
+import { BuscarBandejaDto } from './dto/bandeja.dto';
 import { SeguimientoService } from '../seguimiento/seguimiento.service';
 import { Permisos } from '../auth/decorators/permisos.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
@@ -21,9 +22,16 @@ export class BandejaController {
     private readonly seguimiento: SeguimientoService,
   ) {}
 
+  /**
+   * Sin parámetros devuelve los pendientes, como siempre. Con ellos, también el
+   * histórico: ver una conversación cerrada no es más delicado que verla abierta
+   * —el detalle ya las servía todas— así que va por el mismo `bandeja.operar` del
+   * controlador. Un permiso nuevo dejaría fuera al perfil Asistente en las
+   * instalaciones ya desplegadas, que es justo quien lo necesita.
+   */
   @Get()
-  pendientes() {
-    return this.bandeja.pendientes();
+  listar(@Query() dto: BuscarBandejaDto) {
+    return this.bandeja.listar(dto);
   }
 
   /** Alimenta la burbuja roja del menú lateral (sin sonido). */
@@ -79,6 +87,27 @@ export class BandejaController {
   @Patch(':id/tomar')
   tomar(@Param('id') id: string, @UsuarioActual() usuario: UsuarioAutenticado) {
     return this.bandeja.tomar(id, usuario.id);
+  }
+
+  /** Devolverla a la bandeja, para que no quede bloqueada a nombre de quien se fue. */
+  @Patch(':id/soltar')
+  soltar(@Param('id') id: string, @UsuarioActual() usuario: UsuarioAutenticado) {
+    return this.bandeja.soltar(id, usuario.id);
+  }
+
+  /** Retomar una conversación ya cerrada, con su historial. */
+  @Patch(':id/reabrir')
+  reabrir(@Param('id') id: string, @UsuarioActual() usuario: UsuarioAutenticado) {
+    return this.bandeja.reabrir(id, usuario.id);
+  }
+
+  /**
+   * Lo único que Meta acepta con la ventana de 24 h cerrada. No la abre: sirve para
+   * pedirle al paciente que conteste, y su respuesta es la que la abre.
+   */
+  @Post(':id/plantilla')
+  plantilla(@Param('id') id: string, @UsuarioActual() usuario: UsuarioAutenticado) {
+    return this.bandeja.enviarPlantillaReapertura(id, usuario.id);
   }
 
   @Post(':id/responder')
