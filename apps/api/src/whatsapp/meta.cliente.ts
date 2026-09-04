@@ -40,6 +40,36 @@ export class DestinatarioSinTelefono extends Error {
   }
 }
 
+/**
+ * Meta rechazó un texto libre porque la ventana de 24 h ya se cerró (`#131047`).
+ *
+ * Se distingue del rechazo genérico porque tiene una salida concreta que ningún otro
+ * error tiene: mandar una plantilla aprobada. Quien llama debe decidirlo antes de
+ * intentar el envío; esto es la red por si esa comprobación se desincroniza —un
+ * mensaje entrante todavía en la cola, un desfase de reloj— y para que el aviso que le
+ * llega a la asistente diga qué hacer en vez de un «500».
+ */
+export class FueraDeVentanaMeta extends Error {
+  constructor(detalle: string) {
+    super(
+      'La ventana de 24 h de WhatsApp está cerrada: solo se admite una plantilla ' +
+        `aprobada (${detalle})`,
+    );
+    this.name = 'FueraDeVentanaMeta';
+  }
+}
+
+/** El código de error de Meta, si el cuerpo del rechazo es el JSON que documenta. */
+function codigoDeError(cuerpo: string): number | undefined {
+  try {
+    return (JSON.parse(cuerpo) as { error?: { code?: number } }).error?.code;
+  } catch {
+    // Un rechazo puede llegar como HTML (una pasarela caída, por ejemplo): que no
+    // se pueda leer el código no debe romper el manejo del error.
+    return undefined;
+  }
+}
+
 @Injectable()
 export class MetaCliente {
   private readonly log = new Logger(MetaCliente.name);
@@ -148,6 +178,9 @@ export class MetaCliente {
     try {
       return await this.postear({ recipient_type: 'individual', ...destino, ...carga });
     } catch (e) {
+      // La ventana cerrada no tiene nada que ver con cómo se identifica el destino:
+      // envolverla en `DestinatarioSinTelefono` escondería la única salida que hay.
+      if (e instanceof FueraDeVentanaMeta) throw e;
       if (esTelefono(telefono)) throw e;
       throw new DestinatarioSinTelefono((e as Error).message);
     }
@@ -163,6 +196,7 @@ export class MetaCliente {
     if (!r.ok) {
       const detalle = await r.text();
       // El detalle va al log del servidor, nunca al paciente (checklist §4.9).
+      if (codigoDeError(detalle) === 131047) throw new FueraDeVentanaMeta(`HTTP ${r.status}`);
       throw new Error(`Meta rechazó el envío (${r.status}): ${detalle.slice(0, 300)}`);
     }
 

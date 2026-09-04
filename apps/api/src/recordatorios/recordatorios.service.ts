@@ -5,6 +5,7 @@ import { aHHMM, fechaEnZona } from '@provivir/shared';
 import { REDIS } from '../colas/colas.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { MetaCliente } from '../whatsapp/meta.cliente';
+import { VentanaService } from '../whatsapp/ventana.service';
 import {
   parametrosTicket, ticketConfirmacion, ticketRecordatorio,
 } from '../whatsapp/whatsapp.plantillas';
@@ -55,6 +56,7 @@ export class RecordatoriosService implements OnModuleInit, OnModuleDestroy {
     @Inject(REDIS) private readonly redis: Redis,
     private readonly prisma: PrismaService,
     private readonly meta: MetaCliente,
+    private readonly ventana: VentanaService,
     private readonly auditoria: AuditoriaService,
     private readonly configuracion: ConfiguracionService,
   ) {}
@@ -169,15 +171,11 @@ export class RecordatoriosService implements OnModuleInit, OnModuleDestroy {
     // La ventana de 24 h la abre el PACIENTE con su último mensaje entrante, en
     // cualquier conversación de ese número. Un recordatorio sale 24 h o 3 h antes
     // de la cita, así que lo normal es que ya esté cerrada.
-    const ultimoEntrante = await this.prisma.mensaje.findFirst({
-      where: { direccion: 'entrante', conversacion: { telefono: destino } },
-      orderBy: { ts: 'desc' },
-      select: { ts: true },
-    });
+    const ventana = await this.ventana.estado(destino);
 
     const etiqueta = ETIQUETA[trabajo.cuando];
     const decision = decidirEnvio({
-      ultimoMensajePaciente: ultimoEntrante?.ts ?? null,
+      ultimoMensajePaciente: ventana.ultimoEntranteTs,
       ahora: new Date(),
       plantilla: this.configuracion.texto(CLAVE_PLANTILLA[trabajo.cuando], ''),
     });
