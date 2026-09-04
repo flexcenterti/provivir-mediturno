@@ -170,6 +170,15 @@ export const api = {
   cupos: (p: Record<string, string>) => pedir<Cupo[]>(`/cupos?${new URLSearchParams(p)}`),
   crearCita: (cuerpo: unknown) => pedir<{ creada: boolean; cita?: Cita; alternativas?: Cupo[]; motivo?: string }>(
     '/citas', { method: 'POST', body: JSON.stringify(cuerpo) }),
+  cita: (id: string) => pedir<Cita>(`/citas/${id}`),
+  /** Cambia fecha, hora y prestador. El motor revalida todas las reglas. */
+  reprogramarCita: (
+    id: string,
+    cuerpo: { fecha: string; hora: string; prestadorId?: string; motivo?: string; notificar?: boolean },
+  ) => pedir<Cita>(`/citas/${id}/reprogramar`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
+  /** No borra: da de baja. El historial y la auditoría dependen de que la fila siga ahí. */
+  cancelarCita: (id: string, cuerpo: { motivo: string; notificar?: boolean }) =>
+    pedir<Cita>(`/citas/${id}/cancelar`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
 
   prestadores: () => pedir<Prestador[]>('/prestadores'),
   servicios: (todos = false) => pedir<Servicio[]>(`/servicios${todos ? '?todos=true' : ''}`),
@@ -413,6 +422,8 @@ export interface Interesado {
 export interface Cita {
   id: string; codigo: string; tipo: string; fecha: string; horaInicio: number; duracionMin: number;
   estado: string; origen: string; observacion: string | null;
+  /** Campo propio: antes el motivo pisaba la observación de quien agendó. */
+  motivoCancelacion?: string | null;
   paciente: Paciente; prestador: Prestador; servicio: Servicio;
 }
 export interface Cupo { prestadorId: string; prestadorNombre: string; fecha: string; hora: string; duracionMin: number; consultorio: string | null }

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { TIPOS_CITA } from '@provivir/shared';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -70,9 +70,19 @@ export class ReprogramarCitaDto {
 
   @IsOptional() @IsString() @MaxLength(300)
   motivo?: string;
+
+  /**
+   * Si se le avisa al paciente por WhatsApp. Por defecto sí; cuando la asistente
+   * decide que no, queda en auditoría que fue decisión suya.
+   */
+  @IsOptional() @IsBoolean()
+  notificar?: boolean;
 }
 
 export class CancelarCitaDto {
   @IsString() @MaxLength(300)
   motivo!: string;
+
+  @IsOptional() @IsBoolean()
+  notificar?: boolean;
 }

@@ -19,6 +19,16 @@ type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction'
 const ESTADOS_VIVOS = ['pendiente_llegada', 'confirmada', 'llego', 'en_atencion'] as const;
 
 /**
+ * Se puede cancelar hasta que el paciente entra a consulta. Ni `atendida` ni
+ * `en_atencion`: cancelar algo que ya ocurrió lo borra de las estadísticas de
+ * atención sin que nadie se entere.
+ */
+const ESTADOS_CANCELABLES: string[] = ['pendiente_llegada', 'confirmada', 'llego'];
+
+/** El paciente ya llegó: mover su cita a otro día tiene que devolverla a la espera. */
+const ESTADOS_EN_SALA: string[] = ['llego'];
+
+/**
  * Con los advisory locks, varias peticiones al mismo prestador y día hacen cola.
  * Los tiempos por defecto de Prisma (2 s de espera, 5 s de transacción) son cortos
  * para una ráfaga: WhatsApp, portal y mostrador pueden coincidir sobre el mismo médico.
@@ -305,9 +315,22 @@ export class CitasService {
         codigo = await this.generarCodigo(tx, fecha, original.servicio.categoria, original.tipo as TipoCita);
       }
 
+      await this.cerrarTurnoAbierto(tx, id, 'reprogramada');
+
       return tx.cita.update({
         where: { id },
-        data: { fecha, horaInicio, duracionMin, prestadorId, codigo },
+        data: {
+          fecha, horaInicio, duracionMin, prestadorId, codigo,
+          /*
+           * Si se va a otro día, vuelve a esperar llegada. Quedarse en `llego` la
+           * dejaba fuera de `registrarLlegada`, que solo acepta
+           * `pendiente_llegada|confirmada`: el día bueno el paciente se presentaba y
+           * el mostrador no podía registrarlo.
+           */
+          ...(cambiaDia && ESTADOS_EN_SALA.includes(original.estado)
+            ? { estado: 'confirmada' as const }
+            : {}),
+        },
         include: { paciente: true, prestador: true, servicio: true },
       });
     }, OPCIONES_TX);
@@ -324,8 +347,13 @@ export class CitasService {
         `${aHHMM(original.horaInicio)} → ${dto.hora} · ` +
         `${original.fecha.toISOString().slice(0, 10)} → ${dto.fecha}` +
         (cambiaDia ? ` · código ${original.codigo} → ${actualizada.codigo}` : '') +
-        (dto.motivo ? ` · ${dto.motivo}` : ''),
+        (dto.motivo ? ` · ${dto.motivo}` : '') +
+        (dto.notificar === false ? ' · sin avisar al paciente' : ''),
+      estadoPrev: original.estado,
+      estadoNext: actualizada.estado,
     });
+
+    await this.avisar(dto.notificar, () => this.recordatorios.programarReprogramacion(id));
 
     return actualizada;
   }
@@ -333,13 +361,25 @@ export class CitasService {
   async cancelar(id: string, dto: CancelarCitaDto, usuarioId: string) {
     const cita = await this.prisma.cita.findUnique({ where: { id } });
     if (!cita) throw new NotFoundException('Cita no encontrada');
-    if (cita.estado === 'cancelada') throw new BadRequestException('La cita ya está cancelada');
+    /*
+     * Antes solo se bloqueaba `cancelada`, así que se podía cancelar una cita ya
+     * atendida y el paciente desaparecía de las estadísticas de atención. La guarda
+     * queda simétrica con la de reprogramar.
+     */
+    if (!ESTADOS_CANCELABLES.includes(cita.estado)) {
+      throw new BadRequestException(`No se puede cancelar una cita ${cita.estado}`);
+    }
 
-    const cancelada = await this.prisma.cita.update({
-      where: { id },
-      data: { estado: 'cancelada', observacion: dto.motivo },
-      include: { paciente: true, prestador: true, servicio: true },
-    });
+    const cancelada = await this.prisma.$transaction(async (tx) => {
+      await this.cerrarTurnoAbierto(tx, id, 'cancelada');
+      return tx.cita.update({
+        where: { id },
+        // `motivoCancelacion` y no `observacion`: pisarla se llevaba por delante lo
+        // que hubiera anotado quien agendó.
+        data: { estado: 'cancelada', motivoCancelacion: dto.motivo },
+        include: { paciente: true, prestador: true, servicio: true },
+      });
+    }, OPCIONES_TX);
 
     await this.recordatorios.cancelar(id);
 
@@ -347,13 +387,50 @@ export class CitasService {
       usuario: usuarioId,
       accion: 'Cita cancelada',
       entidad: `cita/${cita.codigo}`,
-      detalle: dto.motivo,
+      detalle: dto.motivo + (dto.notificar === false ? ' · sin avisar al paciente' : ''),
       estadoPrev: cita.estado,
       estadoNext: 'cancelada',
     });
 
-    // La notificación al paciente se encola en la Fase 4.
+    await this.avisar(dto.notificar, () => this.recordatorios.programarCancelacion(id, dto.motivo));
+
     return cancelada;
+  }
+
+  /**
+   * El aviso al paciente lo decide la asistente en cada caso, y por defecto se manda.
+   *
+   * No se deja caer la operación si el encolado falla: la cita ya está cambiada y lo
+   * que el usuario pidió ya ocurrió. Que no salga el aviso queda en el log, y el
+   * descarte de verdad —fuera de la ventana de 24 h— ya se audita en la cola.
+   */
+  private async avisar(notificar: boolean | undefined, encolar: () => Promise<void>): Promise<void> {
+    if (notificar === false) return;
+    await encolar().catch((e: Error) =>
+      this.log.error(`No se pudo encolar el aviso al paciente: ${e.message}`),
+    );
+  }
+
+  /**
+   * El turno que ya estaba en sala deja de tener sentido cuando su cita se cancela o
+   * se va a otro día.
+   *
+   * Sin esto quedaba huérfano: `cola()` filtra solo por el estado del TURNO, así que
+   * un paciente con la cita cancelada seguía en la lista de espera y podía ser
+   * llamado a consultorio.
+   */
+  private async cerrarTurnoAbierto(tx: Tx, citaId: string, porque: string): Promise<void> {
+    const turno = await tx.turno.findUnique({ where: { citaId }, select: { id: true, estado: true } });
+    if (!turno) return;
+
+    if (turno.estado === 'en_atencion') {
+      throw new ConflictException(
+        `El paciente ya está siendo atendido: no se puede dar la cita por ${porque}`,
+      );
+    }
+    if (turno.estado !== 'en_espera' && turno.estado !== 'llamado') return;
+
+    await tx.turno.update({ where: { id: turno.id }, data: { estado: 'cancelado' } });
   }
 
   // ─────────────────────── Consultas ───────────────────────

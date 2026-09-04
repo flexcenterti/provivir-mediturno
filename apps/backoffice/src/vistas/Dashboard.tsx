@@ -1,18 +1,31 @@
 import { useEffect, useState } from 'react';
 import { api, hoyIso, type CargaMedico, type Cita, type Reporte } from '../api';
+import { ModalCita } from './ModalCita';
 
 /**
  * Especificación §2.7 · Dashboard.
  * Fecha visible + selector de rango, buscador de citas y panel de balanceo de MG.
+ *
+ * El buscador es la vía más rápida para llegar a UNA cita concreta —por nombre o
+ * documento, sin saber su fecha— así que desde aquí también se puede actuar sobre
+ * ella. Solo con `citas.gestionar`: esta pantalla la ve también dirección, y para
+ * quien solo mira, unos botones que no puede pulsar son ruido.
  */
-export function Dashboard() {
+export function Dashboard({ permisos }: { permisos: string[] }) {
   const [desde, setDesde] = useState(hoyIso());
   const [hasta, setHasta] = useState(hoyIso());
   const [resumen, setResumen] = useState<Reporte | null>(null);
   const [balanceo, setBalanceo] = useState<CargaMedico[]>([]);
   const [q, setQ] = useState('');
   const [encontradas, setEncontradas] = useState<Cita[] | null>(null);
+  const [abierta, setAbierta] = useState<Cita | null>(null);
   const [error, setError] = useState('');
+
+  const puedeGestionar = permisos.includes('citas.gestionar');
+
+  const rebuscar = async () => {
+    if (q.trim().length >= 3) setEncontradas(await api.buscarCitas(q));
+  };
 
   useEffect(() => {
     Promise.all([api.reporte(desde, hasta), api.balanceo(desde)])
@@ -63,8 +76,16 @@ export function Dashboard() {
       {encontradas && (
         <div className="card">
           <h3>{encontradas.length} resultado(s)</h3>
-          <TablaCitas citas={encontradas} />
+          <TablaCitas citas={encontradas} onAbrir={puedeGestionar ? setAbierta : undefined} />
         </div>
+      )}
+
+      {abierta && (
+        <ModalCita
+          cita={abierta}
+          onCerrar={() => setAbierta(null)}
+          onCambio={() => { setAbierta(null); void rebuscar(); }}
+        />
       )}
 
       {resumen && (
@@ -156,15 +177,24 @@ function Kpi({ titulo, valor }: { titulo: string; valor: string | number }) {
   );
 }
 
-export function TablaCitas({ citas }: { citas: Cita[] }) {
+/**
+ * `onAbrir` es opcional a propósito: donde no llega —el tablero de dirección— la
+ * tabla se queda como estaba, informativa y sin botones que nadie va a pulsar.
+ */
+export function TablaCitas({ citas, onAbrir }: { citas: Cita[]; onAbrir?: (c: Cita) => void }) {
   return (
     <table className="tabla">
       <thead>
-        <tr><th>Código</th><th>Paciente</th><th>Servicio</th><th>Tipo</th><th>Prestador</th><th>Fecha</th><th>Hora</th><th>Estado</th></tr>
+        <tr>
+          <th>Código</th><th>Paciente</th><th>Servicio</th><th>Tipo</th><th>Prestador</th>
+          <th>Fecha</th><th>Hora</th><th>Estado</th>{onAbrir && <th></th>}
+        </tr>
       </thead>
       <tbody>
         {citas.map((c) => (
-          <tr key={c.id}>
+          <tr key={c.id}
+              className={onAbrir ? 'fila-clickable' : ''}
+              onClick={onAbrir ? () => onAbrir(c) : undefined}>
             <td><span className="chip">{c.codigo}</span></td>
             <td>{c.paciente.apellidos}, {c.paciente.nombres}</td>
             <td>{c.servicio.nombre}</td>
@@ -173,9 +203,10 @@ export function TablaCitas({ citas }: { citas: Cita[] }) {
             <td>{c.fecha.slice(0, 10)}</td>
             <td>{aHoraLocal(c.horaInicio)}</td>
             <td>{c.estado.replace(/_/g, ' ')}</td>
+            {onAbrir && <td><button className="btn btn-ghost">Abrir</button></td>}
           </tr>
         ))}
-        {citas.length === 0 && <tr><td colSpan={8} className="muted">Sin citas</td></tr>}
+        {citas.length === 0 && <tr><td colSpan={onAbrir ? 9 : 8} className="muted">Sin citas</td></tr>}
       </tbody>
     </table>
   );
@@ -187,4 +218,4 @@ export function EtiquetaTipo({ tipo }: { tipo: string }) {
   return <span className={`tag ${clase}`}>{texto}</span>;
 }
 
-const aHoraLocal = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+export const aHoraLocal = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;

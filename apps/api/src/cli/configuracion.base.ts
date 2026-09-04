@@ -94,6 +94,14 @@ export const CONFIGURACION_BASE = [
     descripcion: 'RN-05 · Plantilla aprobada en Meta para el recordatorio del mismo día.',
   },
   {
+    clave: 'plantilla_cancelacion_cita',
+    valor: '',
+    descripcion:
+      'Plantilla aprobada en Meta para avisar de una cita cancelada. Mismas cuatro variables que las ' +
+      'demás de cita: código, servicio, fecha y hora. No sirve la de confirmación, que dice lo ' +
+      'contrario. Vacía, fuera de la ventana de 24 h el aviso se descarta y queda en auditoría.',
+  },
+  {
     clave: 'plantilla_reapertura_conversacion',
     valor: '',
     descripcion:

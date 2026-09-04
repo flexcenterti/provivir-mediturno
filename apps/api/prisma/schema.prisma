@@ -74,6 +74,10 @@ enum EstadoTurno {
   en_atencion
   atendido
   ausente
+  /// Su cita se canceló o se movió de día estando él en sala. No es `ausente`: eso
+  /// significa "se le llamó y no vino", y contarlo así ensuciaría el ausentismo con
+  /// cancelaciones administrativas.
+  cancelado
 }
 
 /// D6 · "prioridad", nunca "urgencia". Criterios alta/media/baja pendientes (P4);
@@ -398,6 +402,9 @@ model Cita {
   estado        EstadoCita @default(confirmada)
   origen        OrigenCita
   observacion   String?
+  /// Por qué se canceló. Campo propio porque antes el motivo pisaba `observacion` y
+  /// se llevaba por delante lo que hubiera anotado quien agendó.
+  motivoCancelacion String? @map("motivo_cancelacion")
   sedeId        String     @map("sede_id")
   creadoEn      DateTime   @default(now()) @map("creado_en")
   actualizadoEn DateTime   @updatedAt @map("actualizado_en")

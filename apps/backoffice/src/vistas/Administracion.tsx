@@ -608,6 +608,7 @@ const DESCRIPCION: Record<string, string> = {
   plantilla_recordatorio_24h: 'Nombre de la plantilla aprobada en Meta para el recordatorio de 24 h antes. Cuatro variables, en este orden: código, servicio, fecha y hora. Vacío = fuera de la ventana de 24 h el recordatorio no se envía y queda en auditoría.',
   plantilla_recordatorio_hoy: 'Igual que la anterior, para el recordatorio del mismo día. Mismas cuatro variables.',
   plantilla_confirmacion_cita: 'Plantilla para confirmar una cita agendada en el portal. Quien agenda por web no suele haber escrito por WhatsApp, así que este envío casi siempre la necesita. Mismas cuatro variables.',
+  plantilla_cancelacion_cita: 'Plantilla para avisar de una cita cancelada. Mismas cuatro variables. No sirve la de confirmación: dice lo contrario.',
   plantilla_reapertura_conversacion: 'Plantilla para retomar una conversación cerrada hace más de 24 h. UNA sola variable: el nombre del paciente. Sin ella, la bandeja no ofrece el envío.',
 };
 

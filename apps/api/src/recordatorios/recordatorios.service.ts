@@ -1,13 +1,14 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Queue, Worker } from 'bullmq';
 import type { Redis } from 'ioredis';
-import { aHHMM, fechaEnZona } from '@provivir/shared';
+import { aHHMM } from '@provivir/shared';
 import { REDIS } from '../colas/colas.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { MetaCliente } from '../whatsapp/meta.cliente';
 import { VentanaService } from '../whatsapp/ventana.service';
 import {
-  parametrosTicket, ticketConfirmacion, ticketRecordatorio,
+  parametrosTicket, ticketCancelacion, ticketConfirmacion, ticketRecordatorio,
+  ticketReprogramacion, type DatosTicket,
 } from '../whatsapp/whatsapp.plantillas';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
@@ -15,12 +16,19 @@ import { decidirEnvio } from './recordatorios.decision';
 
 export const COLA_RECORDATORIOS = 'recordatorios';
 
-/** `confirmacion` es RN-10.3: sale al agendar, no antes de la cita. */
-type Momento = '24h' | 'hoy' | 'confirmacion';
+/**
+ * `confirmacion` es RN-10.3: sale al agendar, no antes de la cita. `cancelacion` y
+ * `reprogramacion` salen cuando la asistente cambia la cita, y van por aquí para
+ * heredar la ventana de 24 h, la plantilla y el descarte con auditoría — que es todo
+ * lo que hace falta y ya estaba escrito.
+ */
+type Momento = '24h' | 'hoy' | 'confirmacion' | 'cancelacion' | 'reprogramacion';
 
 interface TrabajoRecordatorio {
   citaId: string;
   cuando: Momento;
+  /** Solo en `cancelacion`: la cita ya estará cancelada cuando el worker la lea. */
+  motivo?: string;
 }
 
 /**
@@ -32,12 +40,19 @@ const CLAVE_PLANTILLA: Record<Momento, string> = {
   '24h': 'plantilla_recordatorio_24h',
   hoy: 'plantilla_recordatorio_hoy',
   confirmacion: 'plantilla_confirmacion_cita',
+  // La reprogramación reutiliza la de confirmación: sus cuatro variables son
+  // exactamente los datos nuevos de la cita. Cancelar dice lo contrario, así que
+  // esa sí necesita plantilla propia.
+  reprogramacion: 'plantilla_confirmacion_cita',
+  cancelacion: 'plantilla_cancelacion_cita',
 };
 
 const ETIQUETA: Record<Momento, string> = {
   '24h': 'Recordatorio 24h',
   hoy: 'Recordatorio del día',
   confirmacion: 'Confirmación de cita',
+  reprogramacion: 'Aviso de reprogramación',
+  cancelacion: 'Aviso de cancelación',
 };
 
 /**
@@ -132,11 +147,53 @@ export class RecordatoriosService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /**
+   * Avisos de un cambio hecho desde el backoffice. Van por la cola y no en la
+   * transacción de la cita: que WhatsApp esté caído no puede impedir cancelarla.
+   *
+   * La asistente decide en cada caso si se avisa; cuando dice que no, no se llama a
+   * esto y queda en auditoría que fue su decisión.
+   */
+  async programarCancelacion(citaId: string, motivo: string): Promise<void> {
+    await this.encolarAviso(citaId, 'cancelacion', motivo);
+  }
+
+  async programarReprogramacion(citaId: string): Promise<void> {
+    await this.encolarAviso(citaId, 'reprogramacion');
+  }
+
+  private async encolarAviso(citaId: string, cuando: Momento, motivo?: string): Promise<void> {
+    await this.cola.add(
+      'recordar',
+      { citaId, cuando, motivo },
+      {
+        // Con la marca de tiempo: una cita se puede mover varias veces el mismo día,
+        // y un jobId fijo haría que el segundo aviso no se encolara.
+        jobId: `${cuando}-${citaId}-${Date.now()}`,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 60_000 },
+        removeOnComplete: { count: 500 },
+        removeOnFail: { count: 200 },
+      },
+    );
+  }
+
   /** Al cancelar o reprogramar, los recordatorios viejos ya no aplican. */
   async cancelar(citaId: string): Promise<void> {
     for (const cuando of ['24h', 'hoy']) {
       const job = await this.cola.getJob(`recordatorio-${citaId}-${cuando}`);
       await job?.remove().catch(() => undefined);
+    }
+  }
+
+  /** Dentro de la ventana va texto libre, y cada momento tiene el suyo. */
+  private textoDe(trabajo: TrabajoRecordatorio, datos: DatosTicket): string {
+    switch (trabajo.cuando) {
+      case 'confirmacion': return ticketConfirmacion(datos);
+      case 'reprogramacion': return ticketReprogramacion(datos);
+      case 'cancelacion':
+        return ticketCancelacion(datos, trabajo.motivo ?? 'Cancelada por la clínica');
+      default: return ticketRecordatorio(datos, trabajo.cuando);
     }
   }
 
@@ -146,8 +203,10 @@ export class RecordatoriosService implements OnModuleInit, OnModuleDestroy {
       include: { paciente: true, prestador: true, servicio: true },
     });
 
-    // La cita pudo cancelarse entre la programación y el envío.
-    if (!cita || cita.estado === 'cancelada') return;
+    if (!cita) return;
+    // La cita pudo cancelarse entre la programación y el envío. El aviso DE la
+    // cancelación es justo el que sí tiene que salir con la cita ya cancelada.
+    if (cita.estado === 'cancelada' && trabajo.cuando !== 'cancelacion') return;
 
     const destino = cita.paciente.whatsapp ?? cita.paciente.telefono;
     if (!destino) {
@@ -160,7 +219,14 @@ export class RecordatoriosService implements OnModuleInit, OnModuleDestroy {
       paciente: `${cita.paciente.nombres} ${cita.paciente.apellidos}`,
       servicio: cita.servicio.nombre,
       prestador: cita.prestador.nombre,
-      fecha: fechaEnZona(cita.fecha),
+      /*
+       * En UTC, NO con `fechaEnZona()`. Las fechas se guardan como medianoche UTC y
+       * leerlas en la zona de la sede (UTC−5) las corre un día hacia atrás: el
+       * recordatorio de una cita del 21 anunciaba el 20. La fase 11 lo dejó anotado
+       * y sin corregir; se arregla aquí porque ahora este mismo objeto alimenta
+       * también los avisos de cancelación y de reprogramación.
+       */
+      fecha: cita.fecha.toISOString().slice(0, 10),
       hora: aHHMM(cita.horaInicio),
       consultorio: cita.prestador.consultorio,
       indicaciones: cita.servicio.requiereOrden
@@ -196,12 +262,7 @@ export class RecordatoriosService implements OnModuleInit, OnModuleDestroy {
     if (decision.modo === 'plantilla') {
       await this.meta.enviarPlantilla(destino, decision.nombre, parametrosTicket(datos));
     } else {
-      await this.meta.enviarTexto(
-        destino,
-        trabajo.cuando === 'confirmacion'
-          ? ticketConfirmacion(datos)
-          : ticketRecordatorio(datos, trabajo.cuando),
-      );
+      await this.meta.enviarTexto(destino, this.textoDe(trabajo, datos));
     }
 
     await this.auditoria.registrar({

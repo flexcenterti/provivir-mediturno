@@ -89,6 +89,17 @@ export function ticketRecordatorio(d: DatosTicket, cuando: '24h' | 'hoy'): strin
   return `${encabezado}\n\n${ticketConfirmacion(d)}`;
 }
 
+/**
+ * Una reprogramación YA HECHA desde el backoffice.
+ *
+ * No sirve `avisoReprogramacion`: ese es el de RN-06.3 —«necesitamos reprogramar tu
+ * cita, respóndenos»— y pide algo. Aquí no hay nada que pedir; hay datos nuevos que
+ * el paciente tiene que apuntar, así que se le manda el ticket entero.
+ */
+export function ticketReprogramacion(d: DatosTicket): string {
+  return `Movimos tu cita 🗓️\n\n${ticketConfirmacion(d)}`;
+}
+
 export function ticketCancelacion(d: DatosTicket, motivo: string): string {
   return [
     'Tu cita fue cancelada.',
