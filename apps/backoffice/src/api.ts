@@ -166,7 +166,11 @@ export const api = {
 
   consolidada: (desde: string, hasta: string, prestadorId?: string) =>
     pedir<Cita[]>(`/citas/consolidada?desde=${desde}&hasta=${hasta}${prestadorId ? `&prestadorId=${prestadorId}` : ''}`),
-  buscarCitas: (q: string) => pedir<Cita[]>(`/citas/buscar?q=${encodeURIComponent(q)}`),
+  buscarCitas: (q: string, rango?: { desde: string; hasta: string }) =>
+    pedir<Cita[]>(
+      `/citas/buscar?q=${encodeURIComponent(q)}` +
+        (rango ? `&desde=${rango.desde}&hasta=${rango.hasta}` : ''),
+    ),
   cupos: (p: Record<string, string>) => pedir<Cupo[]>(`/cupos?${new URLSearchParams(p)}`),
   crearCita: (cuerpo: unknown) => pedir<{ creada: boolean; cita?: Cita; alternativas?: Cupo[]; motivo?: string }>(
     '/citas', { method: 'POST', body: JSON.stringify(cuerpo) }),
@@ -424,12 +428,18 @@ export interface Cita {
   estado: string; origen: string; observacion: string | null;
   /** Campo propio: antes el motivo pisaba la observación de quien agendó. */
   motivoCancelacion?: string | null;
+  /** Presente = la llegada ya se registró. El mostrador lo usa para reimprimir. */
+  turno?: TurnoBasico | null;
   paciente: Paciente; prestador: Prestador; servicio: Servicio;
 }
 export interface Cupo { prestadorId: string; prestadorNombre: string; fecha: string; hora: string; duracionMin: number; consultorio: string | null }
-export interface Turno {
+/** El turno sin su cita, que es como viene colgado de ella (y evita el tipo circular). */
+export interface TurnoBasico {
   id: string; estado: string; prioridad: string; llegadaTs: string; consultorio: string | null;
-  notaPriorizacion: string | null; minutosEsperando?: number; cita: Cita;
+  notaPriorizacion: string | null;
+}
+export interface Turno extends TurnoBasico {
+  minutosEsperando?: number; cita: Cita;
 }
 export interface Reporte extends Resumen {
   porServicio: Array<{ servicio: string; citas: number }>;

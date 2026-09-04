@@ -16,8 +16,16 @@ export class TurnosController {
     return this.turnos.registrarLlegada(dto, usuario.id);
   }
 
-  /** Cola ordenada por prioridad y llegada. El prestador ve la suya. */
+  /**
+   * Cola ordenada por prioridad y llegada. El prestador ve la suya.
+   *
+   * El permiso faltaba: estaba declarado en el catálogo y no se exigía en ninguna
+   * ruta, así que cualquier usuario autenticado veía la cola del día con nombres y
+   * apellidos de pacientes. Los cuatro perfiles base lo traen, y comprobado en
+   * producción que no hay perfiles personalizados: nadie se queda sin la cola.
+   */
   @Get()
+  @Permisos('turnos.ver')
   cola(@Query('prestadorId') prestadorId: string | undefined, @UsuarioActual() usuario: UsuarioAutenticado) {
     // Un prestador solo ve su propia cola, aunque pida otra.
     const id = usuario.rol === 'prestador' ? usuario.prestadorId : prestadorId;

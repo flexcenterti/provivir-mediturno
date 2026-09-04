@@ -445,20 +445,49 @@ export class CitasService {
   }
 
   /** Especificación §2.7 · buscador por código, nombre del paciente o documento. */
-  async buscar(q: string) {
+  /**
+   * Buscador de citas (Especificación §2.10: código, documento, nombre y teléfono).
+   *
+   * El rango de fechas lo usa el mostrador para pedir solo las de hoy: sin él se
+   * traen 50 citas de cualquier día al puesto de recepción, y hay que ir a buscar la
+   * buena entre las del mes pasado.
+   */
+  async buscar(q: string, rango?: { desde?: string; hasta?: string }) {
     const texto = q.trim();
     if (texto.length < 3) throw new BadRequestException('La búsqueda requiere al menos 3 caracteres');
 
+    const digitos = texto.replace(/\D/g, '');
+    const o: Prisma.CitaWhereInput[] = [
+      { codigo: { equals: texto.toUpperCase() } },
+      { paciente: { documento: { startsWith: texto } } },
+      { paciente: { apellidos: { contains: texto, mode: 'insensitive' } } },
+      { paciente: { nombres: { contains: texto, mode: 'insensitive' } } },
+    ];
+    /*
+     * Por subcadena de dígitos, no con `variantesDeTelefono()`: esa función espera un
+     * identificador ya normalizado y con texto libre mete la cadena vacía entre las
+     * variantes, que casaría con cualquier paciente sin teléfono.
+     */
+    if (digitos.length >= 5) {
+      o.push(
+        { paciente: { telefono: { contains: digitos } } },
+        { paciente: { whatsapp: { contains: digitos } } },
+      );
+    }
+
     return this.prisma.cita.findMany({
       where: {
-        OR: [
-          { codigo: { equals: texto.toUpperCase() } },
-          { paciente: { documento: { startsWith: texto } } },
-          { paciente: { apellidos: { contains: texto, mode: 'insensitive' } } },
-          { paciente: { nombres: { contains: texto, mode: 'insensitive' } } },
-        ],
+        OR: o,
+        ...(rango?.desde || rango?.hasta
+          ? {
+              fecha: {
+                ...(rango.desde ? { gte: aFechaUtc(rango.desde) } : {}),
+                ...(rango.hasta ? { lte: aFechaUtc(rango.hasta) } : {}),
+              },
+            }
+          : {}),
       },
-      include: { paciente: true, prestador: true, servicio: true },
+      include: { paciente: true, prestador: true, servicio: true, turno: true },
       orderBy: [{ fecha: 'desc' }, { horaInicio: 'asc' }],
       take: 50,
     });

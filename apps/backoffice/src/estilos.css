@@ -462,3 +462,20 @@ tr.inactiva { opacity: .55; }
 .ia-panel .row { display: flex; justify-content: space-between; gap: .6rem; padding: .4rem 0;
   border-bottom: 1px dashed var(--line); font-size: .84rem; }
 .ia-panel .row:last-child { border-bottom: none; }
+
+/* ──────────────────────────── Impresión ────────────────────────────
+ * `window.print()` mandaba la aplicación entera a la impresora: barra lateral,
+ * cabecera y tabla incluidas. Lo único que se imprime es el ticket, y para eso hay
+ * que sacarlo de la maquetación además de esconder el resto — con la barra lateral
+ * oculta, el contenido seguía desplazado por el `grid` del contenedor.
+ */
+@media print {
+  body { background: #fff; }
+  .lateral, .topbar, .sin-imprimir { display: none !important; }
+  /* Sin esto, el `grid` deja el ticket desplazado 240px aunque la barra no se pinte. */
+  .consola { display: block !important; min-height: 0 !important; }
+  .contenido, .vista { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  .zona-ticket { box-shadow: none !important; border: none !important; padding: 0 !important;
+    margin: 0 !important; }
+  .ticket { border: none; background: #fff; font-size: 12pt; padding: 0; }
+}
