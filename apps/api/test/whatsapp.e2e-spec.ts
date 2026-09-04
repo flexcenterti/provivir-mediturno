@@ -1,6 +1,8 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createHmac } from 'node:crypto';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import request from 'supertest';
 import { json } from 'express';
 import type { IncomingMessage } from 'node:http';
@@ -622,6 +624,97 @@ describe('Canal WhatsApp (e2e)', () => {
       expect(resuelta.estado).toBe('resuelta');
       expect(resuelta.resueltaTs).not.toBeNull();
       expect(enviados.some((e) => e.texto === 'Hola, soy Paula.')).toBe(true);
+    });
+
+    /**
+     * RN-08.1 · la orden médica escaneada es el soporte con el que trabaja la asistente.
+     * Que la conversación escale no sirve de nada si el adjunto no se puede abrir.
+     */
+    describe('adjunto del paciente', () => {
+      // Coincide con lo que devuelve el doble de `descargarMedia`.
+      const RUTA = 'media/prueba.jpg';
+      const BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0x02, 0x03, 0x04]);
+
+      beforeEach(async () => {
+        await mkdir(dirname(RUTA), { recursive: true });
+        await writeFile(RUTA, BYTES);
+      });
+
+      afterEach(async () => {
+        await rm(RUTA, { force: true });
+      });
+
+      async function mensajeConAdjunto() {
+        await conversaciones.procesar(entrante({ tipo: 'imagen', mediaId: 'm1', mimeType: 'image/jpeg' }) as never);
+        return prisma.mensaje.findFirstOrThrow({
+          where: { mediaPath: { not: null } },
+          orderBy: { ts: 'desc' },
+        });
+      }
+
+      it('RN-08.1: la asistente abre el adjunto de la conversación escalada', async () => {
+        const m = await mensajeConAdjunto();
+        const token = await tokenAsistente();
+
+        const r = await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${token}`)
+          .responseType('blob')
+          .expect(200);
+
+        expect(r.headers['content-type']).toContain('image/jpeg');
+        // Sin `nosniff` un adjunto de tipo inesperado podría interpretarse como HTML.
+        expect(r.headers['x-content-type-options']).toBe('nosniff');
+        expect(Buffer.from(r.body)).toEqual(BYTES);
+      });
+
+      it('queda registrado en auditoría quién abrió el adjunto', async () => {
+        const m = await mensajeConAdjunto();
+        const token = await tokenAsistente();
+
+        await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${token}`).responseType('blob').expect(200);
+
+        const entrada = await prisma.auditoria.findFirst({
+          where: { entidad: `mensaje/${m.id}`, accion: 'Adjunto consultado' },
+        });
+        expect(entrada).not.toBeNull();
+      });
+
+      it('un mensaje sin adjunto no sirve nada', async () => {
+        await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'hola' }) as never);
+        const m = await prisma.mensaje.findFirstOrThrow({ where: { mediaPath: null }, orderBy: { ts: 'desc' } });
+        const token = await tokenAsistente();
+
+        await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${token}`).expect(404);
+      });
+
+      it('una ruta fuera del directorio de media nunca se sirve', async () => {
+        const m = await mensajeConAdjunto();
+        await prisma.mensaje.update({ where: { id: m.id }, data: { mediaPath: '/etc/passwd' } });
+        const token = await tokenAsistente();
+
+        await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${token}`).expect(404);
+      });
+
+      it('un adjunto que ya no está en disco responde 404 en vez de reventar', async () => {
+        const m = await mensajeConAdjunto();
+        await rm(RUTA, { force: true });
+        const token = await tokenAsistente();
+
+        await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${token}`).expect(404);
+      });
+
+      it('un prestador no puede abrir el adjunto de un paciente', async () => {
+        const m = await mensajeConAdjunto();
+        const login = await request(http).post('/api/auth/login')
+          .send({ email: 'osorio@provivir.local', password: 'Provivir2026!' }).expect(200);
+
+        await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${login.body.accessToken}`).expect(403);
+      });
     });
 
     it('un prestador no puede ver la bandeja', async () => {

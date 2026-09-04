@@ -140,6 +140,12 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
 .burbuja.de-clinica { align-self: flex-end; background: var(--teal-soft); color: var(--teal-ink); }
 .burbuja time { font-size: .68rem; opacity: .6; align-self: flex-end; }
 .adjunto { font-size: .75rem; font-weight: 600; color: var(--amber); }
+.adjunto-enlace { display: inline-block; text-decoration: none; }
+.adjunto-enlace:hover { text-decoration: underline; }
+/* La miniatura se ve dentro de la burbuja; al pulsarla se abre a tamaño completo. */
+.adjunto-imagen { display: block; margin-bottom: .35rem; }
+.adjunto-imagen img { max-width: 100%; max-height: 260px; border-radius: 9px; display: block; }
+.adjunto-audio { display: block; width: 100%; max-width: 260px; margin-bottom: .35rem; }
 .modal textarea { width: 100%; padding: .6rem .75rem; border: 1px solid var(--line);
   border-radius: 9px; background: #FBFCFC; resize: vertical; }
 

@@ -3,11 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import { createWriteStream } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { dirname, extname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { enmascararTelefono } from '../comun/pii';
 import { esTelefono, paraEnviar } from './whatsapp.normalizador';
+import { extensionDe } from './media.tipos';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 
@@ -200,15 +201,4 @@ export class MetaCliente {
       return null;
     }
   }
-}
-
-function extensionDe(mimeType?: string): string {
-  if (!mimeType) return '.bin';
-  const mapa: Record<string, string> = {
-    'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp',
-    'audio/ogg': '.ogg', 'audio/mpeg': '.mp3', 'audio/mp4': '.m4a', 'audio/amr': '.amr',
-    'video/mp4': '.mp4', 'video/3gpp': '.3gp',
-    'application/pdf': '.pdf',
-  };
-  return mapa[mimeType.split(';')[0]!.trim()] ?? extname(mimeType) ?? '.bin';
 }

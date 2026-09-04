@@ -141,8 +141,8 @@ function ModalConversacion({ conversacion, onCerrar, onCambio, onResuelta }: {
           {conversacion.mensajes.map((m) => (
             <div key={m.id} className={`burbuja ${m.direccion === 'entrante' ? 'de-paciente' : 'de-clinica'}`}>
               {/* RN-09.2 · el adjunto del paciente se le muestra a la asistente como soporte */}
-              {m.mediaPath && <div className="adjunto">📎 {m.tipo}</div>}
-              <span>{m.transcripcion ?? m.contenido ?? `[${m.tipo}]`}</span>
+              {m.mediaPath && <Adjunto mensajeId={m.id} tipo={m.tipo} nombre={m.contenido} />}
+              <span>{m.transcripcion ?? m.contenido ?? (m.mediaPath ? '' : `[${m.tipo}]`)}</span>
               <time>{new Date(m.ts).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</time>
             </div>
           ))}
@@ -251,5 +251,60 @@ function Interesados({ filas, onAbrir }: { filas: Interesado[]; onAbrir: (id: st
         Tomar la conversación también la detiene: lo automático es el piso, no el techo.
       </p>
     </div>
+  );
+}
+
+/**
+ * RN-08.1 · el soporte que mandó el paciente, visible de verdad.
+ *
+ * Se descarga con la sesión y se muestra como object URL porque un `<img src>` no
+ * puede llevar la cabecera del token. Antes solo se pintaba la etiqueta del tipo, así
+ * que la asistente veía que había una orden médica y no podía leerla — que es
+ * exactamente lo que RN-08 le pide hacer.
+ */
+function Adjunto({ mensajeId, tipo, nombre }: { mensajeId: string; tipo: string; nombre: string | null }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [fallo, setFallo] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    let creada: string | null = null;
+
+    api
+      .mediaMensaje(mensajeId)
+      .then((blob) => {
+        if (!vivo) return;
+        creada = URL.createObjectURL(blob);
+        setUrl(creada);
+      })
+      .catch(() => {
+        if (vivo) setFallo(true);
+      });
+
+    // El object URL retiene el archivo en memoria hasta que se revoca: sin esto, cada
+    // conversación abierta deja una copia del adjunto colgada.
+    return () => {
+      vivo = false;
+      if (creada) URL.revokeObjectURL(creada);
+    };
+  }, [mensajeId]);
+
+  if (fallo) return <div className="adjunto">📎 {tipo} · no se pudo cargar</div>;
+  if (!url) return <div className="adjunto">📎 {tipo} · cargando…</div>;
+
+  if (tipo === 'imagen') {
+    return (
+      <a className="adjunto-imagen" href={url} target="_blank" rel="noreferrer" title="Abrir a tamaño completo">
+        <img src={url} alt={nombre ?? 'Imagen enviada por el paciente'} />
+      </a>
+    );
+  }
+
+  if (tipo === 'audio') return <audio className="adjunto-audio" controls src={url} />;
+
+  return (
+    <a className="adjunto adjunto-enlace" href={url} target="_blank" rel="noreferrer">
+      📎 Ver {tipo}
+    </a>
   );
 }

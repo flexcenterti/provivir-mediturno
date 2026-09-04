@@ -134,6 +134,27 @@ async function pedir<T>(ruta: string, init?: RequestInit, reintentar = true): Pr
   return r.status === 204 ? (undefined as T) : r.json();
 }
 
+/**
+ * Hermana de `pedir()` para lo que no es JSON. Comparte el 401 con refresco de sesión
+ * —si no, abrir un adjunto tras un rato inactivo echaría al login— y devuelve el
+ * contenido como Blob, porque un `<img src>` no puede llevar la cabecera del token.
+ */
+async function pedirBlob(ruta: string, reintentar = true): Promise<Blob> {
+  const t = token.leer();
+  const r = await fetch(`/api${ruta}`, {
+    headers: { ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+  });
+
+  if (r.status === 401) {
+    if (reintentar && (await refrescarSesion())) return pedirBlob(ruta, false);
+    token.borrar();
+    alCaerSesion?.();
+    throw new Error('Sesión expirada');
+  }
+  if (!r.ok) throw new Error('No se pudo cargar el adjunto');
+  return r.blob();
+}
+
 export const api = {
   login: (email: string, password: string) =>
     pedir<RespuestaLogin>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
@@ -200,6 +221,8 @@ export const api = {
   responderBandeja: (id: string, texto: string) =>
     pedir<{ enviado: boolean }>(`/bandeja/${id}/responder`, { method: 'POST', body: JSON.stringify({ texto }) }),
   resolverBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/resolver`, { method: 'PATCH' }),
+  /** RN-08.1 · el soporte que mandó el paciente, para que la asistente pueda leerlo. */
+  mediaMensaje: (mensajeId: string) => pedirBlob(`/bandeja/mensajes/${mensajeId}/media`),
 
   // ── Administración ──
   paciente: (id: string) => pedir<Paciente>(`/pacientes/${id}`),
