@@ -120,6 +120,19 @@ describe('Acceso · perfiles y usuarios (e2e)', () => {
         .set('Authorization', `Bearer ${tokenLimitado}`).expect(403);
     });
 
+    /**
+     * La cola lleva nombres y apellidos de quien está ahora mismo en la sala.
+     * `turnos.ver` estaba declarado en el catálogo y no se exigía en ninguna ruta,
+     * así que cualquier usuario autenticado la veía entera.
+     */
+    it('la cola de sala exige `turnos.ver`', async () => {
+      await conToken().get('/api/turnos')
+        .set('Authorization', `Bearer ${tokenLimitado}`).expect(403);
+      // Y quien sí lo tiene la sigue viendo.
+      await conToken().get('/api/turnos')
+        .set('Authorization', `Bearer ${token}`).expect(200);
+    });
+
     it('no puede repartir permisos: eso concede todo lo demás', async () => {
       await conToken().get('/api/acceso/perfiles')
         .set('Authorization', `Bearer ${tokenLimitado}`).expect(403);

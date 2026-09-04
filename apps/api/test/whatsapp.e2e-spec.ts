@@ -1,6 +1,8 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createHmac } from 'node:crypto';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import request from 'supertest';
 import { json } from 'express';
 import type { IncomingMessage } from 'node:http';
@@ -70,6 +72,7 @@ describe('Canal WhatsApp (e2e)', () => {
   const LUNES = '2026-09-21';
 
   let enviados: Array<{ telefono: string; texto: string }> = [];
+  let botones: Array<{ telefono: string; texto: string; ids: string[] }> = [];
 
   beforeAll(async () => {
     llm = new LlmFalso();
@@ -95,6 +98,10 @@ describe('Canal WhatsApp (e2e)', () => {
       enviados.push({ telefono, texto: t });
       return `wamid.out.${enviados.length}`;
     });
+    jest.spyOn(meta, 'enviarBotones').mockImplementation(async (telefono, t, bs) => {
+      botones.push({ telefono, texto: t, ids: bs.map((b) => b.id) });
+      return `wamid.btn.${botones.length}`;
+    });
     jest.spyOn(meta, 'descargarMedia').mockResolvedValue('media/prueba.jpg');
 
     await app.init();
@@ -113,14 +120,28 @@ describe('Canal WhatsApp (e2e)', () => {
 
   beforeEach(async () => {
     enviados = [];
+    botones = [];
     await prisma.mensaje.deleteMany({ where: { conversacion: { telefono: TEL } } });
     await prisma.conversacion.deleteMany({ where: { telefono: TEL } });
     await prisma.cita.deleteMany({ where: { paciente: { documento: { startsWith: '96' } } } });
+
+    // RN-09.10 · sin autorización no se atiende nada, así que el resto de escenarios
+    // parten de un paciente que ya la dio. Los de consentimiento usan su propio número.
+    await prisma.consentimientoWhatsapp.upsert({
+      where: { identificador: TEL },
+      update: { aceptado: true },
+      create: { identificador: TEL, aceptado: true, politicaUrl: 'https://ejemplo/politica.pdf', sedeId: 'cdc-oriente' },
+    });
   });
 
   async function limpiar() {
+    await prisma.consentimientoWhatsapp.deleteMany({
+      where: { OR: [{ identificador: { startsWith: '+57300999' } }, { identificador: { startsWith: 'wa:CO.999' } }] },
+    });
     await prisma.mensaje.deleteMany({ where: { conversacion: { telefono: { startsWith: '+57300999' } } } });
     await prisma.conversacion.deleteMany({ where: { telefono: { startsWith: '+57300999' } } });
+    await prisma.mensaje.deleteMany({ where: { conversacion: { telefono: { startsWith: 'wa:CO.999' } } } });
+    await prisma.conversacion.deleteMany({ where: { telefono: { startsWith: 'wa:CO.999' } } });
     await prisma.cita.deleteMany({ where: { paciente: { documento: { startsWith: '96' } } } });
     await prisma.paciente.deleteMany({ where: { documento: { startsWith: '96' } } });
   }
@@ -254,6 +275,140 @@ describe('Canal WhatsApp (e2e)', () => {
 
       await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'sigo aquí' }) as never);
       expect(llm.llamadas).toHaveLength(0);
+    });
+  });
+
+  // ─────────── RN-09.10 · autorización de tratamiento de datos ───────────
+
+  describe('RN-09.10 · consentimiento antes de atender', () => {
+    // Números propios: el resto de pruebas parte de un consentimiento ya dado.
+    const NUEVO = '+573009991234';
+    // Quien escribe con nombre de usuario: Meta no entrega teléfono, sino este id.
+    const USUARIO = 'wa:CO.9991112223334';
+
+    let n = 0;
+    const de = (telefono: string, extra: Record<string, unknown>) => ({
+      waMessageId: `wamid.consent.${++n}.${Date.now()}`,
+      telefono, ts: new Date(), ...extra,
+    }) as never;
+
+    beforeEach(async () => {
+      // `programar()` es lo único que limpia `llm.llamadas`, y varias pruebas de aquí
+      // afirman que la IA NO se invocó: sin esto heredarían las llamadas de la anterior.
+      llm.programar();
+      for (const id of [NUEVO, USUARIO]) {
+        await prisma.mensaje.deleteMany({ where: { conversacion: { telefono: id } } });
+        await prisma.conversacion.deleteMany({ where: { telefono: id } });
+        await prisma.consentimientoWhatsapp.deleteMany({ where: { identificador: id } });
+      }
+    });
+
+    it('RN-09.10: el primer contacto pide la autorización y NO invoca a la IA', async () => {
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'quiero una cita' }));
+
+      expect(llm.llamadas).toHaveLength(0);
+      expect(botones).toHaveLength(1);
+      expect(botones[0]!.texto).toMatch(/ley 1581 de 2012/i);
+      expect(botones[0]!.texto).toMatch(/https?:\/\//);
+      expect(botones[0]!.ids).toEqual(['consentimiento_acepto', 'consentimiento_rechazo']);
+    });
+
+    it('RN-09.10: aceptar saluda y retoma lo que el paciente había pedido', async () => {
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'quiero una cita de medicina general' }));
+      llm.programar(texto('Con gusto. ¿Me confirmas tu documento?'));
+
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'Acepto', botonId: 'consentimiento_acepto' }));
+
+      const suyos = enviados.filter((e) => e.telefono === NUEVO).map((e) => e.texto);
+      expect(suyos[0]).toContain('Centro de Profesionales & Provivir');
+      expect(suyos[0]).toContain('CPP Principal');
+      // No tuvo que repetir su petición: la IA recibió el mensaje original.
+      expect(llm.llamadas).toHaveLength(1);
+      expect(JSON.stringify(llm.llamadas[0]!.mensajes)).toContain('medicina general');
+      expect(suyos[1]).toMatch(/documento/i);
+    });
+
+    it('RN-09.10: rechazar no atiende, pero deja una salida', async () => {
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'hola' }));
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'No acepto', botonId: 'consentimiento_rechazo' }));
+
+      expect(llm.llamadas).toHaveLength(0);
+      const ultimo = enviados.filter((e) => e.telefono === NUEVO).at(-1)!;
+      expect(ultimo.texto).toMatch(/sin esa autorización no puedo atenderte/i);
+      expect(ultimo.texto).toMatch(/tel[eé]fono|sede/i);
+    });
+
+    it('RN-09.10: tras aceptar no se vuelve a preguntar', async () => {
+      // Dos respuestas: el «hola» que se retoma al aceptar, y la pregunta posterior.
+      llm.programar(texto('¿En qué te ayudo?'), texto('Claro que sí.'));
+
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'hola' }));
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'Acepto', botonId: 'consentimiento_acepto' }));
+
+      // El espía numera los envíos por su posición en el array: vaciarlo repetiría un
+      // waMessageId, que es único en la base. Se compara contra lo que había.
+      const avisosPrevios = botones.length;
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: '¿tienen pediatría?' }));
+
+      expect(botones).toHaveLength(avisosPrevios);
+      expect(llm.llamadas).toHaveLength(2);
+    });
+
+    it('RN-09.10: tras rechazar SÍ se vuelve a preguntar si escribe de nuevo', async () => {
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'hola' }));
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'No acepto', botonId: 'consentimiento_rechazo' }));
+
+      const avisosPrevios = botones.length;
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'lo pensé mejor' }));
+
+      // Un "no" de hoy no le cierra el canal para siempre.
+      expect(botones).toHaveLength(avisosPrevios + 1);
+      expect(llm.llamadas).toHaveLength(0);
+    });
+
+    it('RN-09.10: una foto tampoco pasa sin autorización', async () => {
+      // Sin el consentimiento por delante, esto escalaría a una asistente (RN-08.1) y
+      // una persona leería el adjunto de alguien que no ha autorizado nada.
+      await conversaciones.procesar(de(NUEVO, { tipo: 'imagen', mediaId: 'img-1', mimeType: 'image/jpeg' }));
+
+      expect(botones).toHaveLength(1);
+      const conv = await prisma.conversacion.findFirstOrThrow({ where: { telefono: NUEVO } });
+      expect(conv.estado).toBe('ia_activa');
+    });
+
+    it('RN-09.10: funciona igual con nombre de usuario, sin teléfono', async () => {
+      await conversaciones.procesar(de(USUARIO, { tipo: 'texto', texto: 'buenas' }));
+      await conversaciones.procesar(de(USUARIO, { tipo: 'texto', texto: 'Acepto', botonId: 'consentimiento_acepto' }));
+
+      const registro = await prisma.consentimientoWhatsapp.findUniqueOrThrow({
+        where: { identificador: USUARIO },
+      });
+      expect(registro.aceptado).toBe(true);
+      // Queda qué política aceptó: sin eso no se puede probar el consentimiento después.
+      expect(registro.politicaUrl).toMatch(/^https?:\/\//);
+      expect(registro.pacienteId).toBeNull();
+    });
+
+    it('RN-09.10: quien escribe «acepto» a mano también vale', async () => {
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'hola' }));
+      llm.programar(texto('Listo.'));
+      // Sin botonId: es el respaldo en texto, y también quien no pulsa y contesta.
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'ACEPTO' }));
+
+      expect(await prisma.consentimientoWhatsapp.findUnique({ where: { identificador: NUEVO } }))
+        .toMatchObject({ aceptado: true });
+    });
+
+    it('RN-09.10: la pregunta queda en la conversación, no solo la respuesta', async () => {
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'hola' }));
+
+      const conv = await prisma.conversacion.findFirstOrThrow({ where: { telefono: NUEVO } });
+      const salientes = await prisma.mensaje.findMany({
+        where: { conversacionId: conv.id, direccion: 'saliente' },
+      });
+      // Si no se persistiera, la bandeja mostraría un "Acepto" que no responde a nada.
+      expect(salientes).toHaveLength(1);
+      expect(salientes[0]!.contenido).toMatch(/ley 1581/i);
     });
   });
 
@@ -437,7 +592,7 @@ describe('Canal WhatsApp (e2e)', () => {
       const token = await tokenAsistente();
 
       const r = await request(http).get('/api/bandeja').set('Authorization', `Bearer ${token}`).expect(200);
-      const mia = r.body.find((c: { telefono: string }) => c.telefono === TEL);
+      const mia = r.body.datos.find((c: { telefono: string }) => c.telefono === TEL);
 
       expect(mia).toBeDefined();
       expect(mia.motivo).toMatch(/sin lectura por IA/i);
@@ -469,6 +624,241 @@ describe('Canal WhatsApp (e2e)', () => {
       expect(resuelta.estado).toBe('resuelta');
       expect(resuelta.resueltaTs).not.toBeNull();
       expect(enviados.some((e) => e.texto === 'Hola, soy Paula.')).toBe(true);
+    });
+
+    it('la respuesta de la asistente queda firmada con su nombre', async () => {
+      await conversaciones.procesar(entrante({ tipo: 'imagen', mediaId: 'm1', mimeType: 'image/jpeg' }) as never);
+      const token = await tokenAsistente();
+      const c = await prisma.conversacion.findFirstOrThrow({ where: { telefono: TEL } });
+
+      await request(http).post(`/api/bandeja/${c.id}/responder`)
+        .set('Authorization', `Bearer ${token}`).send({ texto: 'Te confirmo yo.' }).expect(201);
+
+      const r = await request(http).get(`/api/bandeja/${c.id}`)
+        .set('Authorization', `Bearer ${token}`).expect(200);
+      const suyo = r.body.mensajes.find((m: { contenido: string }) => m.contenido === 'Te confirmo yo.');
+
+      // Sin autor no habría forma de distinguirla del bot, que escribe por el mismo sitio.
+      expect(suyo.autor).not.toBeNull();
+      expect(typeof suyo.autor.nombre).toBe('string');
+    });
+
+    /**
+     * Lo que hace falta para que una conversación cerrada no desaparezca para siempre.
+     */
+    describe('conversaciones cerradas', () => {
+      /** Deja la conversación cerrada y decide si el paciente escribió hace poco. */
+      async function cerrada(ultimoEntranteHaceHoras: number) {
+        await conversaciones.procesar(entrante({ texto: 'buenas' }) as never);
+        const c = await prisma.conversacion.findFirstOrThrow({ where: { telefono: TEL } });
+        await prisma.mensaje.updateMany({
+          where: { conversacionId: c.id, direccion: 'entrante' },
+          data: { ts: new Date(Date.now() - ultimoEntranteHaceHoras * 3600_000) },
+        });
+        // Se devuelve la fila YA actualizada: leerla antes deja `escaladaTs` stale y
+        // la comparación de después no compararía nada.
+        return prisma.conversacion.update({
+          where: { id: c.id },
+          data: { estado: 'resuelta', resueltaTs: new Date(), escalada: true, escaladaTs: new Date() },
+        });
+      }
+
+      it('no salen entre los pendientes, pero sí en el histórico', async () => {
+        const c = await cerrada(1);
+        const token = await tokenAsistente();
+
+        const pend = await request(http).get('/api/bandeja')
+          .set('Authorization', `Bearer ${token}`).expect(200);
+        expect(pend.body.datos.some((x: { id: string }) => x.id === c.id)).toBe(false);
+
+        const hist = await request(http).get('/api/bandeja?vista=cerradas')
+          .set('Authorization', `Bearer ${token}`).expect(200);
+        expect(hist.body.datos.some((x: { id: string }) => x.id === c.id)).toBe(true);
+      });
+
+      it('se reabre y vuelve a la bandeja, a nombre de quien la reabrió', async () => {
+        const c = await cerrada(1);
+        const token = await tokenAsistente();
+
+        await request(http).patch(`/api/bandeja/${c.id}/reabrir`)
+          .set('Authorization', `Bearer ${token}`).expect(200);
+
+        const reabierta = await prisma.conversacion.findUniqueOrThrow({ where: { id: c.id } });
+        expect(reabierta.resueltaTs).toBeNull();
+        expect(reabierta.estado).toBe('en_gestion');
+        expect(reabierta.tomadaPor).not.toBeNull();
+        expect(reabierta.reaperturas).toBe(1);
+        // Las métricas se calculan sobre el estado actual: pisar esto reescribiría
+        // las escalaciones de un mes ya reportado.
+        expect(reabierta.escalada).toBe(true);
+        expect(reabierta.escaladaTs).toEqual(c.escaladaTs);
+
+        const pend = await request(http).get('/api/bandeja')
+          .set('Authorization', `Bearer ${token}`).expect(200);
+        expect(pend.body.datos.some((x: { id: string }) => x.id === c.id)).toBe(true);
+      });
+
+      it('reabrir una que no está cerrada no hace nada', async () => {
+        await conversaciones.procesar(entrante({ texto: 'buenas' }) as never);
+        const c = await prisma.conversacion.findFirstOrThrow({ where: { telefono: TEL } });
+        const token = await tokenAsistente();
+
+        await request(http).patch(`/api/bandeja/${c.id}/reabrir`)
+          .set('Authorization', `Bearer ${token}`).expect(400);
+      });
+
+      /**
+       * El fallo que hoy se ve como un «500» con el error crudo de Meta. Tiene que
+       * ser un 409 que diga qué hacer, y no debe salir nada.
+       */
+      it('fuera de la ventana de 24 h no se envía, y se explica por qué', async () => {
+        const c = await cerrada(30);
+        const token = await tokenAsistente();
+        await request(http).patch(`/api/bandeja/${c.id}/reabrir`)
+          .set('Authorization', `Bearer ${token}`).expect(200);
+
+        const antes = enviados.length;
+        const r = await request(http).post(`/api/bandeja/${c.id}/responder`)
+          .set('Authorization', `Bearer ${token}`).send({ texto: 'hola' }).expect(409);
+
+        expect(r.body.message).toMatch(/ventana de 24 h/i);
+        expect(enviados).toHaveLength(antes);
+      });
+
+      it('dentro de la ventana sí se puede responder tras reabrir', async () => {
+        const c = await cerrada(1);
+        const token = await tokenAsistente();
+        await request(http).patch(`/api/bandeja/${c.id}/reabrir`)
+          .set('Authorization', `Bearer ${token}`).expect(200);
+
+        await request(http).post(`/api/bandeja/${c.id}/responder`)
+          .set('Authorization', `Bearer ${token}`).send({ texto: 'seguimos' }).expect(201);
+        expect(enviados.some((e) => e.texto === 'seguimos')).toBe(true);
+      });
+
+      /** Sin plantilla configurada no se intenta: Meta lo rechazaría igual. */
+      it('sin plantilla configurada, el envío no se intenta y lo dice', async () => {
+        const c = await cerrada(30);
+        const token = await tokenAsistente();
+
+        const antes = enviados.length;
+        const r = await request(http).post(`/api/bandeja/${c.id}/plantilla`)
+          .set('Authorization', `Bearer ${token}`).expect(409);
+
+        expect(r.body.message).toMatch(/plantilla/i);
+        expect(enviados).toHaveLength(antes);
+      });
+
+      it('con la ventana abierta, la plantilla se rechaza: se responde con texto', async () => {
+        const c = await cerrada(1);
+        const token = await tokenAsistente();
+
+        await request(http).post(`/api/bandeja/${c.id}/plantilla`)
+          .set('Authorization', `Bearer ${token}`).expect(409);
+      });
+
+      it('el detalle dice si se puede escribir y hasta cuándo', async () => {
+        const c = await cerrada(1);
+        const token = await tokenAsistente();
+
+        const r = await request(http).get(`/api/bandeja/${c.id}`)
+          .set('Authorization', `Bearer ${token}`).expect(200);
+
+        expect(r.body.ventana.dentro).toBe(true);
+        expect(r.body.ventana.expiraTs).not.toBeNull();
+        expect(r.body.ventana.plantillaConfigurada).toBe(false);
+      });
+    });
+
+    /**
+     * RN-08.1 · la orden médica escaneada es el soporte con el que trabaja la asistente.
+     * Que la conversación escale no sirve de nada si el adjunto no se puede abrir.
+     */
+    describe('adjunto del paciente', () => {
+      // Coincide con lo que devuelve el doble de `descargarMedia`.
+      const RUTA = 'media/prueba.jpg';
+      const BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x01, 0x02, 0x03, 0x04]);
+
+      beforeEach(async () => {
+        await mkdir(dirname(RUTA), { recursive: true });
+        await writeFile(RUTA, BYTES);
+      });
+
+      afterEach(async () => {
+        await rm(RUTA, { force: true });
+      });
+
+      async function mensajeConAdjunto() {
+        await conversaciones.procesar(entrante({ tipo: 'imagen', mediaId: 'm1', mimeType: 'image/jpeg' }) as never);
+        return prisma.mensaje.findFirstOrThrow({
+          where: { mediaPath: { not: null } },
+          orderBy: { ts: 'desc' },
+        });
+      }
+
+      it('RN-08.1: la asistente abre el adjunto de la conversación escalada', async () => {
+        const m = await mensajeConAdjunto();
+        const token = await tokenAsistente();
+
+        const r = await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${token}`)
+          .responseType('blob')
+          .expect(200);
+
+        expect(r.headers['content-type']).toContain('image/jpeg');
+        // Sin `nosniff` un adjunto de tipo inesperado podría interpretarse como HTML.
+        expect(r.headers['x-content-type-options']).toBe('nosniff');
+        expect(Buffer.from(r.body)).toEqual(BYTES);
+      });
+
+      it('queda registrado en auditoría quién abrió el adjunto', async () => {
+        const m = await mensajeConAdjunto();
+        const token = await tokenAsistente();
+
+        await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${token}`).responseType('blob').expect(200);
+
+        const entrada = await prisma.auditoria.findFirst({
+          where: { entidad: `mensaje/${m.id}`, accion: 'Adjunto consultado' },
+        });
+        expect(entrada).not.toBeNull();
+      });
+
+      it('un mensaje sin adjunto no sirve nada', async () => {
+        await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'hola' }) as never);
+        const m = await prisma.mensaje.findFirstOrThrow({ where: { mediaPath: null }, orderBy: { ts: 'desc' } });
+        const token = await tokenAsistente();
+
+        await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${token}`).expect(404);
+      });
+
+      it('una ruta fuera del directorio de media nunca se sirve', async () => {
+        const m = await mensajeConAdjunto();
+        await prisma.mensaje.update({ where: { id: m.id }, data: { mediaPath: '/etc/passwd' } });
+        const token = await tokenAsistente();
+
+        await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${token}`).expect(404);
+      });
+
+      it('un adjunto que ya no está en disco responde 404 en vez de reventar', async () => {
+        const m = await mensajeConAdjunto();
+        await rm(RUTA, { force: true });
+        const token = await tokenAsistente();
+
+        await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${token}`).expect(404);
+      });
+
+      it('un prestador no puede abrir el adjunto de un paciente', async () => {
+        const m = await mensajeConAdjunto();
+        const login = await request(http).post('/api/auth/login')
+          .send({ email: 'osorio@provivir.local', password: 'Provivir2026!' }).expect(200);
+
+        await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
+          .set('Authorization', `Bearer ${login.body.accessToken}`).expect(403);
+      });
     });
 
     it('un prestador no puede ver la bandeja', async () => {

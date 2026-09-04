@@ -134,6 +134,27 @@ async function pedir<T>(ruta: string, init?: RequestInit, reintentar = true): Pr
   return r.status === 204 ? (undefined as T) : r.json();
 }
 
+/**
+ * Hermana de `pedir()` para lo que no es JSON. Comparte el 401 con refresco de sesión
+ * —si no, abrir un adjunto tras un rato inactivo echaría al login— y devuelve el
+ * contenido como Blob, porque un `<img src>` no puede llevar la cabecera del token.
+ */
+async function pedirBlob(ruta: string, reintentar = true): Promise<Blob> {
+  const t = token.leer();
+  const r = await fetch(`/api${ruta}`, {
+    headers: { ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+  });
+
+  if (r.status === 401) {
+    if (reintentar && (await refrescarSesion())) return pedirBlob(ruta, false);
+    token.borrar();
+    alCaerSesion?.();
+    throw new Error('Sesión expirada');
+  }
+  if (!r.ok) throw new Error('No se pudo cargar el adjunto');
+  return r.blob();
+}
+
 export const api = {
   login: (email: string, password: string) =>
     pedir<RespuestaLogin>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
@@ -145,10 +166,23 @@ export const api = {
 
   consolidada: (desde: string, hasta: string, prestadorId?: string) =>
     pedir<Cita[]>(`/citas/consolidada?desde=${desde}&hasta=${hasta}${prestadorId ? `&prestadorId=${prestadorId}` : ''}`),
-  buscarCitas: (q: string) => pedir<Cita[]>(`/citas/buscar?q=${encodeURIComponent(q)}`),
+  buscarCitas: (q: string, rango?: { desde: string; hasta: string }) =>
+    pedir<Cita[]>(
+      `/citas/buscar?q=${encodeURIComponent(q)}` +
+        (rango ? `&desde=${rango.desde}&hasta=${rango.hasta}` : ''),
+    ),
   cupos: (p: Record<string, string>) => pedir<Cupo[]>(`/cupos?${new URLSearchParams(p)}`),
   crearCita: (cuerpo: unknown) => pedir<{ creada: boolean; cita?: Cita; alternativas?: Cupo[]; motivo?: string }>(
     '/citas', { method: 'POST', body: JSON.stringify(cuerpo) }),
+  cita: (id: string) => pedir<Cita>(`/citas/${id}`),
+  /** Cambia fecha, hora y prestador. El motor revalida todas las reglas. */
+  reprogramarCita: (
+    id: string,
+    cuerpo: { fecha: string; hora: string; prestadorId?: string; motivo?: string; notificar?: boolean },
+  ) => pedir<Cita>(`/citas/${id}/reprogramar`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
+  /** No borra: da de baja. El historial y la auditoría dependen de que la fila siga ahí. */
+  cancelarCita: (id: string, cuerpo: { motivo: string; notificar?: boolean }) =>
+    pedir<Cita>(`/citas/${id}/cancelar`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
 
   prestadores: () => pedir<Prestador[]>('/prestadores'),
   servicios: (todos = false) => pedir<Servicio[]>(`/servicios${todos ? '?todos=true' : ''}`),
@@ -193,13 +227,24 @@ export const api = {
   crearPaciente: (cuerpo: unknown) => pedir<Paciente>('/pacientes', { method: 'POST', body: JSON.stringify(cuerpo) }),
   historial: (id: string) => pedir<HistorialItem[]>(`/pacientes/${id}/historial`),
 
-  bandeja: () => pedir<Conversacion[]>('/bandeja'),
+  bandeja: (f: FiltrosBandeja = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(f)) if (v) q.set(k, String(v));
+    return pedir<Pagina<Conversacion>>(`/bandeja${q.size ? `?${q}` : ''}`);
+  },
   bandejaConteo: () => pedir<{ pendientes: number; sonido: boolean }>('/bandeja/pendientes/conteo'),
   conversacion: (id: string) => pedir<ConversacionDetalle>(`/bandeja/${id}`),
   tomarBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/tomar`, { method: 'PATCH' }),
+  soltarBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/soltar`, { method: 'PATCH' }),
+  reabrirBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/reabrir`, { method: 'PATCH' }),
+  /** Con la ventana cerrada, lo único que Meta acepta. No la abre: la abre su respuesta. */
+  plantillaBandeja: (id: string) =>
+    pedir<{ enviado: boolean; plantilla: string }>(`/bandeja/${id}/plantilla`, { method: 'POST' }),
   responderBandeja: (id: string, texto: string) =>
     pedir<{ enviado: boolean }>(`/bandeja/${id}/responder`, { method: 'POST', body: JSON.stringify({ texto }) }),
   resolverBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/resolver`, { method: 'PATCH' }),
+  /** RN-08.1 · el soporte que mandó el paciente, para que la asistente pueda leerlo. */
+  mediaMensaje: (mensajeId: string) => pedirBlob(`/bandeja/mensajes/${mensajeId}/media`),
 
   // ── Administración ──
   paciente: (id: string) => pedir<Paciente>(`/pacientes/${id}`),
@@ -381,12 +426,20 @@ export interface Interesado {
 export interface Cita {
   id: string; codigo: string; tipo: string; fecha: string; horaInicio: number; duracionMin: number;
   estado: string; origen: string; observacion: string | null;
+  /** Campo propio: antes el motivo pisaba la observación de quien agendó. */
+  motivoCancelacion?: string | null;
+  /** Presente = la llegada ya se registró. El mostrador lo usa para reimprimir. */
+  turno?: TurnoBasico | null;
   paciente: Paciente; prestador: Prestador; servicio: Servicio;
 }
 export interface Cupo { prestadorId: string; prestadorNombre: string; fecha: string; hora: string; duracionMin: number; consultorio: string | null }
-export interface Turno {
+/** El turno sin su cita, que es como viene colgado de ella (y evita el tipo circular). */
+export interface TurnoBasico {
   id: string; estado: string; prioridad: string; llegadaTs: string; consultorio: string | null;
-  notaPriorizacion: string | null; minutosEsperando?: number; cita: Cita;
+  notaPriorizacion: string | null;
+}
+export interface Turno extends TurnoBasico {
+  minutosEsperando?: number; cita: Cita;
 }
 export interface Reporte extends Resumen {
   porServicio: Array<{ servicio: string; citas: number }>;
@@ -397,6 +450,21 @@ export interface Reporte extends Resumen {
   };
 }
 
+/** Forma de todo listado paginado del backend (`armarPagina`). */
+export interface Pagina<T> {
+  datos: T[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+  paginas: number;
+}
+
+/** Quién atiende o quién escribió. Solo el nombre: no hace falta su ficha. */
+export interface Asistente {
+  id: string;
+  nombre: string;
+}
+
 export interface Conversacion {
   id: string;
   telefono: string;
@@ -405,7 +473,12 @@ export interface Conversacion {
   prioridad: string;
   intencion: string | null;
   tomadaPor: string | null;
+  /** Con nombre: con el id suelto la lista solo podía decir "En gestión". */
+  asistente: Asistente | null;
   estado: string;
+  resueltaTs: string | null;
+  reabiertaTs: string | null;
+  reaperturas: number;
   /** RN-08.3 - para que la espera no se vuelva paisaje. */
   minutosEsperando: number;
   ultimoMensaje: string | null;
@@ -419,10 +492,32 @@ export interface MensajeConversacion {
   transcripcion: string | null;
   mediaPath: string | null;
   ts: string;
+  /** Nulo en un saliente = no lo escribió una persona: el bot o un automatismo. */
+  autor: Asistente | null;
+}
+
+/**
+ * Lo que decide si se puede escribir. Viene en el detalle para poder decirlo ANTES
+ * de que la asistente redacte: enterarse al pulsar enviar es enterarse tarde.
+ */
+export interface VentanaMeta {
+  dentro: boolean;
+  ultimoEntranteTs: string | null;
+  expiraTs: string | null;
+  plantillaConfigurada: boolean;
 }
 
 export interface ConversacionDetalle extends Omit<Conversacion, 'ultimoMensaje'> {
   mensajes: MensajeConversacion[];
+  ventana: VentanaMeta;
+}
+
+export interface FiltrosBandeja {
+  vista?: 'pendientes' | 'cerradas' | 'todas';
+  q?: string;
+  desde?: string;
+  hasta?: string;
+  pagina?: number;
 }
 
 export interface PrestadorDetalle extends Prestador {

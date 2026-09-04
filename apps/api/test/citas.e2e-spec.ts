@@ -449,6 +449,129 @@ describe('Motor de citas (integración)', () => {
       await citas.cancelar(cita.id, { motivo: 'x' }, USUARIO);
       await expect(citas.reprogramar(cita.id, { fecha: LUNES, hora: '09:00' }, USUARIO)).rejects.toThrow(/cancelada/);
     });
+
+    it('el motivo de cancelación no se lleva por delante la observación', async () => {
+      const cita = await crear({ hora: '08:00', observacion: 'Paciente en silla de ruedas' });
+      await citas.cancelar(cita.id, { motivo: 'Se enfermó el médico' }, USUARIO);
+
+      const guardada = await prisma.cita.findUniqueOrThrow({ where: { id: cita.id } });
+      expect(guardada.observacion).toBe('Paciente en silla de ruedas');
+      expect(guardada.motivoCancelacion).toBe('Se enfermó el médico');
+    });
+
+    it('no se cancela una cita ya atendida', async () => {
+      const cita = await crear({ hora: '08:00' });
+      await prisma.cita.update({ where: { id: cita.id }, data: { estado: 'atendida' } });
+
+      await expect(citas.cancelar(cita.id, { motivo: 'x' }, USUARIO)).rejects.toThrow(/atendida/);
+    });
+
+    /**
+     * El paciente ya llegó y está en sala. `cola()` filtra solo por el estado del
+     * TURNO, así que sin cerrarlo seguía en la lista de espera con la cita cancelada
+     * — y podía ser llamado a consultorio.
+     */
+    describe('el turno de quien ya llegó', () => {
+      const conLlegada = async (hora: string) => {
+        const cita = await crear({ hora });
+        const turno = await prisma.turno.create({
+          data: { citaId: cita.id, prioridad: 'baja', estado: 'en_espera' },
+        });
+        return { cita, turno };
+      };
+
+      it('cancelar la cita lo saca de la cola', async () => {
+        const { cita, turno } = await conLlegada('08:00');
+        await citas.cancelar(cita.id, { motivo: 'El paciente se fue' }, USUARIO);
+
+        expect((await prisma.turno.findUniqueOrThrow({ where: { id: turno.id } })).estado).toBe('cancelado');
+        const cola = await prisma.turno.findMany({ where: { estado: { in: ['en_espera', 'llamado'] } } });
+        expect(cola.some((t) => t.id === turno.id)).toBe(false);
+      });
+
+      it('moverla a otro día lo saca de la cola y la deja esperando llegada', async () => {
+        const { cita, turno } = await conLlegada('08:00');
+        await prisma.cita.update({ where: { id: cita.id }, data: { estado: 'llego' } });
+
+        const movida = await citas.reprogramar(cita.id, { fecha: MARTES, hora: '09:00' }, USUARIO);
+
+        expect((await prisma.turno.findUniqueOrThrow({ where: { id: turno.id } })).estado).toBe('cancelado');
+        // Si se quedara en `llego`, el martes el mostrador no podría registrarlo:
+        // `registrarLlegada` solo acepta pendiente_llegada|confirmada.
+        expect(movida.estado).toBe('confirmada');
+      });
+
+      it('con el paciente ya dentro de consulta, no se toca la cita', async () => {
+        const { cita, turno } = await conLlegada('08:00');
+        await prisma.turno.update({ where: { id: turno.id }, data: { estado: 'en_atencion' } });
+
+        await expect(citas.cancelar(cita.id, { motivo: 'x' }, USUARIO)).rejects.toThrow(/siendo atendido/);
+      });
+    });
+
+    it('queda en auditoría cuando la asistente decide no avisar al paciente', async () => {
+      const cita = await crear({ hora: '08:00' });
+      await citas.cancelar(cita.id, { motivo: 'Cambio de plan', notificar: false }, USUARIO);
+
+      // La auditoría es append-only y los códigos se reutilizan entre pruebas
+      // (la secuencia del día arranca de cero al limpiar): hay que mirar la última.
+      const registro = await prisma.auditoria.findFirstOrThrow({
+        where: { entidad: `cita/${cita.codigo}`, accion: 'Cita cancelada' },
+        orderBy: { ts: 'desc' },
+      });
+      expect(registro.detalle).toMatch(/sin avisar al paciente/);
+    });
+  });
+
+  /**
+   * Especificación §2.10 · el mostrador busca por código, documento, nombre y
+   * teléfono, y solo quiere las citas de hoy: sin el rango se traen 50 de cualquier
+   * fecha y hay que encontrar la buena con el paciente esperando delante.
+   */
+  describe('buscador de citas', () => {
+    const TEL = '3159998877';
+
+    beforeAll(async () => {
+      await prisma.paciente.update({
+        where: { id: pacienteId },
+        data: { telefono: `+57${TEL}` },
+      });
+    });
+
+    it('encuentra por teléfono, aunque esté guardado con indicativo', async () => {
+      const cita = await crear({ hora: '08:00' });
+      const r = await citas.buscar(TEL);
+      expect(r.some((c) => c.id === cita.id)).toBe(true);
+    });
+
+    it('encuentra por nombre del paciente', async () => {
+      const cita = await crear({ hora: '08:00' });
+      expect((await citas.buscar('Motor')).some((c) => c.id === cita.id)).toBe(true);
+    });
+
+    it('el rango de fechas deja fuera las de otros días', async () => {
+      const cita = await crear({ hora: '08:00' });
+      expect((await citas.buscar('Motor', { desde: LUNES, hasta: LUNES })).some((c) => c.id === cita.id)).toBe(true);
+      expect((await citas.buscar('Motor', { desde: MARTES, hasta: MARTES })).some((c) => c.id === cita.id)).toBe(false);
+    });
+
+    /** Con texto libre, generar variantes de teléfono produce la cadena vacía. */
+    it('buscar un nombre no arrastra a los pacientes sin teléfono', async () => {
+      const sinTelefono = await prisma.paciente.findFirstOrThrow({ where: { id: paciente2Id } });
+      expect(sinTelefono.telefono).toBeNull();
+
+      await crear({ hora: '08:00' });
+      const r = await citas.buscar('Motor');
+      expect(r.every((c) => c.paciente.id !== paciente2Id)).toBe(true);
+    });
+
+    it('trae el turno, que es lo que permite reimprimir el ticket', async () => {
+      const cita = await crear({ hora: '08:00' });
+      await prisma.turno.create({ data: { citaId: cita.id, prioridad: 'baja' } });
+
+      const encontrada = (await citas.buscar('Motor')).find((c) => c.id === cita.id);
+      expect(encontrada?.turno).not.toBeNull();
+    });
   });
 
   describe('auditoría', () => {

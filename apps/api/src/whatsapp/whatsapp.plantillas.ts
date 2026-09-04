@@ -18,8 +18,8 @@ const LINEA = '━━━━━━━━━━━━━━━━━━';
 export function ticketConfirmacion(d: DatosTicket): string {
   const filas = [
     LINEA,
-    '  *GRUPO PROVIVIR*',
-    '  CDC Oriente',
+    '  *CENTRO DE PROFESIONALES & PROVIVIR*',
+    '  CPP Principal',
     LINEA,
     `*Código*     ${d.codigo}`,
     `*Paciente*   ${d.paciente}`,
@@ -54,11 +54,50 @@ export function parametrosTicket(d: DatosTicket): string[] {
   return [d.codigo, d.servicio, d.fecha, d.hora];
 }
 
+/**
+ * Plantilla para retomar una conversación que ya se cerró, con **una sola variable
+ * de cuerpo**: `{{1}}` el nombre del paciente.
+ *
+ * Una sola, a propósito. No hay cita de la que hablar —por eso no sirven las cuatro
+ * de `parametrosTicket`— y la plantilla tiene un único trabajo: que la persona
+ * conteste. En cuanto conteste se abre la ventana y la asistente escribe con todo el
+ * detalle que quiera. Cuantas más variables, más formas de cruzarlas.
+ *
+ * Meta rechaza los parámetros vacíos y los que llevan saltos de línea, así que el
+ * respaldo no es cortesía: es lo que evita que el envío falle con un paciente que
+ * escribió antes de identificarse, que es el caso normal en un primer contacto.
+ *
+ * El respaldo es «de nuevo» porque encaja en la misma frase que un nombre y suena a
+ * lo que de verdad está pasando:
+ *
+ *   Hola María, te escribimos de…      ← con nombre
+ *   Hola de nuevo, te escribimos de…   ← sin él
+ *
+ * Cualquier genérico del tipo «paciente» delata que la clínica no sabe con quién
+ * habla, y «hola» de respaldo daría «Hola hola».
+ */
+export function parametrosReapertura(nombrePaciente: string | null): string[] {
+  // Solo el primer nombre: la plantilla saluda, no rellena una ficha.
+  const limpio = (nombrePaciente ?? '').replace(/\s+/g, ' ').trim().split(' ')[0] ?? '';
+  return [limpio.slice(0, 60) || 'de nuevo'];
+}
+
 export function ticketRecordatorio(d: DatosTicket, cuando: '24h' | 'hoy'): string {
   const encabezado = cuando === '24h'
     ? 'Te recordamos tu cita de mañana 🗓️'
     : 'Te esperamos hoy 🗓️';
   return `${encabezado}\n\n${ticketConfirmacion(d)}`;
+}
+
+/**
+ * Una reprogramación YA HECHA desde el backoffice.
+ *
+ * No sirve `avisoReprogramacion`: ese es el de RN-06.3 —«necesitamos reprogramar tu
+ * cita, respóndenos»— y pide algo. Aquí no hay nada que pedir; hay datos nuevos que
+ * el paciente tiene que apuntar, así que se le manda el ticket entero.
+ */
+export function ticketReprogramacion(d: DatosTicket): string {
+  return `Movimos tu cita 🗓️\n\n${ticketConfirmacion(d)}`;
 }
 
 export function ticketCancelacion(d: DatosTicket, motivo: string): string {

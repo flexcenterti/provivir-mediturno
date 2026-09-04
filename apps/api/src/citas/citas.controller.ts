@@ -20,8 +20,12 @@ export class CitasController {
   }
 
   @Get('citas/buscar')
-  buscar(@Query('q') q: string) {
-    return this.citas.buscar(q ?? '');
+  buscar(
+    @Query('q') q: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+  ) {
+    return this.citas.buscar(q ?? '', { desde, hasta });
   }
 
   /** Agenda consolidada día/semana/mes (Especificación §2.8). */

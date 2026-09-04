@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { MetaCliente } from './meta.cliente';
 import { TranscripcionService } from './transcripcion.service';
+import { VentanaService } from './ventana.service';
 
 /**
  * Infraestructura de salida de WhatsApp, sin dependencias de dominio.
@@ -11,7 +12,7 @@ import { TranscripcionService } from './transcripcion.service';
  */
 @Global()
 @Module({
-  providers: [MetaCliente, TranscripcionService],
-  exports: [MetaCliente, TranscripcionService],
+  providers: [MetaCliente, TranscripcionService, VentanaService],
+  exports: [MetaCliente, TranscripcionService, VentanaService],
 })
 export class MetaModule {}

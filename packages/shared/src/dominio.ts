@@ -72,3 +72,58 @@ export function fechaEnZona(momento: Date = new Date(), zona: string = ZONA_SEDE
 export function hoyEnSede(zona: string = ZONA_SEDE): Date {
   return new Date(`${fechaEnZona(new Date(), zona)}T00:00:00Z`);
 }
+
+/**
+ * Desfase de la zona respecto a UTC en un instante dado, en milisegundos.
+ *
+ * Se calcula formateando el instante en la zona y volviéndolo a leer como si fuera
+ * UTC: la diferencia es el desfase. Parece un rodeo, pero es la única forma sin
+ * dependencias de acertar en una zona con horario de verano — y aunque Colombia no
+ * lo tenga, la constante `ZONA_SEDE` es un parámetro, no una ley.
+ */
+function desfaseMs(momento: Date, zona: string): number {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: zona, hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(momento);
+
+  const v = (tipo: string): number => Number(partes.find((p) => p.type === tipo)!.value);
+  const comoSiFueraUtc = Date.UTC(
+    v('year'), v('month') - 1, v('day'), v('hour'), v('minute'), v('second'),
+  );
+  return comoSiFueraUtc - Math.floor(momento.getTime() / 1000) * 1000;
+}
+
+/**
+ * El instante UTC en que empieza el día AAAA-MM-DD de la zona.
+ *
+ * Hace falta para filtrar por RANGO DE FECHAS lo que se guarda como instante
+ * (`creado_en`, `resuelta_ts`). Recortar el ISO con `toISOString().slice(0,10)`
+ * compara en UTC: en la sede (UTC−5) todo lo ocurrido después de las 19:00 se
+ * atribuiría al día siguiente y desaparecería del filtro.
+ *
+ * Dos pasadas porque el desfase depende del instante, y el instante es justo lo que
+ * se está calculando: la primera aproxima, la segunda corrige si esa aproximación
+ * cayó al otro lado de un cambio de hora.
+ */
+export function inicioDelDiaEnZona(fecha: string, zona: string = ZONA_SEDE): Date {
+  const comoUtc = new Date(`${fecha}T00:00:00Z`);
+  if (Number.isNaN(comoUtc.getTime())) throw new Error(`Fecha inválida: ${fecha}`);
+
+  const aproximado = new Date(comoUtc.getTime() - desfaseMs(comoUtc, zona));
+  return new Date(comoUtc.getTime() - desfaseMs(aproximado, zona));
+}
+
+/**
+ * El instante UTC en que EMPIEZA el día siguiente al dado.
+ *
+ * Es el límite superior de un rango con `hasta` inclusivo, y se expresa así —con un
+ * `<` sobre el día siguiente— en vez de restar un milisegundo al final del día: no
+ * hay forma de dejarse fuera el último segundo por accidente.
+ */
+export function finDelDiaEnZona(fecha: string, zona: string = ZONA_SEDE): Date {
+  const inicio = inicioDelDiaEnZona(fecha, zona);
+  // Sumar 24 h y renormalizar: un día no siempre dura 24 h donde hay cambio de hora.
+  return inicioDelDiaEnZona(fechaEnZona(new Date(inicio.getTime() + 36 * 60 * 60_000), zona), zona);
+}

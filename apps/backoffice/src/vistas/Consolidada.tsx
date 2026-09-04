@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, hoyIso, type Cita, type Cupo, type Paciente, type Prestador, type Servicio } from '../api';
 import { TablaCitas } from './Dashboard';
+import { ModalCita } from './ModalCita';
 
 type Vista = 'dia' | 'semana' | 'mes';
 
@@ -12,6 +13,7 @@ export function Consolidada() {
   const [prestadores, setPrestadores] = useState<Prestador[]>([]);
   const [citas, setCitas] = useState<Cita[]>([]);
   const [creando, setCreando] = useState(false);
+  const [abierta, setAbierta] = useState<Cita | null>(null);
   const [error, setError] = useState('');
 
   const { desde, hasta } = rango(vista, ancla);
@@ -50,9 +52,18 @@ export function Consolidada() {
 
       {error && <div className="error">{error}</div>}
 
-      <div className="card"><TablaCitas citas={citas} /></div>
+      {/* Quien llega a esta pantalla ya tiene `citas.gestionar`: el menú la filtra
+          por ese permiso, así que las acciones no necesitan otra comprobación. */}
+      <div className="card"><TablaCitas citas={citas} onAbrir={setAbierta} /></div>
 
       {creando && <ModalCrearCita onCerrar={() => setCreando(false)} onCreada={() => { setCreando(false); recargar(); }} />}
+      {abierta && (
+        <ModalCita
+          cita={abierta}
+          onCerrar={() => setAbierta(null)}
+          onCambio={() => { setAbierta(null); recargar(); }}
+        />
+      )}
     </div>
   );
 }

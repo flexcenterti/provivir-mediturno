@@ -74,6 +74,10 @@ enum EstadoTurno {
   en_atencion
   atendido
   ausente
+  /// Su cita se canceló o se movió de día estando él en sala. No es `ausente`: eso
+  /// significa "se le llamó y no vino", y contarlo así ensuciaría el ausentismo con
+  /// cancelaciones administrativas.
+  cancelado
 }
 
 /// D6 · "prioridad", nunca "urgencia". Criterios alta/media/baja pendientes (P4);
@@ -103,6 +107,9 @@ enum TipoMensaje {
   video
   documento
   sistema
+  /// Plantilla aprobada en Meta. Se distingue del texto porque no es lo mismo ni
+  /// cuesta lo mismo: es lo único que sale fuera de la ventana de 24 h.
+  plantilla
 }
 
 /// RN-01.2 · Política de costo del control, parametrizable a futuro
@@ -185,6 +192,7 @@ model Sede {
   articulos      KbArticulo[]
   seguimientos   Seguimiento[]
   diasNoLaborables DiaNoLaborable[]
+  consentimientos  ConsentimientoWhatsapp[]
 
   @@map("sede")
 }
@@ -219,6 +227,7 @@ model Paciente {
   citas          Cita[]
   conversaciones Conversacion[]
   seguimientos   Seguimiento[]
+  consentimientos ConsentimientoWhatsapp[]
 
   @@index([documento])
   @@index([telefono])
@@ -393,6 +402,9 @@ model Cita {
   estado        EstadoCita @default(confirmada)
   origen        OrigenCita
   observacion   String?
+  /// Por qué se canceló. Campo propio porque antes el motivo pisaba `observacion` y
+  /// se llevaba por delante lo que hubiera anotado quien agendó.
+  motivoCancelacion String? @map("motivo_cancelacion")
   sedeId        String     @map("sede_id")
   creadoEn      DateTime   @default(now()) @map("creado_en")
   actualizadoEn DateTime   @updatedAt @map("actualizado_en")
@@ -450,6 +462,14 @@ model Conversacion {
   prioridad  Prioridad          @default(baja)
   tomadaPor  String?            @map("tomada_por")
   resueltaTs DateTime?          @map("resuelta_ts")
+  /// Cuándo se reabrió una conversación ya cerrada. Es el reloj operativo de la
+  /// bandeja: "esperando" se cuenta desde aquí, no desde el escalamiento original.
+  ///
+  /// Existe como campo propio, en vez de pisar `escalada`/`escaladaTs`, porque las
+  /// métricas se calculan sobre el estado ACTUAL y no sobre una foto: reutilizarlos
+  /// inflaría las escalaciones de un mes ya reportado.
+  reabiertaTs DateTime?         @map("reabierta_ts")
+  reaperturas Int               @default(0)
   sedeId     String             @map("sede_id")
   creadoEn   DateTime           @default(now()) @map("creado_en")
 
@@ -463,6 +483,10 @@ model Conversacion {
   paciente        Paciente?     @relation(fields: [pacienteId], references: [id])
   sede            Sede          @relation(fields: [sedeId], references: [id])
   interesServicio Servicio?     @relation(fields: [interesServicioId], references: [id])
+  /// Quién la está atendiendo. La relación existe para poder mostrar su NOMBRE: con
+  /// un id suelto la bandeja solo podía decir "En gestión", y ni el aviso de
+  /// conflicto podía nombrar a quien ya la tenía.
+  asistente       Usuario?      @relation(fields: [tomadaPor], references: [id])
   mensajes        Mensaje[]
   seguimientos    Seguimiento[]
   consultasKb     KbConsulta[]
@@ -470,7 +494,44 @@ model Conversacion {
   /// Consulta de la bandeja: pendientes = escalada && sin resolver
   @@index([escalada, resueltaTs])
   @@index([telefono])
+  /// Histórico de la bandeja: las cerradas se listan por fecha de cierre.
+  @@index([resueltaTs])
   @@map("conversacion")
+}
+
+/// RN-09.10 · Autorización de tratamiento de datos personales (Ley 1581 de 2012)
+/// dada por WhatsApp, antes de atender nada.
+///
+/// NO cuelga del paciente a propósito: en el primer mensaje no se sabe quién escribe
+/// —`Conversacion.pacienteId` es nulo justo por eso— y el consentimiento hay que
+/// pedirlo antes de tratar ningún dato. La llave es el identificador que entrega Meta,
+/// que puede ser un teléfono E.164 o un `wa:CO.<id>` cuando la persona usa nombre de
+/// usuario; para esto da igual cuál sea, porque es estable por interlocutor.
+model ConsentimientoWhatsapp {
+  id String @id @default(uuid())
+
+  /// El `wa_id` tal cual llega de Meta. Es la llave que existe desde el primer mensaje.
+  identificador String @unique
+
+  /// Estado actual. Un rechazo se registra pero NO cierra el canal: si la persona
+  /// vuelve a escribir se le pregunta otra vez.
+  aceptado Boolean
+
+  ts DateTime @default(now())
+
+  /// QUÉ aceptó exactamente. Sin esto no se puede probar un consentimiento el día que
+  /// la política cambie de contenido.
+  politicaUrl String @map("politica_url")
+
+  /// Se enlaza cuando la persona confirma su documento, no antes.
+  pacienteId String? @map("paciente_id")
+  sedeId     String  @map("sede_id")
+
+  paciente Paciente? @relation(fields: [pacienteId], references: [id])
+  sede     Sede      @relation(fields: [sedeId], references: [id])
+
+  @@index([pacienteId])
+  @@map("consentimiento_whatsapp")
 }
 
 model Mensaje {
@@ -491,7 +552,16 @@ model Mensaje {
   kbArticulosUsados String[] @default([]) @map("kb_articulos_usados")
   kbScore           Int?     @map("kb_score")
 
+  /// Quién escribió un mensaje saliente. Nulo = no lo escribió una persona: el bot,
+  /// un recordatorio o una secuencia de seguimiento. Sin esto, en el chat no había
+  /// forma de distinguir al bot de una asistente, ni a una asistente de otra.
+  ///
+  /// Los mensajes anteriores a este campo se quedan sin autor: no hay de dónde
+  /// reconstruirlo, y atribuirlos a alguien sería inventárselo.
+  autorId String? @map("autor_id")
+
   conversacion Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  autor        Usuario?     @relation(fields: [autorId], references: [id])
   consultaKb   KbConsulta?
 
   @@index([conversacionId, ts])
@@ -566,6 +636,9 @@ model Usuario {
   prestador Prestador? @relation(fields: [prestadorId], references: [id])
   sede      Sede       @relation(fields: [sedeId], references: [id])
   perfil    Perfil?    @relation(fields: [perfilId], references: [id])
+
+  conversaciones Conversacion[]
+  mensajes       Mensaje[]
 
   @@index([perfilId])
   @@map("usuario")

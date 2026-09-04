@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { MetaCliente } from './meta.cliente';
+import { DestinatarioSinTelefono, FueraDeVentanaMeta, MetaCliente } from './meta.cliente';
 
 /**
  * El destinatario viaja en un campo distinto según cómo se identifique. Poner el
@@ -73,5 +73,49 @@ describe('MetaCliente · a dónde se dirige la respuesta', () => {
   it('una plantilla sin variables no manda `components` vacío', async () => {
     await cliente.enviarPlantilla('+573001112222', 'aviso_simple', []);
     expect(cuerpoEnviado.template).not.toHaveProperty('components');
+  });
+
+  /**
+   * `131047` es el único rechazo con una salida concreta —mandar una plantilla— así
+   * que tiene que distinguirse del resto. Confundirlo con un token vencido le enseña
+   * a la asistente un «500» donde debería leer qué hacer.
+   */
+  describe('rechazos de Meta', () => {
+    const rechazarCon = (status: number, cuerpo: string) => {
+      global.fetch = jest.fn(async () => ({
+        ok: false, status, text: async () => cuerpo,
+      })) as unknown as typeof fetch;
+    };
+
+    it('el 131047 se distingue del rechazo genérico', async () => {
+      rechazarCon(400, JSON.stringify({
+        error: { code: 131047, message: 'Re-engagement message' },
+      }));
+      await expect(cliente.enviarTexto('+573001112222', 'hola')).rejects.toBeInstanceOf(FueraDeVentanaMeta);
+    });
+
+    it('otro código sigue siendo un error genérico', async () => {
+      rechazarCon(401, JSON.stringify({ error: { code: 190, message: 'Token expirado' } }));
+      const fallo = cliente.enviarTexto('+573001112222', 'hola');
+      await expect(fallo).rejects.not.toBeInstanceOf(FueraDeVentanaMeta);
+      await expect(fallo).rejects.toThrow('Meta rechazó el envío (401)');
+    });
+
+    it('un rechazo ilegible no rompe el manejo del error', async () => {
+      rechazarCon(502, '<html>Bad Gateway</html>');
+      await expect(cliente.enviarTexto('+573001112222', 'hola')).rejects.toThrow('Meta rechazó el envío (502)');
+    });
+
+    /**
+     * La ventana cerrada no depende de cómo se identifique el destinatario. Si se
+     * envolviera en `DestinatarioSinTelefono`, quien la reciba escalaría a una
+     * persona en vez de ofrecer la plantilla, que es lo que sí resuelve el caso.
+     */
+    it('con un nombre de usuario, la ventana cerrada no se disfraza de destinatario sin teléfono', async () => {
+      rechazarCon(400, JSON.stringify({ error: { code: 131047 } }));
+      const fallo = cliente.enviarTexto('wa:CO.13491208655302741918', 'hola');
+      await expect(fallo).rejects.toBeInstanceOf(FueraDeVentanaMeta);
+      await expect(fallo).rejects.not.toBeInstanceOf(DestinatarioSinTelefono);
+    });
   });
 });

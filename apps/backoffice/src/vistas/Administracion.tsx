@@ -592,13 +592,24 @@ const DESCRIPCION: Record<string, string> = {
   ventana_control_dias_defecto: 'Ventana de control por defecto cuando el prestador no define la suya.',
   agendamiento_anticipacion_dias: 'Días de anticipación que exigen el portal y WhatsApp. 1 = solo desde mañana; 0 permite hoy. No aplica al personal en sede.',
   kiosko_activo: 'Activa el módulo de kiosko de llegada.',
+  politica_datos_url: 'Enlace a la política de tratamiento de datos que el bot muestra en el primer contacto.',
   umbral_confianza_ia: 'Bajo este umbral de confianza, la IA escala a la asistente.',
   intervalo_institucional_min: 'Cada cuántos minutos se interrumpe el canal para el video institucional.',
   anticipacion_llegada_min: 'Minutos de anticipación con que se permite registrar la llegada.',
   tolerancia_retraso_min: 'Tolerancia de retraso antes de degradar la prioridad en cola.',
   whatsapp_seguimiento_portal_min: 'Minutos tras ofrecer el portal antes de preguntar si pudo agendar.',
-  whatsapp_botones_interactivos: 'Usar botones de WhatsApp en vez de solo texto. Requiere aprobación del cliente.',
+  whatsapp_botones_interactivos: 'Usar botones de WhatsApp en vez de solo texto. Apagado, el aviso de datos pide responder ACEPTO.',
   documentacion_comercial: 'Documentación de servicios que usa el bot para responder vendiendo.',
+  /*
+   * Las plantillas de Meta se escriben aquí y sin explicación no se sabe qué poner:
+   * lo que va en la casilla es el NOMBRE aprobado en el Business Manager, no el
+   * texto del mensaje. Vacías, la plataforma no intenta el envío y lo dice.
+   */
+  plantilla_recordatorio_24h: 'Nombre de la plantilla aprobada en Meta para el recordatorio de 24 h antes. Cuatro variables, en este orden: código, servicio, fecha y hora. Vacío = fuera de la ventana de 24 h el recordatorio no se envía y queda en auditoría.',
+  plantilla_recordatorio_hoy: 'Igual que la anterior, para el recordatorio del mismo día. Mismas cuatro variables.',
+  plantilla_confirmacion_cita: 'Plantilla para confirmar una cita agendada en el portal. Quien agenda por web no suele haber escrito por WhatsApp, así que este envío casi siempre la necesita. Mismas cuatro variables.',
+  plantilla_cancelacion_cita: 'Plantilla para avisar de una cita cancelada. Mismas cuatro variables. No sirve la de confirmación: dice lo contrario.',
+  plantilla_reapertura_conversacion: 'Plantilla para retomar una conversación cerrada hace más de 24 h. UNA sola variable: el nombre del paciente. Sin ella, la bandeja no ofrece el envío.',
 };
 
 /** Arquitectura §9 · los parámetros de reglas viven en la base, no en el código. */

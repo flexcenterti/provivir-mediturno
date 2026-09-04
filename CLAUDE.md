@@ -42,6 +42,7 @@ Los documentos v2.0 están **congelados**. Las reglas acordadas después viven e
 | `docs/index_v2.html` | **Especificación visual.** El prototipo manda en UI: layout, paleta, textos, componentes. |
 | `docs/rn-09-8-oferta-web.md` | **RN-09.8.** El bot ofrece el enlace del portal al detectar intención de agendar |
 | `docs/rn-09-9-seguimiento-comercial.md` | **RN-09.9.** Secuencia de 3 mensajes al interesado que no agenda (extiende RN-09.8) |
+| `docs/rn-09-10-consentimiento-whatsapp.md` | **RN-09.10.** Autorización de datos (Ley 1581) antes de atender por WhatsApp |
 | `docs/rn-04-5-catalogo-comercial.md` | **RN-04.5.** Ficha comercial del servicio y gobierno del catálogo |
 | `docs/rn-04-6-anticipacion-minima.md` | **RN-04.6.** El autoservicio agenda desde mañana; la sede sí puede agendar hoy |
 | `docs/rn-04-7-agenda-con-asistente.md` | **RN-04.7.** Servicios que el paciente no agenda solo; los coordina la asistente |

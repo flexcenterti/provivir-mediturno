@@ -163,9 +163,11 @@ describe('Seguimiento comercial (integración)', () => {
 
     it('una asistente ya la tomó → no se le escribe encima', async () => {
       const { conversacionId, pasos } = await armar();
+      // `tomadaPor` apunta ahora a `usuario`: tiene que ser alguien de verdad, no un rótulo.
+      const asistente = await prisma.usuario.findFirstOrThrow({ select: { id: true } });
       await prisma.conversacion.update({
         where: { id: conversacionId },
-        data: { escalada: true, escaladaTs: new Date(), tomadaPor: 'asistente' },
+        data: { escalada: true, escaladaTs: new Date(), tomadaPor: asistente.id },
       });
 
       expect(await seg.despachar(pasos[0]!.id, HABIL)).toBe('en_gestion_humana');

@@ -248,3 +248,40 @@ test('RN-05 · las reglas de prioridad se editan y quedan guardadas', async ({ p
   await page.getByRole('button', { name: /Guardar · Margen de tolerancia/ }).click();
   await expect(page.getByText(/Regla actualizada/)).toBeVisible({ timeout: 15_000 });
 });
+
+test('la bandeja separa pendientes de cerradas y deja filtrar las propias', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: /Bandeja asistente/ }).click();
+
+  // Una conversación resuelta desaparecía para siempre: no había dónde buscarla.
+  await expect(page.getByRole('button', { name: 'Pendientes', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Cerradas', exact: true }).click();
+  await expect(page.getByText(/Se pueden reabrir para seguir atendiéndolas/)).toBeVisible();
+
+  // El histórico añade rango de fechas; los pendientes no lo necesitan.
+  await expect(page.getByLabel(/Desde/)).toBeVisible();
+
+  // Con varias asistentes trabajando a la vez, saber cuáles son las tuyas.
+  await expect(page.getByText('Solo las mías')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Pendientes', exact: true }).click();
+  await expect(page.getByLabel(/Desde/)).toHaveCount(0);
+});
+
+test('§2.10 · el mostrador busca antes de registrar, en vez de adivinar', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: 'Mostrador' }).click();
+
+  // El campo ya no es "código o documento": también nombre y teléfono.
+  const campo = page.getByPlaceholder(/Código, documento, nombre o teléfono/);
+  await expect(campo).toBeVisible();
+
+  await campo.fill('ab');
+  await page.getByRole('button', { name: 'Buscar', exact: true }).click();
+  await expect(page.getByText(/al menos 3 caracteres/)).toBeVisible();
+
+  // Sin resultados dice qué hacer, en vez de un 404 que no se puede interpretar.
+  await campo.fill('Zzyzx');
+  await page.getByRole('button', { name: 'Buscar', exact: true }).click();
+  await expect(page.getByText(/Si viene sin cita, créasela en Agenda consolidada/)).toBeVisible();
+});

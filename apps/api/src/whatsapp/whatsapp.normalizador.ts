@@ -100,8 +100,10 @@ function normalizarMensaje(m: MensajeMeta, identidad: string, nombrePerfil?: str
 
     case 'interactive': {
       // Respuesta a un botón: se trata como texto para que la IA no distinga el canal.
-      const titulo = m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title;
-      return { ...base, tipo: 'texto', texto: titulo ?? '' };
+      // El id sí se conserva (RN-09.10): el consentimiento no puede depender de que el
+      // título del botón coincida palabra por palabra.
+      const respuesta = m.interactive?.button_reply ?? m.interactive?.list_reply;
+      return { ...base, tipo: 'texto', texto: respuesta?.title ?? '', botonId: respuesta?.id };
     }
 
     case 'audio':

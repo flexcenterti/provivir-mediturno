@@ -199,9 +199,9 @@ function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => 
           </div>
         </div>
 
-        {vista === 'dashboard' && <Dashboard />}
+        {vista === 'dashboard' && <Dashboard permisos={usuario.permisos} />}
         {vista === 'consolidada' && <Consolidada />}
-        {vista === 'bandeja' && <Bandeja />}
+        {vista === 'bandeja' && <Bandeja usuarioId={usuario.id} />}
         {vista === 'mostrador' && <Mostrador />}
         {vista === 'pacientes' && <Pacientes />}
         {vista === 'agendas' && <Agendas />}
