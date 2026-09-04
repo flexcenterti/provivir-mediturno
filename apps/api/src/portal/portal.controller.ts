@@ -30,7 +30,7 @@ export class PortalController {
   @Throttle({ default: { limit: 300, ttl: 60_000 } })
   aviso() {
     return {
-      responsable: 'Grupo Provivir · CDC Oriente',
+      responsable: 'Centro de Profesionales & Provivir · CPP Principal',
       finalidad:
         'Gestionar la asignación, confirmación y recordatorio de citas médicas. ' +
         'No se almacenan datos clínicos: diagnósticos, resultados ni notas médicas.',

@@ -18,6 +18,22 @@ export const CONFIGURACION_BASE = [
       'mañana. 0 apaga la regla. El personal en sede no queda sujeto a este parámetro.',
   },
   { clave: 'kiosko_activo', valor: 'false', descripcion: 'D3 · El kiosko queda construido pero apagado.' },
+  {
+    clave: 'whatsapp_botones_interactivos',
+    valor: 'true',
+    descripcion:
+      'RN-09.2 · Usar botones de WhatsApp en vez de solo texto. Aprobado por el cliente para el ' +
+      'consentimiento de datos (RN-09.10). En false, el aviso sale en texto pidiendo ACEPTO / NO ACEPTO.',
+  },
+  {
+    clave: 'politica_datos_url',
+    valor:
+      'https://grupoprovivir.com/wp-content/uploads/2020/10/' +
+      'PD-POL%C3%8DTICA-DE-PRIVACIDAD-Y-TRATAMIENTO-DE-DATOS-PERSONALES.pdf',
+    descripcion:
+      'RN-09.10 · Política de tratamiento de datos que se enlaza en el aviso de WhatsApp. Se guarda ' +
+      'en cada consentimiento: cambiarla aquí no reescribe los ya otorgados, que conservan la suya.',
+  },
   { clave: 'umbral_confianza_ia', valor: '70', descripcion: 'RN-08 · Bajo este umbral la IA escala a la asistente.' },
   { clave: 'intervalo_institucional_min', valor: '10', descripcion: 'RN-11.2 · Cada cuántos minutos se interrumpe el canal para el video institucional.' },
   { clave: 'anticipacion_llegada_min', valor: '15', descripcion: 'Minutos de anticipación con que se permite registrar llegada.' },

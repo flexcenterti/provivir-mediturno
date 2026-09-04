@@ -59,6 +59,16 @@ describe('RN-09.2 · normalización del multimedia entrante', () => {
     expect(m).toMatchObject({ tipo: 'texto', texto: 'Seguir por aquí' });
   });
 
+  it('RN-09.10: conserva el id del botón, no solo su título', () => {
+    // El título es traducible y el paciente puede escribirlo a mano con otras palabras:
+    // una decisión legal no puede depender de que coincida letra por letra.
+    const [m] = normalizarWebhook(envoltorio([
+      { id: 'w.5', from: '573002222222', timestamp: '1755000000', type: 'interactive',
+        interactive: { type: 'button_reply', button_reply: { id: 'consentimiento_acepto', title: 'Acepto' } } },
+    ]));
+    expect(m).toMatchObject({ tipo: 'texto', texto: 'Acepto', botonId: 'consentimiento_acepto' });
+  });
+
   it('ignora los eventos de estado (entregado/leído), que no son mensajes', () => {
     const cuerpo: WebhookMeta = {
       object: 'whatsapp_business_account',

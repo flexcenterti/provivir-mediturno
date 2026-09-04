@@ -185,6 +185,7 @@ model Sede {
   articulos      KbArticulo[]
   seguimientos   Seguimiento[]
   diasNoLaborables DiaNoLaborable[]
+  consentimientos  ConsentimientoWhatsapp[]
 
   @@map("sede")
 }
@@ -219,6 +220,7 @@ model Paciente {
   citas          Cita[]
   conversaciones Conversacion[]
   seguimientos   Seguimiento[]
+  consentimientos ConsentimientoWhatsapp[]
 
   @@index([documento])
   @@index([telefono])
@@ -471,6 +473,41 @@ model Conversacion {
   @@index([escalada, resueltaTs])
   @@index([telefono])
   @@map("conversacion")
+}
+
+/// RN-09.10 · Autorización de tratamiento de datos personales (Ley 1581 de 2012)
+/// dada por WhatsApp, antes de atender nada.
+///
+/// NO cuelga del paciente a propósito: en el primer mensaje no se sabe quién escribe
+/// —`Conversacion.pacienteId` es nulo justo por eso— y el consentimiento hay que
+/// pedirlo antes de tratar ningún dato. La llave es el identificador que entrega Meta,
+/// que puede ser un teléfono E.164 o un `wa:CO.<id>` cuando la persona usa nombre de
+/// usuario; para esto da igual cuál sea, porque es estable por interlocutor.
+model ConsentimientoWhatsapp {
+  id String @id @default(uuid())
+
+  /// El `wa_id` tal cual llega de Meta. Es la llave que existe desde el primer mensaje.
+  identificador String @unique
+
+  /// Estado actual. Un rechazo se registra pero NO cierra el canal: si la persona
+  /// vuelve a escribir se le pregunta otra vez.
+  aceptado Boolean
+
+  ts DateTime @default(now())
+
+  /// QUÉ aceptó exactamente. Sin esto no se puede probar un consentimiento el día que
+  /// la política cambie de contenido.
+  politicaUrl String @map("politica_url")
+
+  /// Se enlaza cuando la persona confirma su documento, no antes.
+  pacienteId String? @map("paciente_id")
+  sedeId     String  @map("sede_id")
+
+  paciente Paciente? @relation(fields: [pacienteId], references: [id])
+  sede     Sede      @relation(fields: [sedeId], references: [id])
+
+  @@index([pacienteId])
+  @@map("consentimiento_whatsapp")
 }
 
 model Mensaje {

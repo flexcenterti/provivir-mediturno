@@ -15,7 +15,8 @@
 | 8 · Envíos proactivos y ventana de Meta | **Completa** salvo las plantillas del cliente — `docs/changelog-fase8.md` |
 | 9 · Sesión que no se corta mientras se trabaja | **Completa** — `docs/changelog-fase9.md` |
 | 10 · Menú del prototipo y pantallas que faltaban | **Completa** — `docs/changelog-fase10.md` |
-| 11 · Ajustes de retroalimentación del cliente | **En curso** — `docs/changelog-fase11.md` |
+| 11 · Ajustes de retroalimentación del cliente | **Desplegada** — `docs/changelog-fase11.md` |
+| 12 · Consentimiento de datos en WhatsApp | **En curso** — `docs/changelog-fase12.md` |
 
 **Las seis primeras fases están completas.** Lo que falta para producción son credenciales e insumos
 del cliente, no código: ver `docs/checklist-piloto.md` y `despliegue/GUIA-DESPLIEGUE.md`.

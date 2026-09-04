@@ -592,12 +592,13 @@ const DESCRIPCION: Record<string, string> = {
   ventana_control_dias_defecto: 'Ventana de control por defecto cuando el prestador no define la suya.',
   agendamiento_anticipacion_dias: 'Días de anticipación que exigen el portal y WhatsApp. 1 = solo desde mañana; 0 permite hoy. No aplica al personal en sede.',
   kiosko_activo: 'Activa el módulo de kiosko de llegada.',
+  politica_datos_url: 'Enlace a la política de tratamiento de datos que el bot muestra en el primer contacto.',
   umbral_confianza_ia: 'Bajo este umbral de confianza, la IA escala a la asistente.',
   intervalo_institucional_min: 'Cada cuántos minutos se interrumpe el canal para el video institucional.',
   anticipacion_llegada_min: 'Minutos de anticipación con que se permite registrar la llegada.',
   tolerancia_retraso_min: 'Tolerancia de retraso antes de degradar la prioridad en cola.',
   whatsapp_seguimiento_portal_min: 'Minutos tras ofrecer el portal antes de preguntar si pudo agendar.',
-  whatsapp_botones_interactivos: 'Usar botones de WhatsApp en vez de solo texto. Requiere aprobación del cliente.',
+  whatsapp_botones_interactivos: 'Usar botones de WhatsApp en vez de solo texto. Apagado, el aviso de datos pide responder ACEPTO.',
   documentacion_comercial: 'Documentación de servicios que usa el bot para responder vendiendo.',
 };
 

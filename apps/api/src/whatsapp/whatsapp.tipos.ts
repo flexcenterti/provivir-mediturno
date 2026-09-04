@@ -61,5 +61,11 @@ export interface MensajeEntrante {
   mimeType?: string;
   /** Marca las notas de voz frente a un audio adjunto cualquiera. */
   esNotaDeVoz?: boolean;
+  /**
+   * RN-09.10 · Id del botón pulsado, cuando el mensaje es respuesta a uno interactivo.
+   * El texto por sí solo no basta para decidir algo legal: el título es traducible y
+   * el paciente puede escribirlo a mano con otras palabras.
+   */
+  botonId?: string;
   ts: Date;
 }

@@ -43,6 +43,10 @@ reemplazo de la fuente normativa.
   Se comprueba con `dentroDeVentanaMeta()` de `whatsapp/ventana-meta.ts` — la usan recordatorios,
   confirmación del portal y seguimiento comercial. Sin plantilla configurada **no se intenta**: se
   descarta con motivo en auditoría, porque un reintento no cambia el resultado y un fallo mudo sí.
+- **RN-09.10 · Nada se atiende por WhatsApp sin autorización de datos**, y va antes de la IA y
+  antes de escalar: que un adjunto lo lea una asistente también es tratamiento. La llave es el
+  identificador de Meta (`+57…` o `wa:CO.…`), NO el paciente — en el primer mensaje no se sabe
+  quién escribe. Se guarda qué política aceptó, no solo que aceptó.
 - **RN-09.9 · Antes de cada envío de seguimiento se revalida todo**, no al encolarlo. El paciente
   pudo agendar por otro canal entretanto. Las condiciones que cancelan ganan sobre las que difieren.
 

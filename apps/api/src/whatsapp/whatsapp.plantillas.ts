@@ -18,8 +18,8 @@ const LINEA = '━━━━━━━━━━━━━━━━━━';
 export function ticketConfirmacion(d: DatosTicket): string {
   const filas = [
     LINEA,
-    '  *GRUPO PROVIVIR*',
-    '  CDC Oriente',
+    '  *CENTRO DE PROFESIONALES & PROVIVIR*',
+    '  CPP Principal',
     LINEA,
     `*Código*     ${d.codigo}`,
     `*Paciente*   ${d.paciente}`,

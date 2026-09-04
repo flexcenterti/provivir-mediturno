@@ -15,6 +15,11 @@ import { WhatsappCola, type TrabajoSeguimiento } from './whatsapp.cola';
 import type { MensajeEntrante } from './whatsapp.tipos';
 import { SeguimientoService } from '../seguimiento/seguimiento.service';
 import { SeguimientoCola } from '../seguimiento/seguimiento.cola';
+import { ConsentimientoService } from './consentimiento.service';
+import {
+  avisoConsentimiento, avisoConsentimientoTexto, BIENVENIDA, BOTON_ACEPTO, BOTON_NO_ACEPTO,
+  leerRespuestaConsentimiento, TRAS_RECHAZO,
+} from './whatsapp.textos';
 
 /** Turnos previos que se le pasan al modelo. Más historial no mejora y encarece cada mensaje. */
 const HISTORIAL_MAX = 20;
@@ -33,6 +38,7 @@ export class ConversacionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ia: IaService,
+    private readonly consentimiento: ConsentimientoService,
     private readonly meta: MetaCliente,
     private readonly stt: TranscripcionService,
     private readonly auditoria: AuditoriaService,
@@ -76,6 +82,19 @@ export class ConversacionService {
       },
     });
 
+    /*
+     * RN-09.10 · Nada se atiende sin autorización de tratamiento de datos.
+     *
+     * Va aquí, y no más abajo, a propósito: el mensaje ya está guardado —hace falta para
+     * la idempotencia y para poder retomarlo— pero todavía no se decidió escalar ni
+     * llamar a la IA. Así el aviso antecede también a una foto o una nota de voz, que
+     * escalan antes de llegar al modelo.
+     */
+    if (!(await this.consentimiento.aceptado(entrante.telefono))) {
+      await this.resolverConsentimiento(conversacion.id, entrante, texto);
+      return;
+    }
+
     // Si la conversación ya está en manos de una asistente, la IA no interviene.
     if (conversacion.estado === 'escalada' || conversacion.estado === 'en_gestion') {
       this.gateway.emitirPendientesBandeja(await this.pendientes());
@@ -109,6 +128,84 @@ export class ConversacionService {
     }
 
     await this.responderConIa(conversacion.id, entrante.telefono, texto);
+  }
+
+  /**
+   * RN-09.10 · Pide la autorización, o interpreta la respuesta si el mensaje ya lo era.
+   *
+   * Quien acepta no tiene que repetir lo que había pedido: su mensaje original sigue
+   * guardado y se retoma. Quien rechaza recibe una salida —teléfono o sede— y no queda
+   * bloqueado: si vuelve a escribir, se le pregunta otra vez.
+   */
+  private async resolverConsentimiento(
+    conversacionId: string,
+    entrante: MensajeEntrante,
+    texto?: string,
+  ): Promise<void> {
+    const respuesta = leerRespuestaConsentimiento(entrante.botonId, texto);
+
+    if (respuesta === null) {
+      await this.pedirConsentimiento(conversacionId, entrante.telefono);
+      return;
+    }
+
+    await this.consentimiento.registrar(entrante.telefono, respuesta === 'acepta');
+
+    if (respuesta === 'rechaza') {
+      await this.enviar(conversacionId, entrante.telefono, TRAS_RECHAZO);
+      return;
+    }
+
+    await this.enviar(conversacionId, entrante.telefono, BIENVENIDA);
+
+    const pendiente = await this.mensajePendiente(conversacionId, entrante.waMessageId);
+    if (pendiente) {
+      await this.responderConIa(conversacionId, entrante.telefono, pendiente);
+    }
+  }
+
+  /** Con la bandera apagada sale en texto: el consentimiento no puede quedarse sin vía. */
+  private async pedirConsentimiento(conversacionId: string, telefono: string): Promise<void> {
+    const url = this.consentimiento.politicaUrl();
+    const conBotones = this.configuracion.booleano('whatsapp_botones_interactivos', true);
+
+    if (!conBotones) {
+      await this.enviar(conversacionId, telefono, avisoConsentimientoTexto(url));
+      return;
+    }
+
+    const texto = avisoConsentimiento(url);
+    const waMessageId = await this.meta.enviarBotones(telefono, texto, [BOTON_ACEPTO, BOTON_NO_ACEPTO]);
+
+    // Se persiste como cualquier saliente: si no, la bandeja muestra una conversación
+    // con la respuesta del paciente y sin la pregunta.
+    await this.prisma.mensaje.create({
+      data: {
+        conversacionId, direccion: 'saliente', tipo: 'texto',
+        contenido: texto, waMessageId: waMessageId || null,
+      },
+    });
+  }
+
+  /**
+   * Lo que el paciente había pedido antes de que se le interrumpiera con el aviso.
+   * Se excluye el mensaje de la propia respuesta: «Acepto» no es una petición.
+   */
+  private async mensajePendiente(conversacionId: string, waMessageIdActual: string): Promise<string | null> {
+    const previo = await this.prisma.mensaje.findFirst({
+      where: {
+        conversacionId,
+        direccion: 'entrante',
+        tipo: 'texto',
+        contenido: { not: null },
+        waMessageId: { not: waMessageIdActual },
+      },
+      orderBy: { ts: 'desc' },
+    });
+
+    // Si lo único anterior fue otro intento de responder al aviso, no hay nada que retomar.
+    if (!previo?.contenido) return null;
+    return leerRespuestaConsentimiento(undefined, previo.contenido) === null ? previo.contenido : null;
   }
 
   /**
@@ -204,6 +301,15 @@ export class ConversacionService {
         );
         return;
       }
+    }
+
+    /*
+     * RN-09.10 · Ya sabemos quién es: se ata su autorización a la persona. Es lo que
+     * permite responder «esta persona autorizó, tal día, esta política» en vez de tener
+     * solo un número suelto.
+     */
+    if (resultado.pacienteId) {
+      await this.consentimiento.enlazarPaciente(telefono, resultado.pacienteId);
     }
 
     await this.prisma.conversacion.update({

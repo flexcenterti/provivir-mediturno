@@ -122,6 +122,14 @@ describe('Herramientas de conocimiento (e2e)', () => {
     await prisma.mensaje.deleteMany({ where: { conversacion: { telefono: TEL } } });
     await prisma.kbConsulta.deleteMany({ where: { conversacion: { telefono: TEL } } });
     await prisma.conversacion.deleteMany({ where: { telefono: TEL } });
+
+    // RN-09.10 · sin autorización no se atiende nada. Aquí lo que se prueba es la base
+    // de conocimiento, así que se parte de un paciente que ya la dio.
+    await prisma.consentimientoWhatsapp.upsert({
+      where: { identificador: TEL },
+      update: { aceptado: true },
+      create: { identificador: TEL, aceptado: true, politicaUrl: 'https://ejemplo/politica.pdf', sedeId: 'cdc-oriente' },
+    });
   });
 
   it('las dos herramientas quedan declaradas para el modelo', () => {
