@@ -195,3 +195,27 @@ export function porcentajeOcupacion(citas: CitaExistente[], minutosJornada: numb
   const ocupados = citas.reduce((s, c) => s + c.duracionMin, 0);
   return Math.min(100, Math.round((ocupados / minutosJornada) * 100));
 }
+
+/**
+ * RN-10.5 · Cuántas citas puede tener un paciente el mismo día agendándose SOLO.
+ *
+ * Uno. Para una segunda tiene que llamar, y que una asistente valore si de verdad
+ * hacen falta dos visitas el mismo día o es un error de quien agenda.
+ *
+ * El límite es del canal, no del paciente: el mostrador y el backoffice ponen las que
+ * hagan falta. Lo que la regla evita es que nadie con criterio haya mirado — en
+ * producción se vieron dos citas a la MISMA hora con dos médicos distintos, agendadas
+ * desde el portal por la misma persona.
+ */
+export const CITAS_POR_DIA_AUTOSERVICIO = 1;
+
+/**
+ * ¿Bloquea el autoagendamiento el número de citas que ya tiene ese día?
+ *
+ * `>=` y no `>`: se llama ANTES de crear la nueva, así que el paciente que ya tiene
+ * una está en el límite, no por debajo. Con `>` haría falta tener dos para que la
+ * tercera se bloqueara, que es justo el error que esta función existe para no cometer.
+ */
+export function superaCitasDelDia(vivasEseDia: number): boolean {
+  return vivasEseDia >= CITAS_POR_DIA_AUTOSERVICIO;
+}

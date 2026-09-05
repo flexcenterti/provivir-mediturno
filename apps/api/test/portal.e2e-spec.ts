@@ -43,9 +43,22 @@ describe('Portal público (e2e)', () => {
 
   afterAll(async () => { await limpiar(); await app.close(); });
 
-  async function limpiar() {
+  /**
+   * Las citas se borran ANTES de cada prueba, no solo al final del fichero.
+   *
+   * Antes se acumulaban, y con RN-10.5 —una cita por día agendándose solo— eso dejó de
+   * ser inocuo: la cita que deja una prueba bloquea el agendamiento de la siguiente.
+   * El orden no debería haber importado nunca; ahora además se nota.
+   */
+  beforeEach(limpiarCitas);
+
+  async function limpiarCitas() {
     await prisma.turno.deleteMany({ where: { cita: { paciente: { documento: { startsWith: '97' } } } } });
     await prisma.cita.deleteMany({ where: { paciente: { documento: { startsWith: '97' } } } });
+  }
+
+  async function limpiar() {
+    await limpiarCitas();
     await prisma.paciente.deleteMany({ where: { documento: { startsWith: '97' } } });
   }
 
@@ -181,13 +194,25 @@ describe('Portal público (e2e)', () => {
   });
 
   describe('agendamiento', () => {
+    /*
+     * Una sola identificación para el bloque. `/identificar` está limitado a 8 por
+     * minuto a propósito —es la superficie por la que se enumeraría pacientes— y una
+     * llamada por prueba agota el cupo y hace fallar a la última con un 429 que no
+     * tiene nada que ver con lo que se estaba probando. La sesión es un JWT y vale
+     * para todas.
+     */
+    let sesionPaciente: string;
+    beforeAll(async () => {
+      sesionPaciente = (await post('/identificar', { documento: DOC_REGISTRADO, telefonoUltimos4: '8877' })
+        .expect(201)).body.sesion;
+    });
+
     it('agenda y devuelve el código único de atención', async () => {
-      const ident = await post('/identificar', { documento: DOC_REGISTRADO, telefonoUltimos4: '8877' }).expect(201);
       const cupos = await post('/cupos', { servicioId: 'mg', fecha: LUNES, prestadorId: 'ao', limite: 5 }).expect(201);
       const cupo = cupos.body[0];
 
       const r = await post('/agendar', {
-        sesion: ident.body.sesion, servicioId: 'mg', fecha: LUNES,
+        sesion: sesionPaciente, servicioId: 'mg', fecha: LUNES,
         hora: cupo.hora, prestadorId: cupo.prestadorId,
       }).expect(201);
 
@@ -201,6 +226,52 @@ describe('Portal público (e2e)', () => {
         where: { codigo: r.body.confirmacion.codigo, fecha: new Date(`${LUNES}T00:00:00Z`) },
       });
       expect(cita?.origen).toBe('autoagendamiento');
+    });
+
+    /**
+     * RN-10.5 · Una cita por día agendándose solo. La regla vive en el motor y se
+     * prueba a fondo en `citas.e2e-spec.ts`; lo que se verifica aquí es el cableado
+     * del portal, que es la parte que puede romperse en silencio.
+     */
+    describe('RN-10.5 · una cita por día', () => {
+      const agendar = async (sesion: string, hora: string, estado: number) =>
+        post('/agendar', { sesion, servicioId: 'mg', fecha: LUNES, hora, prestadorId: 'ao' }).expect(estado);
+
+      it('la segunda del mismo día se rechaza y dice que llame', async () => {
+        await agendar(sesionPaciente, '08:00', 201);
+
+        const r = await agendar(sesionPaciente, '09:00', 400);
+        expect(r.body.message).toMatch(/Ya tienes una cita ese día/);
+      });
+
+      /**
+       * El cableado propiamente dicho: la sesión viaja con la consulta de horarios.
+       *
+       * Mutación que la mata: no pasar `pacienteId` desde `PortalService.cupos`. El
+       * portal pintaría doce horas y las rechazaría las doce al confirmar.
+       */
+      it('con la sesión puesta, los cupos avisan antes de pintar horarios', async () => {
+        await agendar(sesionPaciente, '08:00', 201);
+
+        const r = await post('/cupos', { sesion: sesionPaciente, servicioId: 'mg', fecha: LUNES, prestadorId: 'ao', limite: 5 })
+          .expect(400);
+        expect(r.body.message).toMatch(/Ya tienes una cita ese día/);
+      });
+
+      it('sin sesión se siguen pudiendo mirar los horarios', async () => {
+        await agendar(sesionPaciente, '08:00', 201);
+
+        // Curiosear la agenda no exige identificarse: sería un paso nuevo por una
+        // regla que no es suya, y `agendar` la vuelve a aplicar igual.
+        const r = await post('/cupos', { servicioId: 'mg', fecha: LUNES, prestadorId: 'ao', limite: 5 }).expect(201);
+        expect(r.body.length).toBeGreaterThan(0);
+      });
+
+      it('una sesión ilegible no rompe la consulta de horarios', async () => {
+        const r = await post('/cupos', { sesion: 'token-falso', servicioId: 'mg', fecha: LUNES, prestadorId: 'ao', limite: 5 })
+          .expect(201);
+        expect(r.body.length).toBeGreaterThan(0);
+      });
     });
 
     it('sin sesión válida no se agenda', async () => {
@@ -219,7 +290,6 @@ describe('Portal público (e2e)', () => {
     });
 
     it('si el cupo se ocupa, devuelve alternativas en vez de fallar', async () => {
-      const ident = await post('/identificar', { documento: DOC_REGISTRADO, telefonoUltimos4: '8877' }).expect(201);
       const paciente = await prisma.paciente.findUnique({ where: { documento: DOC_NUEVO } });
 
       await citas.crear(
@@ -228,7 +298,7 @@ describe('Portal público (e2e)', () => {
       );
 
       const r = await post('/agendar', {
-        sesion: ident.body.sesion, servicioId: 'mg', fecha: LUNES, hora: '11:00', prestadorId: 'ao',
+        sesion: sesionPaciente, servicioId: 'mg', fecha: LUNES, hora: '11:00', prestadorId: 'ao',
       }).expect(201);
 
       expect(r.body.creada).toBe(false);

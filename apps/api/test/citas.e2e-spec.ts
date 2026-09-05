@@ -357,6 +357,165 @@ describe('Motor de citas (integración)', () => {
 
   // ─────────────────────── Concurrencia ───────────────────────
 
+  /**
+   * RN-10.5 · Agendándose solo, una cita por día.
+   *
+   * Nace de producción: el 2026-09-05 tres pacientes tenían dos citas ese día, y una
+   * de ellas tenía DOS A LA MISMA HORA con dos médicos distintos, puestas desde el
+   * portal. Dos de los tres casos los produjo el bot, no el portal.
+   */
+  describe('RN-10.5 · una cita por día agendándose solo', () => {
+    // Función y no constante: el cuerpo del `describe` corre ANTES del `beforeAll`
+    // que asigna `pacienteId`, así que una constante lo capturaría `undefined` — y la
+    // regla, que exige paciente conocido, no se aplicaría. La prueba pasaría en verde
+    // sin probar nada.
+    const auto = () => ({ autoservicio: true, pacienteId });
+    const crearAuto = (extra: Record<string, unknown> = {}) =>
+      citas.crear(
+        { pacienteId, servicioId: 'mg', fecha: LUNES, hora: '08:00', prestadorId: 'ao', origen: 'autoagendamiento', ...extra } as never,
+        USUARIO,
+        { autoservicio: true, pacienteId },
+      );
+
+    it('la primera pasa; la segunda del mismo día se rechaza diciendo qué hacer', async () => {
+      await crearAuto({ hora: '08:00' });
+
+      await expect(crearAuto({ hora: '09:00' }))
+        .rejects.toThrow(/Ya tienes una cita ese día.*comunícate con una asistente/is);
+      expect(await prisma.cita.count({ where: { pacienteId, fecha: new Date(`${LUNES}T00:00:00Z`) } })).toBe(1);
+    });
+
+    /**
+     * El caso exacto de producción: dos médicos distintos, así que `lockPrestadorFecha`
+     * toma llaves distintas y no serializa. Mutación que la mata: quitar
+     * `lockPacienteFecha`, o mover la comprobación fuera de la transacción.
+     */
+    it('dos envíos simultáneos con médicos distintos crean UNA sola cita', async () => {
+      const intentos = [
+        crearAuto({ hora: '08:00', prestadorId: 'ao' }).then(() => 'creada' as const).catch(() => 'rechazada' as const),
+        crearAuto({ hora: '08:00', prestadorId: 'pr' }).then(() => 'creada' as const).catch(() => 'rechazada' as const),
+      ];
+      const r = await Promise.all(intentos);
+
+      // Se afirma también que UNA salió: con un prestador inexistente las dos fallarían
+      // y la prueba pasaría sin el lock, que es lo que ocurría con un id mal escrito.
+      expect(r.filter((x) => x === 'creada')).toHaveLength(1);
+      expect(r.filter((x) => x === 'rechazada')).toHaveLength(1);
+      expect(await prisma.cita.count({ where: { pacienteId, fecha: new Date(`${LUNES}T00:00:00Z`) } })).toBe(1);
+    }, 30_000);
+
+    it('el mostrador y el backoffice sí pueden ponerle la segunda', async () => {
+      await crearAuto({ hora: '08:00' });
+
+      // Misma llamada sin declararse autoservicio: es la excepción de canal, porque
+      // ahí hay una asistente valorando si de verdad hacen falta dos visitas.
+      await crear({ hora: '09:00' });
+      expect(await prisma.cita.count({ where: { pacienteId, fecha: new Date(`${LUNES}T00:00:00Z`) } })).toBe(2);
+    });
+
+    /**
+     * Con el paciente PUESTO y sin `autoservicio`. Sin esta variante no se distingue
+     * «exento porque hay una asistente» de «exento porque no sé quién es», y la regla
+     * podría estar aplicándose a todos los canales sin que ninguna prueba lo notara.
+     *
+     * Mutación que la mata: quitar `!opciones?.autoservicio ||` de la guarda.
+     */
+    it('lo que exime es el canal, no que se desconozca al paciente', async () => {
+      await crearAuto({ hora: '08:00' });
+
+      await expect(citas.crear(
+        { pacienteId, servicioId: 'mg', fecha: LUNES, hora: '09:00', prestadorId: 'ao', origen: 'mostrador' } as never,
+        USUARIO,
+        { pacienteId },
+      )).resolves.toBeDefined();
+    });
+
+    /**
+     * Mutación que la mata: contar también las canceladas. Cancelar y volver a agendar
+     * el mismo día es justo lo que el paciente tiene que poder hacer sin llamar.
+     */
+    it('una cita cancelada no ocupa el cupo del día', async () => {
+      const primera = await crearAuto({ hora: '08:00' });
+      await citas.cancelar(primera.id, { motivo: 'se le cruzó algo' }, USUARIO);
+
+      await expect(crearAuto({ hora: '09:00' })).resolves.toBeDefined();
+    });
+
+    it('cuenta también la que puso la asistente: no hay puerta de atrás', async () => {
+      await crear({ hora: '08:00' });   // origen 'asistente', sin autoservicio
+
+      await expect(crearAuto({ hora: '09:00' })).rejects.toThrow(/Ya tienes una cita ese día/);
+    });
+
+    it('otro día sí se puede: el límite es por día, no por paciente', async () => {
+      await crearAuto({ hora: '08:00' });
+      await expect(crearAuto({ fecha: MARTES, hora: '08:00' })).resolves.toBeDefined();
+    });
+
+    it('el límite es del paciente: a otro no le estorba', async () => {
+      await crearAuto({ hora: '08:00' });
+
+      await expect(citas.crear(
+        { pacienteId: paciente2Id, servicioId: 'mg', fecha: LUNES, hora: '09:00', prestadorId: 'ao', origen: 'autoagendamiento' } as never,
+        USUARIO,
+        { autoservicio: true, pacienteId: paciente2Id },
+      )).resolves.toBeDefined();
+    });
+
+    /**
+     * Se dice antes de pintar la lista, no después de elegir hora.
+     *
+     * Mutación que la mata: validar solo en `crear()`. El portal ofrecería doce
+     * horarios y los rechazaría los doce, y en el bot el modelo negociaría con el
+     * paciente una cita que no puede existir.
+     */
+    it('los cupos ya avisan, en vez de ofrecer horas que se van a rechazar', async () => {
+      await crearAuto({ hora: '08:00' });
+
+      await expect(
+        citas.cupos({ servicioId: 'mg', fecha: LUNES, prestadorId: 'ao', limite: 5 } as never, auto()),
+      ).rejects.toThrow(/Ya tienes una cita ese día/);
+    });
+
+    it('sin paciente en el contexto, los cupos se siguen pudiendo mirar', async () => {
+      await crearAuto({ hora: '08:00' });
+
+      // El portal deja curiosear horarios sin identificarse: exigirlo sería un paso
+      // nuevo por una regla que no es suya. `crear()` la revalida igual.
+      const libres = await citas.cupos(
+        { servicioId: 'mg', fecha: LUNES, prestadorId: 'ao', limite: 5 } as never,
+        { autoservicio: true },
+      );
+      expect(libres.length).toBeGreaterThan(0);
+    });
+
+    describe('reprogramación', () => {
+      it('no se puede mover una cita a un día donde ya hay otra', async () => {
+        const enLunes = await crearAuto({ hora: '08:00' });
+        const enMartes = await crearAuto({ fecha: MARTES, hora: '08:00' });
+
+        await expect(citas.reprogramar(
+          enMartes.id, { fecha: LUNES, hora: '10:00' } as never, USUARIO, auto(),
+        )).rejects.toThrow(/Ya tienes una cita ese día/);
+
+        expect((await prisma.cita.findUniqueOrThrow({ where: { id: enLunes.id } })).estado).toBe('confirmada');
+      });
+
+      /**
+       * Mutación que la mata: no pasar `excluirCitaId`. La cita se contaría a sí misma
+       * y NINGUNA podría cambiar de hora dentro de su propio día — que es la
+       * reprogramación más común que hay.
+       */
+      it('mover la hora dentro del mismo día sí se puede', async () => {
+        const cita = await crearAuto({ hora: '08:00' });
+
+        await expect(citas.reprogramar(
+          cita.id, { fecha: LUNES, hora: '10:00' } as never, USUARIO, auto(),
+        )).resolves.toBeDefined();
+      });
+    });
+  });
+
   describe('concurrencia', () => {
     it('20 peticiones simultáneas al mismo cupo → exactamente 1 creada', async () => {
       const intentos = Array.from({ length: 20 }, (_, i) =>

@@ -26,8 +26,12 @@ export function App() {
   useEffect(() => {
     if (paso !== 'cupos' || !servicioId) return;
     setError('');
-    api.cupos(servicioId, fecha).then(setCupos).catch((e: Error) => setError(e.message));
-  }, [paso, servicioId, fecha]);
+    // RN-10.5 · con la sesión, el motor avisa de que ya hay cita ese día en vez de
+    // dejar que el paciente elija una hora y se la rechacen al confirmar.
+    api.cupos(servicioId, fecha, sesion)
+      .then(setCupos)
+      .catch((e: Error) => { setCupos([]); setError(e.message); });
+  }, [paso, servicioId, fecha, sesion]);
 
   function entrar(s: string, n: string) {
     setSesion(s); setNombre(n); setPaso('servicio'); setError('');

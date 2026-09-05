@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import {
-  chocaConAlguna, controlDentroDeVentana, cumpleAnticipacionMinima, elegirPorMenorCarga,
+  chocaConAlguna, CITAS_POR_DIA_AUTOSERVICIO, controlDentroDeVentana, cumpleAnticipacionMinima,
+  elegirPorMenorCarga, superaCitasDelDia,
   generarCupos, ordenarPorCompactacion, porcentajeOcupacion, primeraFechaAgendable,
   seSolapan, violaIntercaladoEnAgenda,
   type CitaExistente,
@@ -356,5 +357,26 @@ describe('Propiedades del motor sobre agendas generadas', () => {
       }),
       { numRuns: 500 },
     );
+  });
+});
+
+describe('RN-10.5 · una cita por día agendándose solo', () => {
+  /**
+   * El borde es lo único que hay que probar, y es donde está el error fácil.
+   *
+   * Mutación que la mata: `>` en vez de `>=`. Con ella harían falta dos citas para
+   * bloquear la tercera, así que el paciente acabaría con dos — que es exactamente el
+   * caso que se vio en producción.
+   */
+  it('sin citas ese día se puede agendar; con una ya no', () => {
+    expect(superaCitasDelDia(0)).toBe(false);
+    expect(superaCitasDelDia(1)).toBe(true);
+    expect(superaCitasDelDia(2)).toBe(true);
+  });
+
+  it('el límite es uno, y está escrito una sola vez', () => {
+    expect(CITAS_POR_DIA_AUTOSERVICIO).toBe(1);
+    expect(superaCitasDelDia(CITAS_POR_DIA_AUTOSERVICIO)).toBe(true);
+    expect(superaCitasDelDia(CITAS_POR_DIA_AUTOSERVICIO - 1)).toBe(false);
   });
 });

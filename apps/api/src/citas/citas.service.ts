@@ -8,7 +8,8 @@ import { AgendasService, aFechaUtc } from '../agendas/agendas.service';
 import { DiasNoLaborablesService } from '../agendas/dias-no-laborables.service';
 import {
   chocaConAlguna, controlDentroDeVentana, cumpleAnticipacionMinima, elegirPorMenorCarga,
-  generarCupos, ordenarPorCompactacion, primeraFechaAgendable, violaIntercaladoEnAgenda,
+  generarCupos, ordenarPorCompactacion, primeraFechaAgendable, superaCitasDelDia,
+  violaIntercaladoEnAgenda,
   type CitaExistente, type Cupo,
 } from './citas.reglas';
 import { RecordatoriosService } from '../recordatorios/recordatorios.service';
@@ -46,6 +47,12 @@ const OPCIONES_TX = { maxWait: 15_000, timeout: 20_000 } as const;
 export interface OpcionesAgendamiento {
   /** El paciente actúa solo, sin asistente que lo corrija: portal público y bot de WhatsApp. */
   autoservicio?: boolean;
+  /**
+   * Quién está agendando, cuando se sabe. RN-10.5 lo necesita para contarle las citas
+   * del día, y `cupos()` no lo recibe en su DTO: la consulta de cupos es pública y el
+   * paciente sale de la sesión del portal o del hilo de WhatsApp, no de la petición.
+   */
+  pacienteId?: string;
 }
 
 export interface CupoOfrecido {
@@ -98,6 +105,12 @@ export class CitasService {
      */
     if (!servicio.activo) throw new NotFoundException('El servicio ya no está disponible');
     this.validarAgendablePorAutoservicio(servicio, opciones);
+    /*
+     * RN-10.5 · También aquí, aunque `crear()` lo revalide: ofrecer una lista de horas
+     * y rechazarlas todas al confirmar es peor que decirlo de entrada, y en el bot
+     * significa que el modelo negocia con el paciente una cita imposible.
+     */
+    await this.validarUnaCitaPorDia(this.prisma, fecha, opciones);
 
     const tipo = (dto.tipo ?? servicio.tipo) as TipoCita;
     const limite = dto.limite ?? 10;
@@ -208,6 +221,13 @@ export class CitasService {
     const tipo = (dto.tipo ?? servicio.tipo) as TipoCita;
 
     const cita = await this.prisma.$transaction(async (tx) => {
+      /*
+       * RN-10.5 · El primero de los tres locks, y dentro de la transacción: dos envíos
+       * simultáneos del portal pasarían los dos una comprobación de fuera.
+       */
+      await this.lockPacienteFecha(tx, dto.pacienteId, dto.fecha);
+      await this.validarUnaCitaPorDia(tx, fecha, opciones);
+
       // La duración depende del prestador, y el prestador del balanceo: se resuelve
       // con la duración de catálogo y se recalcula una vez elegido.
       const preliminar: Cupo = { horaInicio, duracionMin: servicio.duracionMin };
@@ -304,6 +324,14 @@ export class CitasService {
     const cambiaDia = fecha.getTime() !== original.fecha.getTime();
 
     const actualizada = await this.prisma.$transaction(async (tx) => {
+      /*
+       * RN-10.5 · Mover una cita a un día donde ya hay otra es agendarse dos ese día
+       * por la puerta de atrás. Se excluye la que se está moviendo: si no, dejarla en
+       * su propio día se bloquearía a sí misma.
+       */
+      await this.lockPacienteFecha(tx, original.pacienteId, dto.fecha);
+      await this.validarUnaCitaPorDia(tx, fecha, opciones, id);
+
       const prestadorId = dto.prestadorId ?? original.prestadorId;
       await this.lockPrestadorFecha(tx, prestadorId, dto.fecha);
       const duracionMin = await this.duracionEfectiva(prestadorId, original.servicio);
@@ -615,6 +643,20 @@ export class CitasService {
    * Se toman SIEMPRE en este orden — prestador y luego fecha — para que no puedan
    * producir un interbloqueo entre transacciones concurrentes.
    */
+  /**
+   * RN-10.5 · Serializa lo que un mismo paciente agenda para un mismo día.
+   *
+   * `lockPrestadorFecha` no sirve aquí: dos citas con prestadores distintos toman
+   * llaves distintas y no se ven entre sí, que es exactamente cómo aparecieron en
+   * producción dos citas a la misma hora con dos médicos.
+   *
+   * Se toma SIEMPRE el primero de los tres —paciente, prestador, fecha— para que el
+   * orden sea total y no pueda haber interbloqueo entre transacciones concurrentes.
+   */
+  private async lockPacienteFecha(tx: Tx, pacienteId: string, fecha: string): Promise<void> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${SEDE_ID}:${fecha}:paciente:${pacienteId}`}))`;
+  }
+
   private async lockPrestadorFecha(tx: Tx, prestadorId: string, fecha: string): Promise<void> {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${SEDE_ID}:${fecha}:${prestadorId}`}))`;
   }
@@ -820,6 +862,50 @@ export class CitasService {
    * abrir o cerrar un servicio al autoservicio desde el backoffice, sin desplegar.
    * La asistente sí los agenda: es exactamente para eso que se marcan.
    */
+  /**
+   * RN-10.5 · Agendándose solo, una cita por día. Para una segunda, que llame.
+   *
+   * Cuenta CUALQUIER cita viva de ese día, la haya puesto él, el bot, la asistente o
+   * el mostrador: lo que se evita es que el paciente acabe con dos sin que nadie con
+   * criterio lo haya mirado, y da igual por qué puerta entró la primera. El límite es
+   * del canal, no del paciente — mostrador y backoffice siguen poniendo las que hagan
+   * falta, porque ahí sí hay alguien valorándolo.
+   *
+   * `cancelada` no cuenta: cancelar y volver a agendar el mismo día es justamente lo
+   * que el paciente tiene que poder hacer solo. Todo lo demás sí, incluida `atendida`
+   * — si ya vino esta mañana y quiere volver esta tarde, eso es una conversación con
+   * una asistente, no un formulario.
+   *
+   * Recibe el cliente de transacción porque en `crear()` corre DENTRO de ella, con el
+   * lock del paciente tomado: en producción aparecieron dos citas a la misma hora con
+   * dos médicos distintos, que es la firma de dos envíos a la vez. Una comprobación
+   * fuera de la transacción las habría dejado pasar las dos.
+   */
+  private async validarUnaCitaPorDia(
+    cliente: Tx,
+    fecha: Date,
+    opciones?: OpcionesAgendamiento,
+    excluirCitaId?: string,
+  ): Promise<void> {
+    if (!opciones?.autoservicio || !opciones.pacienteId) return;
+
+    const vivas = await cliente.cita.count({
+      where: {
+        pacienteId: opciones.pacienteId,
+        fecha,
+        estado: { not: 'cancelada' },
+        ...(excluirCitaId ? { id: { not: excluirCitaId } } : {}),
+      },
+    });
+
+    if (!superaCitasDelDia(vivas)) return;
+
+    throw new BadRequestException(
+      'Ya tienes una cita ese día. Para agendar otra el mismo día, comunícate con una '
+      + 'asistente y te ayudamos a coordinarlo.',
+    );
+  }
+
   private validarAgendablePorAutoservicio(
     servicio: { nombre: string; agendable: boolean },
     opciones?: OpcionesAgendamiento,

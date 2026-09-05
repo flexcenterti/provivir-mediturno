@@ -52,7 +52,14 @@ export const api = {
     pedirProtegido<Sesion>('/identificar', { documento, telefonoUltimos4 }),
   registrar: (datos: object) =>
     pedirProtegido<Sesion>('/registrar', { ...datos, aceptaPrivacidad: 'si' }),
-  cupos: (servicioId: string, fecha: string) => pedir<Cupo[]>('/cupos', { servicioId, fecha, limite: 12 }),
+  /**
+   * La sesión viaja con la consulta de horarios, no solo al agendar: así el motor
+   * puede decir «ya tienes una cita ese día» antes de pintar una lista de horas que
+   * después va a rechazar. Es opcional en el servidor, y mirar horarios sin
+   * identificarse sigue funcionando.
+   */
+  cupos: (servicioId: string, fecha: string, sesion?: string) =>
+    pedir<Cupo[]>('/cupos', { servicioId, fecha, limite: 12, sesion }),
   agendar: (cuerpo: object) =>
     pedirProtegido<{ creada: boolean; confirmacion?: Confirmacion; motivo?: string; alternativas?: Cupo[] }>('/agendar', cuerpo),
 };

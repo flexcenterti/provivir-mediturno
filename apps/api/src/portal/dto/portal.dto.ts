@@ -49,6 +49,14 @@ export class RegistrarPacienteDto {
 }
 
 export class CuposPortalDto {
+  /**
+   * RN-10.5 · Opcional a propósito: la lista de horarios se puede mirar sin haberse
+   * identificado. Cuando viene, el motor sabe a quién contarle las citas del día y
+   * puede decirlo ANTES de ofrecer horas que después va a rechazar.
+   */
+  @IsOptional() @IsString() @MaxLength(300)
+  sesion?: string;
+
   @IsString()
   servicioId!: string;
 
