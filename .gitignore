@@ -27,6 +27,9 @@ apps/api/prisma/migrations/dev.db*
 
 # Datos de carga masiva (PII de pacientes)
 uploads/
+# Adjuntos de WhatsApp y anuncios de sala: se generan en ejecución y en las pruebas.
+# Faltaba, y una corrida de la suite llegó a commitear 112 PNG de usar y tirar.
+media/
 *.csv
 !docs/**/*.csv
 
