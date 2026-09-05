@@ -154,6 +154,12 @@ describe('Canal WhatsApp (e2e)', () => {
     ...extra,
   });
 
+  async function tokenAsistente(): Promise<string> {
+    const r = await request(http).post('/api/auth/login')
+      .send({ email: 'asistente@provivir.local', password: 'Provivir2026!' }).expect(200);
+    return r.body.accessToken;
+  }
+
   // ─────────────────────── Webhook y firma ───────────────────────
 
   describe('webhook', () => {
@@ -301,6 +307,40 @@ describe('Canal WhatsApp (e2e)', () => {
         await prisma.conversacion.deleteMany({ where: { telefono: id } });
         await prisma.consentimientoWhatsapp.deleteMany({ where: { identificador: id } });
       }
+    });
+
+    /**
+     * El agujero que abre poder tomar un hilo que el bot todavía no ha escalado.
+     *
+     * La puerta del consentimiento va ANTES de comprobar si el hilo está en manos de
+     * una persona —tiene que anteceder también a una foto o una nota de voz—, así que
+     * al aceptar se retomaba el mensaje pendiente con la IA sin volver a mirarlo.
+     *
+     * Mutación que la mata: quitar la relectura del estado en `resolverConsentimiento`.
+     */
+    it('si una asistente ya tomó el hilo, aceptar NO le devuelve la conversación a la IA', async () => {
+      // El paciente escribe algo que la IA tendría que contestar: así queda pendiente
+      // y hay de verdad qué retomar. Sin mensaje pendiente la prueba pasaría sola.
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'quiero una cita' }));
+      const c = await prisma.conversacion.findFirstOrThrow({ where: { telefono: NUEVO } });
+
+      const token = await tokenAsistente();
+      await request(http).patch(`/api/bandeja/${c.id}/tomar`)
+        .set('Authorization', `Bearer ${token}`).expect(200);
+      const tomada = await prisma.conversacion.findUniqueOrThrow({ where: { id: c.id } });
+      expect(tomada.estado).toBe('en_gestion');
+
+      await conversaciones.procesar(de(NUEVO, { tipo: 'texto', texto: 'Acepto', botonId: 'consentimiento_acepto' }));
+
+      // Lo decisivo: el modelo no se invocó por encima de quien está atendiendo.
+      expect(llm.llamadas).toHaveLength(0);
+
+      const despues = await prisma.conversacion.findUniqueOrThrow({ where: { id: c.id } });
+      expect(despues.estado).toBe('en_gestion');
+      expect(despues.tomadaPor).toBe(tomada.tomadaPor);
+
+      // Y el paciente no se queda sin respuesta: la bienvenida sí sale.
+      expect(enviados.some((e) => e.telefono === NUEVO)).toBe(true);
     });
 
     it('RN-09.10: el primer contacto pide la autorización y NO invoca a la IA', async () => {
@@ -581,12 +621,6 @@ describe('Canal WhatsApp (e2e)', () => {
   // ─────────────────────── Bandeja ───────────────────────
 
   describe('bandeja de la asistente', () => {
-    async function tokenAsistente(): Promise<string> {
-      const r = await request(http).post('/api/auth/login')
-        .send({ email: 'asistente@provivir.local', password: 'Provivir2026!' }).expect(200);
-      return r.body.accessToken;
-    }
-
     it('RN-08.3: la conversación escalada aparece con motivo y tiempo esperando', async () => {
       await conversaciones.procesar(entrante({ tipo: 'imagen', mediaId: 'm1', mimeType: 'image/jpeg' }) as never);
       const token = await tokenAsistente();
@@ -858,6 +892,119 @@ describe('Canal WhatsApp (e2e)', () => {
 
         await request(http).get(`/api/bandeja/mensajes/${m.id}/media`)
           .set('Authorization', `Bearer ${login.body.accessToken}`).expect(403);
+      });
+    });
+
+    /**
+     * El hilo que el bot atendió de punta a punta: existe, y hasta ahora no había
+     * forma de llegar a él. `PENDIENTES` pide `escalada` o `reabiertaTs`, y «cerradas»
+     * pide `resueltaTs` —que solo escribe `resolver()`, o sea una persona—, así que
+     * una conversación en `ia_activa` no caía en ninguna de las dos vistas.
+     */
+    describe('conversaciones que el bot atendió solo', () => {
+      /** Una conversación real del bot: `ia_activa`, sin escalar y sin resolver. */
+      async function delBot() {
+        llm.programar(texto('Con gusto te ayudo.'));
+        await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'gracias' }) as never);
+        const c = await prisma.conversacion.findFirstOrThrow({ where: { telefono: TEL } });
+        expect(c.estado).toBe('ia_activa');
+        expect(c.escalada).toBe(false);
+        expect(c.resueltaTs).toBeNull();
+        return c;
+      }
+
+      const contiene = (cuerpo: { datos: Array<{ id: string }> }, id: string) =>
+        cuerpo.datos.some((x) => x.id === id);
+
+      it('no sale en pendientes ni en cerradas, pero sí en todas', async () => {
+        const c = await delBot();
+        const token = await tokenAsistente();
+        const pedir = async (vista: string) => (await request(http)
+          .get(`/api/bandeja?vista=${vista}`)
+          .set('Authorization', `Bearer ${token}`).expect(200)).body;
+
+        expect(contiene(await pedir('pendientes'), c.id)).toBe(false);
+        expect(contiene(await pedir('cerradas'), c.id)).toBe(false);
+        expect(contiene(await pedir('todas'), c.id)).toBe(true);
+      });
+
+      it('se encuentra buscando por el documento del paciente', async () => {
+        const c = await delBot();
+        const token = await tokenAsistente();
+        const buscar = async (vista: string) => (await request(http)
+          .get(`/api/bandeja?vista=${vista}&q=${DOC}`)
+          .set('Authorization', `Bearer ${token}`).expect(200)).body;
+
+        expect(contiene(await buscar('todas'), c.id)).toBe(true);
+        // El buscador hereda el filtro de la vista: en pendientes sigue sin aparecer.
+        expect(contiene(await buscar('pendientes'), c.id)).toBe(false);
+      });
+
+      it('la asistente la toma y el bot deja de contestar', async () => {
+        const c = await delBot();
+        const token = await tokenAsistente();
+
+        await request(http).patch(`/api/bandeja/${c.id}/tomar`)
+          .set('Authorization', `Bearer ${token}`).expect(200);
+
+        // `programar()` es lo único que limpia `llamadas`: sin esto heredaría la del bot.
+        llm.programar();
+        await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'sigo aquí' }) as never);
+
+        expect(llm.llamadas).toHaveLength(0);
+        const despues = await prisma.conversacion.findUniqueOrThrow({ where: { id: c.id } });
+        expect(despues.estado).toBe('en_gestion');
+        expect(despues.tomadaPor).not.toBeNull();
+      });
+
+      it('al resolverla pasa al histórico, desde donde ya se sabe reabrir', async () => {
+        const c = await delBot();
+        const token = await tokenAsistente();
+
+        await request(http).patch(`/api/bandeja/${c.id}/resolver`)
+          .set('Authorization', `Bearer ${token}`).expect(200);
+
+        const hist = await request(http).get('/api/bandeja?vista=cerradas')
+          .set('Authorization', `Bearer ${token}`).expect(200);
+        expect(contiene(hist.body, c.id)).toBe(true);
+      });
+
+      /**
+       * El hilo vivo se busca por variantes del número, no por igualdad exacta.
+       *
+       * Hoy no se alcanza por el webhook —`normalizarIdentidad` corre a la entrada, así
+       * que toda fila que crea el bot ya está en `+57…`—, pero sí en cuanto una fila
+       * nace con el teléfono tal como lo tecleó el paciente en el portal. Sin esto, su
+       * respuesta abriría un segundo hilo y la asistente se quedaría mirando el vacío.
+       *
+       * Mutación que la mata: volver a `where: { telefono: entrante.telefono }`.
+       */
+      it('un hilo guardado sin normalizar recibe la respuesta del paciente', async () => {
+        const SIN_NORMALIZAR = '3009991111';
+        await prisma.conversacion.deleteMany({ where: { telefono: SIN_NORMALIZAR } });
+        const paciente = await prisma.paciente.findUniqueOrThrow({ where: { documento: DOC } });
+        const c = await prisma.conversacion.create({
+          data: {
+            telefono: SIN_NORMALIZAR, pacienteId: paciente.id,
+            estado: 'en_gestion', sedeId: 'cdc-oriente',
+          },
+        });
+
+        try {
+          llm.programar();
+          // Meta siempre entrega el formato internacional.
+          await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'ya te respondo' }) as never);
+
+          const suyas = await prisma.conversacion.count({ where: { pacienteId: paciente.id } });
+          expect(suyas).toBe(1);
+          const m = await prisma.mensaje.findFirstOrThrow({
+            where: { direccion: 'entrante', contenido: 'ya te respondo' },
+          });
+          expect(m.conversacionId).toBe(c.id);
+        } finally {
+          await prisma.mensaje.deleteMany({ where: { conversacionId: c.id } });
+          await prisma.conversacion.deleteMany({ where: { telefono: SIN_NORMALIZAR } });
+        }
       });
     });
 

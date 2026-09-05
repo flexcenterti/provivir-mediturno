@@ -18,27 +18,11 @@ import { parametrosReapertura } from '../whatsapp/whatsapp.plantillas';
 import { variantesDeTelefono } from '../whatsapp/whatsapp.normalizador';
 import { armarPagina } from '../comun/paginacion';
 import { esperaEnMinutos, ordenarPendientes } from './bandeja.orden';
+import { PENDIENTES } from './bandeja.filtros';
 import type { BuscarBandejaDto } from './dto/bandeja.dto';
 
 /** Nombre de la plantilla aprobada en Meta para retomar una conversación cerrada. */
 const CLAVE_PLANTILLA_REAPERTURA = 'plantilla_reapertura_conversacion';
-
-/**
- * Pendiente = sin resolver y esperando a una persona.
- *
- * `reabiertaTs` entra en el OR porque una conversación que el bot resolvió solo
- * (`escalada: false`) y una asistente reabre tiene que aparecer aquí. La alternativa
- * —ponerle `escalada: true` al reabrir— falsearía el contador de escalaciones de un
- * mes ya reportado, porque las métricas se calculan sobre el estado actual.
- *
- * Vive en una constante porque el listado y el conteo lo tenían duplicado
- * literalmente, y dos copias del mismo filtro acaban divergiendo: la burbuja diría
- * un número y la lista mostraría otro.
- */
-const PENDIENTES: Prisma.ConversacionWhereInput = {
-  resueltaTs: null,
-  OR: [{ escalada: true }, { reabiertaTs: { not: null } }],
-};
 
 const PACIENTE_RESUMIDO = {
   select: { id: true, nombres: true, apellidos: true, documento: true },
