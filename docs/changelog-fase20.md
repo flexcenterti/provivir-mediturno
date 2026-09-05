@@ -1,6 +1,6 @@
 # Changelog · FASE 20 — La sala de espera, con el reparto de la guía de televisión
 
-**Estado:** en rama `fase-20-publicidad-en-sala`. **Una migración.** 318 unitarias (API) +
+**Estado:** desplegado en producción el 2026-09-05. **Una migración.** 318 unitarias (API) +
 74 (shared) + 381 e2e + 60 de navegador.
 
 ## Por qué
@@ -199,3 +199,38 @@ probablemente no.
 - **Las fuentes siguen sin cargarse.** `--fm` y `--fd` apuntan a IBM Plex y Sora y no hay
   ni un `<link>` ni un `@font-face` en ningún `index.html` del monorepo: todo cae a
   `system-ui`. Es de antes de esta fase y no se toca aquí.
+
+---
+
+## El despliegue
+
+Desplegado el 2026-09-05 a las 22:08. **Una migración**, y exactamente una: de 12 a 13.
+
+### Verificado en vivo
+
+- Las **cinco rutas nuevas** registradas: `GET/POST /pantallas/anuncios`,
+  `DELETE`, `PATCH …/mover` y `GET …/imagen`.
+- `anuncio_sala` creada y vacía. `/api/health/ready` en `ok`, contenedor `healthy`, sin
+  errores ni 500 en el registro.
+- **La forma de `/estado` es la correcta**, comprobada contra la pantalla real que la
+  clínica ya tenía creada: `anuncios` y `ahora` salen al nivel superior y el objeto
+  `pantalla` **no los lleva dentro**. Eso es lo que evita que el reproductor de YouTube se
+  recree cada 60 s.
+- La ruta pública de imágenes responde **404 y no 500** con un id inexistente, y listar o
+  subir siguen exigiendo sesión (401).
+- Bundles: backoffice `index-Drxi6gZ9.js` y TV `index-_5pAeNb5.js` cambiaron; **el portal
+  quedó en `index-Duhw44L6.js`, el mismo de antes** — esta fase no lo toca. Sin `dist`
+  anidado.
+- Caddy no se tocó: la CSP de `/tv` sigue siendo `img-src 'self' data: https://i.ytimg.com`,
+  que ya permitía las imágenes del mismo origen.
+- Datos: 93 pacientes, 25 citas, 463 conversaciones, 6.414 mensajes — **uno más** que antes
+  del relevo, tráfico real de WhatsApp durante la ventana.
+
+### Lo que NO se pudo verificar, y hay que decirlo
+
+**Que `media/anuncios` se cree bien es la trampa clásica de estrenar un subdirectorio
+dentro de un volumen nombrado, y solo está verificada la precondición**: `/app/media`
+existe, es `drwxr-xr-x node:node`, y el proceso corre como `uid=1000(node)`. Con eso el
+`mkdir` debería prosperar, pero la carpeta no existe todavía porque se crea en la primera
+subida, y subir exige credenciales de producción. **La primera imagen que suba la clínica
+es la prueba**: si la miniatura aparece en el backoffice, está resuelto; si no, es esto.
