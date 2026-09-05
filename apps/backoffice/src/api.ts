@@ -146,6 +146,36 @@ async function pedir<T>(ruta: string, init?: RequestInit, reintentar = true): Pr
  * —si no, abrir un adjunto tras un rato inactivo echaría al login— y devuelve el
  * contenido como Blob, porque un `<img src>` no puede llevar la cabecera del token.
  */
+/**
+ * Sube un archivo. Va aparte de `pedir` porque `FormData` no puede llevar el
+ * `Content-Type: application/json` que aquel fija.
+ *
+ * La renovación silenciosa de sesión hay que pedirla a mano: subir un CSV de 50.000
+ * contactos justo cuando vence el token no puede costar el archivo. Estaba copiado en
+ * dos vistas y los anuncios de sala eran el tercer llamador — que es exactamente el
+ * motivo por el que en el servidor se creó `opcionesSubida`.
+ */
+export async function subirArchivo<T>(ruta: string, archivo: File): Promise<T> {
+  const form = new FormData();
+  form.append('archivo', archivo);
+
+  const enviar = () =>
+    fetch(`/api${ruta}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token.leer()}` },
+      body: form,
+    });
+
+  let r = await enviar();
+  if (r.status === 401 && (await refrescarSesion())) r = await enviar();
+
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.message ?? 'No fue posible cargar el archivo');
+  }
+  return r.json() as Promise<T>;
+}
+
 async function pedirBlob(ruta: string, reintentar = true): Promise<Blob> {
   const t = token.leer();
   const r = await fetch(`/api${ruta}`, {
@@ -319,6 +349,18 @@ export const api = {
     pedir<Pantalla>(`/pantallas/${id}`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
   /** Retirar una pantalla revoca su enlace y no se puede deshacer (RN-11.6). */
   eliminarPantalla: (id: string) => pedir<void>(`/pantallas/${id}`, { method: 'DELETE' }),
+
+  /** RN-11.7 · los anuncios de la franja del televisor. Son de sede, no de pantalla. */
+  anuncios: () => pedir<AnuncioSala[]>('/pantallas/anuncios'),
+  subirAnuncio: (archivo: File) => subirArchivo<AnuncioSala>('/pantallas/anuncios', archivo),
+  moverAnuncio: (id: string, direccion: 'izquierda' | 'derecha') =>
+    pedir<AnuncioSala[]>(`/pantallas/anuncios/${id}/mover`, {
+      method: 'PATCH', body: JSON.stringify({ direccion }),
+    }),
+  eliminarAnuncio: (id: string) =>
+    pedir<void>(`/pantallas/anuncios/${id}`, { method: 'DELETE' }),
+  /** La misma ruta pública que usa el televisor: si la miniatura se ve, el TV también. */
+  urlAnuncio: (id: string) => `/api/pantallas/anuncios/${id}/imagen`,
 
   kiosko: () => pedir<EstadoKiosko>('/kiosko/estado'),
 
@@ -665,6 +707,10 @@ export interface Pantalla {
   id: string; nombre: string; servicios: string[]; turnosVisibles: number;
   sonido: boolean; mensaje: string | null; media: boolean;
   canalYoutube: string | null; videosPromo: string[]; intervaloInstitucionalMin: number;
+}
+
+export interface AnuncioSala {
+  id: string; nombreOriginal: string; mime: string; bytes: number; orden: number;
 }
 
 export interface EstadoKiosko {
