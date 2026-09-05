@@ -21,7 +21,7 @@
 | 14 · Sala compartida y vínculo con la ficha de prestador | **Desplegada** — `docs/changelog-fase14.md` |
 | 15 · Constancia de cobro en el mostrador | **Desplegada** — `docs/changelog-fase15.md` |
 | 16 · Hablar con los pacientes que se agendan solos | **Desplegada** — `docs/changelog-fase16.md` |
-| 17 · Una cita por día agendándose solo | **En rama** — `docs/changelog-fase17.md` |
+| 17 · Una cita por día agendándose solo | **Desplegada** — `docs/changelog-fase17.md` |
 
 **Las seis primeras fases están completas.** Lo que falta para producción son credenciales e insumos
 del cliente, no código: ver `docs/checklist-piloto.md` y `despliegue/GUIA-DESPLIEGUE.md`.

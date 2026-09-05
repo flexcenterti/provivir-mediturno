@@ -1,6 +1,6 @@
 # Changelog · FASE 17 — Una cita por día agendándose solo
 
-**Estado:** en rama `fase-17-una-cita-por-dia`. 316 unitarias (API) + 39 (shared) +
+**Estado:** desplegado en producción el 2026-09-05. 316 unitarias (API) + 39 (shared) +
 335 e2e + 35 de navegador.
 
 ## Por qué
@@ -114,3 +114,38 @@ ellas — que es exactamente lo que el cliente pidió.
   regla es hacia adelante y esa cita ya está confirmada. Hay que llamarla.
 - **El límite es uno y está en el código**, no en configuración. Si la clínica quiere dos
   para algún servicio, es un parámetro nuevo y una conversación de producto.
+
+---
+
+## El despliegue
+
+Desplegado el 2026-09-05 a las 10:38 (15:38 UTC), en horario de atención. **Sin migración
+y sin parámetros nuevos**: las migraciones siguen en 12, ninguna nueva, que es lo que
+tenía que pasar.
+
+### Verificado en vivo
+
+`/api/health/ready` en `ok` con los cuatro subsistemas · un solo arranque limpio y ningún
+error en el registro · la regla presente en el contenedor que corre, no solo en el árbol:
+el mensaje al paciente y **tres** `pg_advisory_xact_lock` en `citas.service.js` —el del
+paciente, el del prestador y el de la fecha— · el bundle servido igual al compilado en las
+tres aplicaciones, sin `dist` anidado.
+
+El bundle del portal cambió de hash y el del backoffice **no**, que es la comprobación de
+que se desplegó lo que se tocó y nada más: esta fase no toca el backoffice.
+
+### Datos
+
+Nada se perdió y nada estaba quieto: durante la ventana los conteos subieron —79
+pacientes, 369 conversaciones, 5.414 mensajes— porque había pacientes escribiendo por
+WhatsApp mientras se desplegaba. Las 25 citas, sin cambio.
+
+### La cita doble que queda
+
+Una sola en todo el futuro, y es la conocida: **Luciana Álzate Camayo, martes 8, E0002 a
+las 13:00 y E0001 a las 14:00**, misma psicóloga, puestas por el bot con un minuto de
+diferencia. No se tocó, como se acordó: la regla es hacia adelante y cancelar por cuenta
+propia una cita que una persona reservó no le corresponde al software. **Hay que
+llamarla.**
+
+De aquí en adelante no puede volver a formarse por el portal ni por el bot.
