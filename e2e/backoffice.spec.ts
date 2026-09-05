@@ -713,3 +713,67 @@ test('RN-11.1 · una pantalla sin servicios queda marcada en la lista y en el fo
 
   await expect(page.getByText(/Sin servicios · no mostrará llamados/)).toBeVisible();
 });
+
+// ─────────────── Fase 20 · anuncios de la sala ───────────────
+
+/** Un PNG de 1×1 de verdad: el servidor valida por la firma, no por la extensión. */
+const PNG_1x1 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+/*
+ * Mata: que la tarjeta no recargue tras subir —parece que no se guardó y se suben
+ * tres—, o que la miniatura apunte a otra ruta que la del televisor. Usar la MISMA URL
+ * pública es lo que convierte esta vista previa en la prueba de que el televisor
+ * funciona: si aquí se ve, allí se ve.
+ */
+test('RN-11.7 · se sube un anuncio y la miniatura sale de la misma ruta que usa el televisor', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: 'Pantallas de sala' }).click();
+  await expect(page.getByRole('heading', { name: 'Anuncios de la sala' })).toBeVisible();
+
+  page.on('dialog', (d) => void d.accept());
+  // Deja la tarjeta vacía, sea cual sea el estado que dejó otra prueba.
+  for (;;) {
+    const retirar = page.locator('.anuncio-ficha').getByRole('button', { name: 'Retirar' }).first();
+    if (await retirar.count() === 0) break;
+    await retirar.click();
+    await expect(page.locator('.anuncio-ficha')).toHaveCount(await page.locator('.anuncio-ficha').count() - 1);
+  }
+  await expect(page.getByText(/Todavía no hay anuncios/)).toBeVisible();
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'promocion.png', mimeType: 'image/png', buffer: PNG_1x1,
+  });
+
+  const miniatura = page.locator('.anuncio-ficha img');
+  await expect(miniatura).toHaveCount(1);
+  await expect(miniatura).toHaveAttribute('src', /^\/api\/pantallas\/anuncios\/[0-9a-f-]{36}\/imagen$/);
+  await expect(page.getByText('1 de 4')).toBeVisible();
+
+  /*
+   * Se retira al terminar. Los anuncios son de SEDE, así que dejarlo aquí se lo
+   * encuentran las pruebas del televisor —otro proyecto, que corre después— con una
+   * franja que no pidieron.
+   */
+  await page.locator('.anuncio-ficha').getByRole('button', { name: 'Retirar' }).click();
+  await expect(page.locator('.anuncio-ficha')).toHaveCount(0);
+});
+
+/*
+ * Mata: aceptar cualquier archivo con extensión de imagen. Es el mismo defecto que
+ * tienen hoy los otros dos endpoints de subida del sistema, y aquí el archivo acabaría
+ * servido desde una ruta pública.
+ */
+test('RN-11.7 · un archivo que no es una imagen se rechaza y lo dice', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: 'Pantallas de sala' }).click();
+  await expect(page.getByRole('heading', { name: 'Anuncios de la sala' })).toBeVisible();
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'trampa.png', mimeType: 'image/png', buffer: Buffer.from('<!doctype html><script>'),
+  });
+
+  await expect(page.getByText(/no es una imagen/i)).toBeVisible();
+});
