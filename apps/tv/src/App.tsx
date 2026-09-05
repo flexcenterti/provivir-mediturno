@@ -1,18 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { interpretarYoutube, urlEmbedDirecto } from '@provivir/shared';
 import { io, type Socket } from 'socket.io-client';
+import { alCambiarVoces, anunciar, apagar, armar, hayVozEspanola, type EstadoSonido } from './sonido';
 
 interface Llamado {
+  turnoId: string;
   codigo: string;
   paciente: string;
   prestador: string;
   consultorio: string | null;
   ts: string;
+  repetido?: boolean;
 }
 
 interface ConfigPantalla {
   id: string;
   nombre: string;
+  servicios: string[];
   turnosVisibles: number;
   sonido: boolean;
   mensaje: string | null;
@@ -20,6 +24,65 @@ interface ConfigPantalla {
   canalYoutube: string | null;
   videosPromo: string[];
   intervaloInstitucionalMin: number;
+}
+
+/**
+ * RN-11.5 · el estado del sonido de esta pantalla.
+ *
+ * Tres estados y no dos, porque «no suena» tiene causas con arreglos distintos: la
+ * pantalla está configurada sin sonido (se arregla en el backoffice), nadie ha tocado
+ * el televisor (se arregla con el mando), o el aparato no trae voz en español (se
+ * arregla instalando el idioma). Sin distinguirlos, quien instala el stick no sabe
+ * dónde mirar.
+ */
+function useSonido(activado: boolean) {
+  const [estado, setEstado] = useState<EstadoSonido>('apagado');
+
+  const activar = useCallback(() => {
+    void armar().then((listo) => {
+      if (listo) setEstado(hayVozEspanola() ? 'activo' : 'sin-voz');
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!activado) { apagar(); setEstado('apagado'); return; }
+
+    setEstado('pendiente');
+    // Con el navegador del kiosko lanzado con --autoplay-policy=no-user-gesture-required
+    // esto ya prospera y la franja no llega a verse.
+    void armar().then((listo) => {
+      setEstado(listo ? (hayVozEspanola() ? 'activo' : 'sin-voz') : 'pendiente');
+    });
+
+    // El paquete de voces puede llegar después del primer render: `getVoices()` da []
+    // hasta que dispara `voiceschanged`, y decidir con la primera respuesta condenaría
+    // al televisor al silencio para siempre.
+    const soltar = alCambiarVoces(() => {
+      setEstado((e) => (e === 'pendiente' || e === 'apagado' ? e : (hayVozEspanola() ? 'activo' : 'sin-voz')));
+    });
+    return () => { soltar(); apagar(); };
+  }, [activado]);
+
+  return { estado, activar };
+}
+
+/**
+ * La franja de activación. **Nunca tapa el turno que se está llamando**: una sala de
+ * espera con el tablero escondido detrás de una petición de permisos está peor que
+ * muda.
+ *
+ * Es un `<button>` de verdad y enfocado, y eso es lo que la hace usable con el mando de
+ * un stick: el botón OK dispara un `click` sobre el elemento con foco. Un `<div
+ * onClick>` no lo recibiría nunca, y en un televisor sin táctil no habría forma de
+ * activar el sonido.
+ */
+function FranjaSonido({ onActivar }: { onActivar: () => void }) {
+  return (
+    <button className="tv-armar" autoFocus onClick={onActivar}>
+      Toca la pantalla o pulsa OK en el control para activar el sonido
+      <small>Los llamados se ven igual sin sonido.</small>
+    </button>
+  );
 }
 
 /**
@@ -32,6 +95,8 @@ export function App() {
   const [llamados, setLlamados] = useState<Llamado[]>([]);
   const [error, setError] = useState('');
   const socketRef = useRef<Socket | null>(null);
+  /* El anuncio cuelga del socket, no del estado: ver el comentario del handler. */
+  const sonandoRef = useRef(false);
 
   useEffect(() => {
     if (!pantallaId) { setError('Falta el parámetro ?pantalla=<id>'); return; }
@@ -39,21 +104,48 @@ export function App() {
     const cargar = () =>
       fetch(`/api/pantallas/${pantallaId}/estado`)
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Pantalla no encontrada'))))
-        .then((d) => { setConfig(d.pantalla); setLlamados(d.llamados); })
+        .then((d) => {
+          /*
+           * Solo se reemplaza si cambió de verdad. Reasignar un objeto idéntico cada
+           * minuto hacía trepidar todo efecto llaveado en `config` — y en particular
+           * destruía y recreaba el reproductor de YouTube, así que un video
+           * institucional de más de 60 s no llegaba jamás a su evento de fin.
+           */
+          setConfig((prev) => (
+            JSON.stringify(prev) === JSON.stringify(d.pantalla) ? prev : d.pantalla
+          ));
+          setLlamados(d.llamados);
+        })
         .catch((e: Error) => setError(e.message));
 
     void cargar();
 
     // Llamados en vivo por WebSocket; el fetch periódico es la red de seguridad
     // si la TV pierde la conexión un rato.
-    const socket = io('/tiempo-real', { transports: ['websocket'] });
+    const socket = io('/tiempo-real', { path: '/tiempo-real', transports: ['websocket'] });
     socketRef.current = socket;
     socket.on('connect', () => socket.emit('suscribir-pantalla', pantallaId));
-    socket.on('llamado', (l: Llamado) => setLlamados((prev) => [l, ...prev].slice(0, 12)));
+    socket.on('llamado', (l: Llamado) => {
+      // Llaveado por turno: el mismo llega por el sondeo y por el socket, y con el
+      // rellamado, varias veces por el socket.
+      setLlamados((prev) => [l, ...prev.filter((x) => x.turnoId !== l.turnoId)].slice(0, 12));
+      /*
+       * Se anuncia AQUÍ y en ningún otro sitio. Colgarlo del estado haría que cada
+       * refetch de 60 s —o una reconexión— le recitara a la sala los últimos cuatro
+       * turnos.
+       */
+      if (sonandoRef.current) anunciar(l);
+    });
+    socket.on('retirar-llamado', ({ turnoId }: { turnoId: string }) => {
+      setLlamados((prev) => prev.filter((x) => x.turnoId !== turnoId));
+    });
 
     const id = setInterval(cargar, 60_000);
     return () => { socket.disconnect(); clearInterval(id); };
   }, [pantallaId]);
+
+  const sonido = useSonido(config?.sonido ?? false);
+  sonandoRef.current = sonido.estado === 'activo' || sonido.estado === 'sin-voz';
 
   if (error) return <div className="tv-error">{error}</div>;
   if (!config) return <div className="tv-error">Conectando…</div>;
@@ -67,7 +159,14 @@ export function App() {
         <div className="brand-mark">CPP</div>
         <h1>Centro de Profesionales & Provivir · CPP Principal</h1>
         <span className="tv-sala">{config.nombre}</span>
+        {sonido.estado === 'sin-voz' && (
+          <span className="tv-aviso" title="Falta el paquete de voz en español en el televisor">
+            Sin voz en español
+          </span>
+        )}
       </header>
+
+      {sonido.estado === 'pendiente' && <FranjaSonido onActivar={sonido.activar} />}
 
       <div className="tv-cuerpo">
         <section className="tv-turnos">
@@ -79,12 +178,20 @@ export function App() {
               <span className="tv-consultorio">{actual.consultorio ?? actual.prestador}</span>
             </div>
           ) : (
-            <div className="tv-actual"><span className="tv-etiqueta">Esperando llamados</span></div>
+            <div className="tv-actual">
+              {/* Una pantalla sin servicios no recibe un solo llamado en toda su vida,
+                  y «Esperando llamados» es indistinguible de una sala tranquila. */}
+              <span className="tv-etiqueta">
+                {config.servicios.length === 0
+                  ? 'Esta pantalla no tiene servicios asignados'
+                  : 'Esperando llamados'}
+              </span>
+            </div>
           )}
 
           <ul className="tv-lista">
-            {visibles.slice(1).map((l, i) => (
-              <li key={`${l.codigo}-${i}`}>
+            {visibles.slice(1).map((l) => (
+              <li key={l.turnoId}>
                 <strong>{l.codigo}</strong>
                 <span>{l.paciente}</span>
                 <span className="tv-consultorio-min">{l.consultorio ?? l.prestador}</span>
@@ -131,46 +238,69 @@ function FrameMultimedia({ config }: { config: ConfigPantalla }) {
    * iframe normal y solo los institucionales usan la API, que es la que avisa
    * cuando el video termina para volver al canal.
    */
-  useEffect(() => {
-    const el = contenedor.current;
-    if (!el || enCanal) return;
+  const videoId = extraerVideoId(config.videosPromo[indiceVideo] ?? '');
+  const cuantos = config.videosPromo.length;
 
-    const videoId = extraerVideoId(config.videosPromo[indiceVideo] ?? '');
-    if (!videoId) return;
+  useEffect(() => {
+    const marco = contenedor.current;
+    if (!marco || enCanal || !videoId) return;
+
+    let vivo = true;
+    let player: { destroy?: () => void } | null = null;
+
+    const siguiente = () => {
+      setIndiceVideo((i) => (i + 1) % Math.max(1, cuantos));
+      setModo('canal');
+    };
 
     const iniciar = () => {
       const YT = (window as unknown as { YT?: YtNamespace }).YT;
-      if (!YT?.Player) return;
-      const player = new YT.Player(el, {
+      if (!vivo || !YT?.Player) return;
+
+      /*
+       * Nodo propio y desechable para YouTube: `YT.Player` REEMPLAZA el elemento que
+       * recibe por su iframe. Si le diéramos el div del ref, tras `destroy()` el ref
+       * apuntaría a un nodo fuera del documento —frame en negro para siempre— y React
+       * podría intentar quitar un hijo que ya no está. Así el ref siempre apunta a un
+       * nodo que posee React, y YouTube siempre recibe uno que puede destruir.
+       */
+      const hueco = document.createElement('div');
+      hueco.style.height = '100%';
+      marco.replaceChildren(hueco);
+
+      player = new YT.Player(hueco, {
         height: '100%',
         width: '100%',
         videoId,
         playerVars: { autoplay: 1, mute: 1, controls: 0, rel: 0, playsinline: 1 },
         events: {
-          onStateChange: (e: { data: number }) => {
-            // ENDED = 0 · al terminar el institucional se vuelve al canal en vivo.
-            if (e.data === 0) {
-              setIndiceVideo((i) => (i + 1) % Math.max(1, config.videosPromo.length));
-              setModo('canal');
-            }
-          },
+          // ENDED = 0 · al terminar el institucional se vuelve al canal en vivo.
+          onStateChange: (e: { data: number }) => { if (e.data === 0) siguiente(); },
           // Un video que no se puede reproducir no debe congelar la rotación.
-          onError: () => {
-            setIndiceVideo((i) => (i + 1) % Math.max(1, config.videosPromo.length));
-            setModo('canal');
-          },
+          onError: siguiente,
         },
       });
-      return () => player.destroy?.();
     };
 
-    if ((window as unknown as { YT?: YtNamespace }).YT?.Player) return iniciar();
+    void cargarApiYoutube().then(iniciar);
 
-    const script = document.createElement('script');
-    script.src = 'https://www.youtube.com/iframe_api';
-    (window as unknown as { onYouTubeIframeAPIReady?: () => void }).onYouTubeIframeAPIReady = iniciar;
-    document.body.appendChild(script);
-  }, [enCanal, indiceVideo, config.videosPromo]);
+    /*
+     * La limpieza sale del efecto y no del callback. Por la rama asíncrona, el valor
+     * que devolvía `iniciar()` se lo tragaba `onYouTubeIframeAPIReady`: un reproductor
+     * creado por esa vía no se destruía nunca.
+     */
+    return () => {
+      vivo = false;
+      player?.destroy?.();
+      marco.replaceChildren();
+    };
+    /*
+     * Las deps son el video concreto, no `config.videosPromo`: el array llegaba nuevo
+     * en cada refetch de 60 s y rehacía el reproductor, así que un institucional más
+     * largo que un minuto no alcanzaba jamás su evento de fin — que es lo único de lo
+     * que depende RN-11.2 para volver al canal.
+     */
+  }, [enCanal, videoId, cuantos]);
 
   /*
    * Qué se emite, decidido en un solo sitio. Encadenar ternarios en el JSX dejaba
@@ -221,6 +351,25 @@ function FrameMultimedia({ config }: { config: ConfigPantalla }) {
 
 interface YtNamespace {
   Player: new (el: HTMLElement, opciones: Record<string, unknown>) => { destroy?: () => void };
+}
+
+/**
+ * El script de la API se carga UNA vez por documento.
+ *
+ * Antes se añadía en cada montaje del efecto: dos montajes antes de que resolviera
+ * dejaban dos `<script>` pisándose el mismo `onYouTubeIframeAPIReady`, y el primero se
+ * perdía en silencio.
+ */
+let apiYoutube: Promise<void> | null = null;
+function cargarApiYoutube(): Promise<void> {
+  apiYoutube ??= new Promise<void>((listo) => {
+    if ((window as unknown as { YT?: YtNamespace }).YT?.Player) { listo(); return; }
+    (window as unknown as { onYouTubeIframeAPIReady?: () => void }).onYouTubeIframeAPIReady = () => listo();
+    const script = document.createElement('script');
+    script.src = 'https://www.youtube.com/iframe_api';
+    document.body.appendChild(script);
+  });
+  return apiYoutube;
 }
 
 /** Acepta una URL completa de YouTube o directamente el id del video. */
