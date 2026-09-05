@@ -277,6 +277,15 @@ test('la bandeja separa pendientes de cerradas y deja filtrar las propias', asyn
   // Con varias asistentes trabajando a la vez, saber cuáles son las tuyas.
   await expect(page.getByText('Solo las mías')).toBeVisible();
 
+  // La tercera vista: un hilo que el bot resolvió solo no está ni en pendientes
+  // (pide `escalada` o `reabiertaTs`) ni en cerradas (pide `resueltaTs`, que solo
+  // escribe una persona). Sin esta pestaña no había forma de llegar a él.
+  await page.getByRole('button', { name: 'Todas', exact: true }).click();
+  await expect(page.getByText(/las que el bot resolvió solo/)).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Situación' })).toBeVisible();
+  // Buscar un paciente concreto es para lo que sirve, así que el rango también.
+  await expect(page.getByLabel(/Desde/)).toBeVisible();
+
   await page.getByRole('button', { name: 'Pendientes', exact: true }).click();
   await expect(page.getByLabel(/Desde/)).toHaveCount(0);
 });

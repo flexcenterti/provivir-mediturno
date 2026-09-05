@@ -3,12 +3,27 @@ import {
   api, type Conversacion, type ConversacionDetalle, type Interesado, type VentanaMeta,
 } from '../api';
 
-type Vista = 'pendientes' | 'cerradas';
+type Vista = 'pendientes' | 'cerradas' | 'todas';
 
 const fechaCorta = (iso: string) =>
   new Date(iso).toLocaleString('es-CO', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
   });
+
+/**
+ * En qué anda una conversación, para la columna que en «Todas» tiene que servir a
+ * los tres estados a la vez.
+ *
+ * Un hilo que el bot atendió solo no espera a nadie: `inicioDeEspera` mira
+ * `reabiertaTs` y `escaladaTs`, y sin ninguno de los dos la espera sale 0. Pintar
+ * «0 min» junto a quien lleva dos horas lo dejaría arriba del todo leyéndose como
+ * lo más urgente de la lista, cuando es exactamente lo contrario.
+ */
+function enQueAnda(c: Conversacion): string {
+  if (c.resueltaTs) return `Cerrada el ${fechaCorta(c.resueltaTs)}`;
+  if (c.estado === 'ia_activa') return 'La atiende el bot';
+  return `Esperando ${c.minutosEsperando} min`;
+}
 
 /**
  * Especificación §2.9 · Bandeja de la asistente.
@@ -81,11 +96,18 @@ export function Bandeja({ usuarioId }: { usuarioId: string }) {
                     onClick={() => cambiar(() => setVista('cerradas'))}>
               Cerradas
             </button>
+            <button className={`tab ${vista === 'todas' ? 'activa' : ''}`}
+                    onClick={() => cambiar(() => setVista('todas'))}>
+              Todas
+            </button>
           </div>
           <p className="nota">
             {vista === 'pendientes'
               ? 'Conversaciones que la IA no resolvió. Ordenadas por prioridad y, dentro de ella, por quién lleva más tiempo esperando.'
-              : 'Conversaciones ya cerradas, de la más reciente a la más antigua. Se pueden reabrir para seguir atendiéndolas.'}
+              : vista === 'cerradas'
+                ? 'Conversaciones ya cerradas, de la más reciente a la más antigua. Se pueden reabrir para seguir atendiéndolas.'
+                : 'Todas, incluidas las que el bot resolvió solo y por eso no salen en las otras dos pestañas. '
+                  + 'Es donde buscar a un paciente concreto para retomar su conversación.'}
           </p>
         </div>
       </header>
@@ -96,7 +118,7 @@ export function Bandeja({ usuarioId }: { usuarioId: string }) {
           value={q}
           onChange={(e) => cambiar(() => setQ(e.target.value))}
         />
-        {vista === 'cerradas' && (
+        {vista !== 'pendientes' && (
           <>
             <label>Desde <input type="date" value={desde} onChange={(e) => cambiar(() => setDesde(e.target.value))} /></label>
             <label>Hasta <input type="date" value={hasta} onChange={(e) => cambiar(() => setHasta(e.target.value))} /></label>
@@ -115,7 +137,7 @@ export function Bandeja({ usuarioId }: { usuarioId: string }) {
           <thead>
             <tr>
               <th>Paciente</th><th>Motivo</th><th>Prioridad</th>
-              <th>{vista === 'pendientes' ? 'Tiempo esperando' : 'Cerrada'}</th>
+              <th>{vista === 'pendientes' ? 'Tiempo esperando' : vista === 'cerradas' ? 'Cerrada' : 'Situación'}</th>
               <th>Atiende</th><th></th>
             </tr>
           </thead>
@@ -127,7 +149,8 @@ export function Bandeja({ usuarioId }: { usuarioId: string }) {
                   <br />
                   <span className="muted">{c.telefono}</span>
                 </td>
-                <td>{c.motivo}</td>
+                {/* `motivo` lo escribe `escalar()`: en un hilo que el bot llevó solo es nulo. */}
+                <td>{c.motivo ?? <span className="muted">Sin escalar</span>}</td>
                 <td>
                   <span className={`tag ${c.prioridad === 'alta' ? 't-red' : c.prioridad === 'media' ? 't-amber' : 't-gray'}`}>
                     {c.prioridad}
@@ -139,8 +162,10 @@ export function Bandeja({ usuarioId }: { usuarioId: string }) {
                     {c.minutosEsperando} min
                     {c.reaperturas > 0 && <span className="muted"> · reabierta</span>}
                   </td>
-                ) : (
+                ) : vista === 'cerradas' ? (
                   <td>{c.resueltaTs ? fechaCorta(c.resueltaTs) : '—'}</td>
+                ) : (
+                  <td>{enQueAnda(c)}</td>
                 )}
                 <td>
                   {c.asistente
@@ -157,7 +182,9 @@ export function Bandeja({ usuarioId }: { usuarioId: string }) {
                     ? 'Ninguna a tu nombre. Quita "Solo las mías" para ver el resto.'
                     : vista === 'pendientes'
                       ? 'No hay conversaciones pendientes'
-                      : 'Ninguna conversación cerrada con esos filtros'}
+                      : vista === 'cerradas'
+                        ? 'Ninguna conversación cerrada con esos filtros'
+                        : 'Ninguna conversación con esos filtros'}
                 </td>
               </tr>
             )}
@@ -276,6 +303,18 @@ function ModalConversacion({ conversacion, usuarioId, onCerrar, onCambio, onResu
         </p>
 
         {aviso && <div className="aviso-ventana">{aviso}</div>}
+        {/*
+          * Se avisa ANTES de escribir, no después: tomar la conversación la pone en
+          * `en_gestion`, y en ese estado el bot deja de responder al paciente. Es lo
+          * que se quiere al retomar un hilo, pero quien solo entró a leer tiene que
+          * saber que pulsar «Tomar» apaga al bot en esa conversación.
+          */}
+        {!cerrada && conversacion.estado === 'ia_activa' && (
+          <div className="aviso-ventana">
+            Esta conversación la lleva el bot. Si la tomas o le escribes, deja de contestarle al
+            paciente y pasa a atenderla tú.
+          </div>
+        )}
         {error && <div className="error">{error}</div>}
 
         <div className="chat">
