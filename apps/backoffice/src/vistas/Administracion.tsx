@@ -610,6 +610,7 @@ const DESCRIPCION: Record<string, string> = {
   plantilla_confirmacion_cita: 'Plantilla para confirmar una cita agendada en el portal. Quien agenda por web no suele haber escrito por WhatsApp, así que este envío casi siempre la necesita. Mismas cuatro variables.',
   plantilla_cancelacion_cita: 'Plantilla para avisar de una cita cancelada. Mismas cuatro variables. No sirve la de confirmación: dice lo contrario.',
   plantilla_reapertura_conversacion: 'Plantilla para retomar una conversación cerrada hace más de 24 h. UNA sola variable: el nombre del paciente. Sin ella, la bandeja no ofrece el envío.',
+  plantilla_contacto_inicial: 'Plantilla para escribirle PRIMERO a quien nunca ha usado el chat, como el que agenda por el portal. UNA sola variable: el nombre. Si no quieres tramitar una sexta plantilla ante Meta, pega aquí el mismo nombre que en la de reapertura. Sin ella, «Escribirle» sale deshabilitado.',
 };
 
 /** Arquitectura §9 · los parámetros de reglas viven en la base, no en el código. */

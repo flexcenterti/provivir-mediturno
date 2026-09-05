@@ -16,6 +16,7 @@ import type { MensajeEntrante } from './whatsapp.tipos';
 import { SeguimientoService } from '../seguimiento/seguimiento.service';
 import { SeguimientoCola } from '../seguimiento/seguimiento.cola';
 import { ConsentimientoService } from './consentimiento.service';
+import { PENDIENTES } from '../bandeja/bandeja.filtros';
 import {
   avisoConsentimiento, avisoConsentimientoTexto, BIENVENIDA, BOTON_ACEPTO, BOTON_NO_ACEPTO,
   leerRespuestaConsentimiento, TRAS_RECHAZO,
@@ -157,6 +158,26 @@ export class ConversacionService {
     }
 
     await this.enviar(conversacionId, entrante.telefono, BIENVENIDA);
+
+    /*
+     * Y aquí se vuelve a mirar quién tiene el hilo, porque este es el único sitio
+     * donde puede mirarse: la puerta del consentimiento va ANTES de esa comprobación
+     * en `procesar()` —tiene que anteceder también a una foto o una nota de voz—, así
+     * que quien acepta se saltaba la guarda y la IA le respondía por encima a la
+     * asistente que ya estaba atendiendo.
+     *
+     * Antes era inalcanzable: a `en_gestion` solo se llegaba después de que el
+     * consentimiento estuviera resuelto. Deja de serlo en cuanto una asistente puede
+     * tomar un hilo que el bot todavía no ha escalado.
+     */
+    const actual = await this.prisma.conversacion.findUnique({
+      where: { id: conversacionId },
+      select: { estado: true },
+    });
+    if (actual?.estado === 'escalada' || actual?.estado === 'en_gestion') {
+      this.gateway.emitirPendientesBandeja(await this.pendientes());
+      return;
+    }
 
     const pendiente = await this.mensajePendiente(conversacionId, entrante.waMessageId);
     if (pendiente) {
@@ -484,8 +505,14 @@ export class ConversacionService {
     );
   }
 
+  /**
+   * El mismo filtro que usa la bandeja, no una copia: es el número de la burbuja, y
+   * antes este lado contaba solo `escalada: true`. Una conversación reabierta salía
+   * en la lista pero no en el conteo, así que la burbuja bajaba sola al entrar
+   * cualquier WhatsApp y volvía a subir en cuanto alguien tocaba la bandeja.
+   */
   async pendientes(): Promise<number> {
-    return this.prisma.conversacion.count({ where: { escalada: true, resueltaTs: null } });
+    return this.prisma.conversacion.count({ where: PENDIENTES });
   }
 
   /** Reconstruye el historial en el formato del SDK, del más antiguo al más reciente. */
@@ -508,10 +535,16 @@ export class ConversacionService {
   /**
    * Una conversación viva por teléfono. Se intenta atar al paciente por sus
    * variantes de número, porque la base cargada trae formatos mezclados.
+   *
+   * El hilo vivo se busca por esas MISMAS variantes, y no por igualdad exacta: el
+   * número entra a la base por tres puertas —la carga masiva, el mostrador y el
+   * portal, que guarda lo que teclee el paciente— y Meta siempre entrega el formato
+   * internacional. Comparando exacto, el mismo paciente acaba con un hilo por
+   * formato: la asistente contesta en uno mientras él escribe en el otro.
    */
   private async obtenerOCrear(entrante: MensajeEntrante) {
     const abierta = await this.prisma.conversacion.findFirst({
-      where: { telefono: entrante.telefono, resueltaTs: null },
+      where: { telefono: { in: variantesDeTelefono(entrante.telefono) }, resueltaTs: null },
       orderBy: { creadoEn: 'desc' },
     });
     if (abierta) return abierta;

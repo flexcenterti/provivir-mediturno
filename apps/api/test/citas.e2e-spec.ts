@@ -574,6 +574,157 @@ describe('Motor de citas (integración)', () => {
     });
   });
 
+  /**
+   * Fase 16 · si al paciente le llegó el aviso de su cita, y si no, por qué.
+   *
+   * El caso que lo motiva: quien agenda por el portal no recibe la confirmación, y
+   * en la pantalla de la asistente esa cita se veía igual que cualquier otra.
+   */
+  describe('estado de contacto', () => {
+    const TEL = '+573007770001';
+
+    /**
+     * Una cita con la auditoría de su código en blanco.
+     *
+     * `limpiar()` borra las citas pero NO la auditoría, y el código se recicla en
+     * cuanto la fila desaparece: sin esto, cada prueba heredaría las filas que dejó la
+     * anterior sobre el mismo `cita/CÓDIGO`. Es la misma ambigüedad que el endpoint
+     * acota por `creadoEn`, y aquí se elimina para poder probarla a propósito.
+     */
+    async function citaLimpia() {
+      const cita = await crear({ hora: '08:00' });
+      await prisma.auditoria.deleteMany({ where: { entidad: `cita/${cita.codigo}` } });
+      return cita;
+    }
+
+    async function conTelefono() {
+      await prisma.paciente.update({ where: { id: pacienteId }, data: { whatsapp: TEL, telefono: TEL } });
+    }
+
+    beforeEach(async () => {
+      await prisma.paciente.update({ where: { id: pacienteId }, data: { whatsapp: null, telefono: null } });
+      await prisma.mensaje.deleteMany({ where: { conversacion: { telefono: TEL } } });
+      await prisma.conversacion.deleteMany({ where: { telefono: TEL } });
+    });
+
+    afterAll(async () => {
+      await prisma.mensaje.deleteMany({ where: { conversacion: { telefono: TEL } } });
+      await prisma.conversacion.deleteMany({ where: { telefono: TEL } });
+    });
+
+    it('sin número en la ficha lo dice, en vez de fingir que hay por dónde', async () => {
+      const cita = await citaLimpia();
+      const c = await citas.estadoDeContacto(cita.id);
+
+      expect(c.telefono).toBeNull();
+      expect(c.nuncaHaEscrito).toBe(true);
+    });
+
+    it('el paciente del portal: tiene número, nunca escribió y no consta envío', async () => {
+      await conTelefono();
+      const cita = await citaLimpia();
+      const c = await citas.estadoDeContacto(cita.id);
+
+      expect(c.telefono).toBe(TEL);
+      expect(c.nuncaHaEscrito).toBe(true);
+      expect(c.ventana.dentro).toBe(false);
+      // `null` es "todavía no consta", que se pinta distinto de "no le llegó".
+      expect(c.ultimoEnvio).toBeNull();
+    });
+
+    /**
+     * Mutación que la mata: filtrar por `cita/${cita.id}` en vez de por su CÓDIGO.
+     * `RecordatoriosService` audita con el código, así que el uuid no encuentra nada
+     * — y en pantalla eso se ve idéntico a «todavía no consta».
+     */
+    it('devuelve el motivo literal por el que no salió, no solo que falló', async () => {
+      await conTelefono();
+      const cita = await citaLimpia();
+      const motivo = 'El paciente nunca ha escrito por WhatsApp: solo cabía plantilla, y no hay ninguna aprobada';
+      await prisma.auditoria.create({
+        data: {
+          usuario: 'sistema', accion: 'Confirmación de cita no enviado',
+          entidad: `cita/${cita.codigo}`, detalle: motivo,
+        },
+      });
+
+      const c = await citas.estadoDeContacto(cita.id);
+      expect(c.ultimoEnvio?.accion).toBe('Confirmación de cita no enviado');
+      expect(c.ultimoEnvio?.detalle).toBe(motivo);
+    });
+
+    /**
+     * La auditoría es de solo añadir. Mutación que la mata: `orderBy: { ts: 'asc' }`,
+     * que diría que no le llegó cuando el reintento sí salió.
+     */
+    it('con varios intentos devuelve el último, no el primero', async () => {
+      await conTelefono();
+      const cita = await citaLimpia();
+      // Las dos DESPUÉS de crear la cita: con una anterior la descartaría el acotado
+      // por `creadoEn` y la prueba pasaría con cualquier orden, sin probar nada.
+      await prisma.auditoria.create({
+        data: {
+          usuario: 'sistema', accion: 'Confirmación de cita no enviado',
+          entidad: `cita/${cita.codigo}`, detalle: 'sin plantilla',
+          ts: new Date(cita.creadoEn.getTime() + 1_000),
+        },
+      });
+      await prisma.auditoria.create({
+        data: {
+          usuario: 'sistema', accion: 'Confirmación de cita enviado',
+          entidad: `cita/${cita.codigo}`, detalle: 'WhatsApp (texto formateado)',
+          ts: new Date(cita.creadoEn.getTime() + 2_000),
+        },
+      });
+
+      const c = await citas.estadoDeContacto(cita.id);
+      expect(c.ultimoEnvio?.accion).toBe('Confirmación de cita enviado');
+    });
+
+    /**
+     * `codigo` es único por sede y DÍA (`@@unique([sedeId, fecha, codigo])`), y la
+     * auditoría no se borra: `cita/MG-001` se repite cada jornada. Sin acotar por
+     * `creadoEn`, la cita del martes mostraría lo que pasó con la del lunes.
+     *
+     * Mutación que la mata: quitar `ts: { gte: cita.creadoEn }`. Esta prueba nació de
+     * un fallo real: la suite pasaba una fila de auditoría de otra cita ya borrada.
+     */
+    it('no muestra la auditoría de otra cita que reusó el mismo código', async () => {
+      await conTelefono();
+      const cita = await citaLimpia();
+      await prisma.auditoria.create({
+        data: {
+          usuario: 'sistema', accion: 'Confirmación de cita enviado',
+          entidad: `cita/${cita.codigo}`, detalle: 'de la cita de otro día',
+          ts: new Date(cita.creadoEn.getTime() - 86_400_000),
+        },
+      });
+
+      const c = await citas.estadoDeContacto(cita.id);
+      expect(c.ultimoEnvio).toBeNull();
+    });
+
+    it('si el paciente escribió hace poco, la ventana está abierta y se ve su hilo', async () => {
+      await conTelefono();
+      const cita = await citaLimpia();
+      const conv = await prisma.conversacion.create({
+        data: { telefono: TEL, pacienteId, estado: 'ia_activa', sedeId: SEDE_ID },
+      });
+      await prisma.mensaje.create({
+        data: {
+          conversacionId: conv.id, direccion: 'entrante', tipo: 'texto',
+          contenido: 'hola', ts: new Date(Date.now() - 3600_000),
+        },
+      });
+
+      const c = await citas.estadoDeContacto(cita.id);
+      expect(c.nuncaHaEscrito).toBe(false);
+      expect(c.ventana.dentro).toBe(true);
+      expect(c.conversacion?.id).toBe(conv.id);
+      expect(c.conversacion?.resuelta).toBe(false);
+    });
+  });
+
   describe('auditoría', () => {
     it('cada creación y cancelación queda auditada', async () => {
       const cita = await crear({ hora: '08:00' });

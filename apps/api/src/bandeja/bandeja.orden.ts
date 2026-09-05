@@ -15,6 +15,8 @@ export interface FilaPendiente {
 export interface Relojes {
   escaladaTs: Date | null;
   reabiertaTs: Date | null;
+  /** Cuándo la abrió una asistente desde el backoffice. Ver `bandeja.filtros`. */
+  iniciadaTs?: Date | null;
 }
 
 /**
@@ -23,9 +25,13 @@ export interface Relojes {
  * Una reabierta arranca su reloj de cero: si contara desde el escalamiento original
  * aparecería con tres días de espera el mismo minuto en que se reabre, y empujaría
  * al final de la lista a quien de verdad lleva esperando desde esta mañana.
+ *
+ * El orden es del suceso más reciente al más antiguo, no al revés: una conversación
+ * que se abrió a mano y después se cerró y se reabrió tiene que contar desde la
+ * reapertura. Con `iniciadaTs` por delante seguiría contando desde el primer día.
  */
 export function inicioDeEspera(c: Relojes): Date | null {
-  return c.reabiertaTs ?? c.escaladaTs;
+  return c.reabiertaTs ?? c.iniciadaTs ?? c.escaladaTs;
 }
 
 /** Minutos que lleva esperando, 0 si nunca se escaló ni se reabrió. */

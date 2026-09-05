@@ -13,6 +13,7 @@ import {
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { decidirEnvio } from './recordatorios.decision';
+import { numeroDeContacto } from '../comun/contacto';
 
 export const COLA_RECORDATORIOS = 'recordatorios';
 
@@ -208,7 +209,7 @@ export class RecordatoriosService implements OnModuleInit, OnModuleDestroy {
     // cancelación es justo el que sí tiene que salir con la cita ya cancelada.
     if (cita.estado === 'cancelada' && trabajo.cuando !== 'cancelacion') return;
 
-    const destino = cita.paciente.whatsapp ?? cita.paciente.telefono;
+    const destino = numeroDeContacto(cita.paciente);
     if (!destino) {
       this.log.warn(`Cita ${cita.codigo} sin número de contacto: no se envía recordatorio`);
       return;
@@ -259,10 +260,30 @@ export class RecordatoriosService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    if (decision.modo === 'plantilla') {
-      await this.meta.enviarPlantilla(destino, decision.nombre, parametrosTicket(datos));
-    } else {
-      await this.meta.enviarTexto(destino, this.textoDe(trabajo, datos));
+    try {
+      if (decision.modo === 'plantilla') {
+        await this.meta.enviarPlantilla(destino, decision.nombre, parametrosTicket(datos));
+      } else {
+        await this.meta.enviarTexto(destino, this.textoDe(trabajo, datos));
+      }
+    } catch (e) {
+      /*
+       * Un rechazo duro de Meta —el número no tiene WhatsApp, #131026— dejaba de
+       * rastro una línea de log tras agotar los tres reintentos, y nada más. Cuando
+       * el cliente apruebe las plantillas esa va a ser la causa número uno de «no le
+       * llegó», y la asistente no tenía dónde verlo.
+       *
+       * Se audita y se relanza: el reintento sigue teniendo sentido para un fallo
+       * pasajero, y lo que no puede es agotarse en silencio.
+       */
+      const motivo = e instanceof Error ? e.message : String(e);
+      await this.auditoria.registrar({
+        usuario: 'sistema',
+        accion: `${etiqueta} no enviado`,
+        entidad: `cita/${cita.codigo}`,
+        detalle: `WhatsApp rechazó el envío: ${motivo.slice(0, 300)}`,
+      });
+      throw e;
     }
 
     await this.auditoria.registrar({
