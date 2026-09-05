@@ -1,6 +1,7 @@
 # Changelog · FASE 16 — Hablar con los pacientes que se agendan solos
 
-**Estado:** en rama `fase-16-contacto-autoagendados`.
+**Estado:** en rama `fase-16-contacto-autoagendados`. 314 unitarias (API) + 39 (shared) +
+319 e2e + 26 de navegador.
 
 ## Por qué
 
