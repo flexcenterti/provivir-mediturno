@@ -1,6 +1,7 @@
 # Changelog · FASE 14 — Sala compartida y vínculo con la ficha de prestador
 
-**Estado:** en verde, sin desplegar. 300 unitarias (API) + 39 (shared) + 281 e2e + 31 de navegador.
+**Estado:** desplegado en producción el 2026-09-04. 300 unitarias (API) + 39 (shared) + 281 e2e +
+31 de navegador.
 
 ## Por qué
 
@@ -171,3 +172,19 @@ no hay incoherencia de acceso, solo de pantalla.
 - **Las cuentas de los médicos.** Los 21 profesionales del catálogo siguen sin
   usuario; ahora se pueden crear y corregir desde la pantalla, pero quiénes entran lo
   decide la clínica.
+
+---
+
+## El despliegue
+
+Desplegado el 2026-09-04 sobre `provivir.exagos.co`, **sin migración**: solo la imagen
+de la API y los tres frontends. Los datos, intactos —241 conversaciones, 25 citas, 20
+profesionales—, que es lo esperable cuando no se toca el esquema.
+
+Se verificó que lo desplegado es lo nuevo y no solo que la API responda: la guarda del
+médico sin ficha, el cerrojo y el filtro de fecha están en el `dist` de la imagen que
+corre, y el bundle servido trae los textos de la sala.
+
+Y queda un caso vivo para probarlo de verdad: `prestador@prueba.provivir.local` sigue
+en producción con rol médico y **sin ficha**. Es exactamente la cuenta que motivó todo
+esto, y ahora se arregla desde Administración → Perfiles y usuarios → Editar.
