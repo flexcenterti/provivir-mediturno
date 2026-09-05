@@ -1,6 +1,6 @@
 # Changelog · FASE 18 — Rediseño de la bandeja de la asistente
 
-**Estado:** en rama `fase-18-bandeja-dos-paneles`. 312 unitarias (API) + 58 (shared) +
+**Estado:** desplegado en producción el 2026-09-05. 312 unitarias (API) + 58 (shared) +
 341 e2e + 42 de navegador.
 
 ## Por qué
@@ -154,3 +154,43 @@ los interesados dejan de estar debajo para ser un chip.
   etiqueta importe tanto.
 - **Por debajo de 760 px de contenedor** la pantalla pasa a master–detail: o la lista o el
   hilo, con un botón para volver. No está probado en navegador.
+
+---
+
+## El despliegue
+
+Desplegado el 2026-09-05 a las 12:45 (17:45 UTC). **Sin migración y sin parámetros
+nuevos**: las migraciones siguen en 12, ninguna aplicada, que es lo que tocaba.
+
+### Verificado en vivo
+
+`/api/health/ready` en `ok` con los cuatro subsistemas · un solo arranque limpio y ningún
+error ni 500 en el registro · el bundle servido igual al compilado en las tres
+aplicaciones, sin `dist` anidado.
+
+Y las dos comprobaciones que valen más que el «ok», hechas **contra el contenedor que
+corre** y no contra el árbol de trabajo:
+
+- **`bandeja.operar` está en `turnos.gateway.js`** → la sala del websocket dejó de ser
+  pública de verdad, no solo en el repositorio.
+- **`JOIN LATERAL` está en `bandeja.service.js`** → el orden por actividad es el que se
+  está ejecutando.
+
+El bundle del backoffice cambió de hash y **los de portal y TV no**, que es la
+comprobación de que se desplegó lo que se tocó y nada más.
+
+### Datos
+
+Nada se perdió y nada estaba quieto: 89 pacientes, 25 citas, 426 conversaciones y 6.049
+mensajes — siete más que al empezar, porque había pacientes escribiendo durante la
+ventana. Ninguno bajó.
+
+### Lo que hay que decirle a recepción
+
+Dos cosas, y la segunda importa más que la primera:
+
+1. **La pantalla cambia de arriba abajo.** El modal desaparece, la tabla desaparece, y
+   los interesados dejan de estar debajo para ser un chip.
+2. **El orden ya no es el que conocen.** Arriba va quien acaba de escribir, no quien lleva
+   más esperando. La etiqueta de prioridad está siempre a la vista precisamente por eso, y
+   conviene decírselo con esas palabras: es lo único que queda señalando quién es urgente.
