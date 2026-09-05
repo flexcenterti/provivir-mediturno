@@ -115,11 +115,18 @@ async function pedir<T>(ruta: string, init?: RequestInit, reintentar = true): Pr
     },
   });
 
-  if (r.status === 401) {
+  /*
+   * Un 401 al INICIAR SESIÓN no es una sesión vencida: es una credencial mala. Cae
+   * al manejo genérico de abajo para que llegue el motivo real que manda la API
+   * —«Credenciales inválidas»—. Decirle «Sesión expirada» a quien está escribiendo
+   * su contraseña hace pensar en una cuenta bloqueada, y no existe tal cosa: se
+   * pierde el rato buscando un bloqueo que nadie puede levantar porque no hay.
+   */
+  if (r.status === 401 && ruta !== '/auth/login') {
     // El 401 normal es "el token de acceso venció": se renueva y se repite la
     // petición, sin que quien esté trabajando se entere. Solo se cae al login si
     // el refresco tampoco sirve — 8 h sin usar la plataforma, o usuario desactivado.
-    // Las rutas de `auth` quedan fuera: un login con contraseña mala no se refresca.
+    // Las rutas de `auth` quedan fuera del reintento: no hay refresco que valga.
     if (reintentar && !ruta.startsWith('/auth/') && (await refrescarSesion())) {
       return pedir<T>(ruta, init, false);
     }

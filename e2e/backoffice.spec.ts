@@ -26,6 +26,15 @@ test('una contraseña equivocada no dice si el correo existe', async ({ page }) 
   await expect(error).toBeVisible();
   // Distinguir "no existe" de "clave incorrecta" regala una lista de usuarios válidos.
   await expect(error).not.toContainText(/no existe|usuario no encontrado/i);
+  /*
+   * Y tiene que decir que la CREDENCIAL está mal. El frontend convertía todo 401 en
+   * «Sesión expirada», así que una contraseña equivocada se leía como una cuenta
+   * bloqueada — y no existe tal cosa: se pierde el rato buscando un bloqueo que
+   * nadie puede levantar. Esta prueba pasaba igual, porque ese texto tampoco
+   * delataba si el correo existe.
+   */
+  await expect(error).not.toContainText(/sesión expirada/i);
+  await expect(error).toContainText(/credenciales/i);
 });
 
 test('un correo inexistente da el mismo mensaje que una clave mala', async ({ page }) => {
@@ -33,7 +42,11 @@ test('un correo inexistente da el mismo mensaje que una clave mala', async ({ pa
   await page.getByLabel('Correo').fill('nadie@provivir.local');
   await page.getByLabel('Contraseña').fill('loquesea123');
   await page.getByRole('button', { name: /Entrar|Ingresar/ }).click();
-  await expect(page.getByRole('alert')).toBeVisible();
+
+  const error = page.getByRole('alert');
+  await expect(error).toBeVisible();
+  await expect(error).toContainText(/credenciales/i);
+  await expect(error).not.toContainText(/sesión expirada/i);
 });
 
 test('con credenciales válidas se entra y la sesión sobrevive al recargar', async ({ page }) => {
