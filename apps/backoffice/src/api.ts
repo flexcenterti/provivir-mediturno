@@ -312,7 +312,11 @@ export const api = {
   enlacePortal: () => pedir<{ url: string }>('/portal/enlace'),
 
   cola: (prestadorId?: string) => pedir<Turno[]>(`/turnos${prestadorId ? `?prestadorId=${prestadorId}` : ''}`),
-  registrarLlegada: (cuerpo: unknown) => pedir<Turno>('/turnos/llegada', { method: 'POST', body: JSON.stringify(cuerpo) }),
+  /** `cobro` es obligatorio desde RN-07.6: la constancia viaja con la llegada. */
+  registrarLlegada: (cuerpo: {
+    codigo?: string; documento?: string; consultorio?: string;
+    cobro: Cobro; cobroNota?: string;
+  }) => pedir<Turno>('/turnos/llegada', { method: 'POST', body: JSON.stringify(cuerpo) }),
   llamarSiguiente: (prestadorId: string) =>
     pedir<Turno>('/turnos/llamar-siguiente', { method: 'POST', body: JSON.stringify({ prestadorId }) }),
   priorizar: (id: string, prioridad: string, nota: string) =>
@@ -452,10 +456,17 @@ export interface Cita {
   paciente: Paciente; prestador: Prestador; servicio: Servicio;
 }
 export interface Cupo { prestadorId: string; prestadorNombre: string; fecha: string; hora: string; duracionMin: number; consultorio: string | null }
+/** RN-07.6 · Qué se hizo con el cobro. Sin importes: la plataforma no maneja dinero. */
+export type Cobro = 'cobrado' | 'exento';
+
 /** El turno sin su cita, que es como viene colgado de ella (y evita el tipo circular). */
 export interface TurnoBasico {
   id: string; estado: string; prioridad: string; llegadaTs: string; consultorio: string | null;
   notaPriorizacion: string | null;
+  /** `null` = no consta (llegadas anteriores a la regla), NO «no se cobró». */
+  cobro?: Cobro | null;
+  cobroNota?: string | null;
+  cobroTs?: string | null;
 }
 export interface Turno extends TurnoBasico {
   minutosEsperando?: number; cita: Cita;

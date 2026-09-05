@@ -243,4 +243,29 @@ describe('Catálogo real de la clínica (integración)', () => {
       expect(cupos).toEqual([]);
     });
   });
+
+  /**
+   * RN-01.2 · la cita de control no tiene costo.
+   *
+   * La primera carga no declaró la política en NINGUNO de los 21 servicios y todos
+   * cayeron en el default `costo_pleno`, control incluido. No se notó durante meses
+   * porque el campo no decidía nada; desde RN-07.6 el mostrador lo lee y diría que el
+   * control se cobra.
+   */
+  describe('política de costo', () => {
+    it('el control queda sin costo', async () => {
+      const control = await prisma.servicio.findUniqueOrThrow({ where: { id: 'ctrl' } });
+      expect(control.politicaCosto).toBe('sin_costo');
+    });
+
+    /*
+     * Sobre la constante y no sobre la base: contra la base pasaría igual gracias al
+     * default de Prisma, que es exactamente cómo se coló el defecto. Lo que hay que
+     * proteger es que el ARCHIVO lo declare.
+     */
+    it('los 21 servicios declaran su política en el archivo', () => {
+      expect(SERVICIOS.every((sv) => sv.politicaCosto !== undefined)).toBe(true);
+      expect(SERVICIOS.filter((sv) => sv.politicaCosto === 'sin_costo').map((sv) => sv.id)).toEqual(['ctrl']);
+    });
+  });
 });

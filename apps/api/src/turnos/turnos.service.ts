@@ -6,8 +6,9 @@ import { TurnosGateway } from './turnos.gateway';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { esModoNombre, nombreParaPantalla, type ModoNombre } from '../pantallas/nombre-en-pantalla';
 import { minutosEsperando, ordenarCola, prioridadPorCondiciones } from './turnos.reglas';
+import { exigeNota, motivoPorPolitica } from './cobro.reglas';
 import type { LlamarSiguienteDto, PriorizarTurnoDto, RegistrarLlegadaDto } from './dto/turno.dto';
-import { hoyEnSede, SEDE_ID, type Prioridad } from '@provivir/shared';
+import { hoyEnSede, SEDE_ID, type PoliticaCosto, type Prioridad } from '@provivir/shared';
 
 type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
 
@@ -62,6 +63,13 @@ export class TurnosService {
     const existente = await this.prisma.turno.findUnique({ where: { citaId: cita.id } });
     if (existente) throw new BadRequestException('La llegada de esta cita ya fue registrada');
 
+    /*
+     * RN-07.6 · La nota se exige ANTES de tocar nada: si falta, no puede quedar ni el
+     * turno creado ni la cita en `llego`. Y se comprueba aquí y no en el DTO porque
+     * depende de la política del servicio, que el cliente no debería poder declarar.
+     */
+    const cobro = this.resolverCobro(cita.servicio.politicaCosto, dto);
+
     // RN-05.2 · las marcas preferenciales del paciente definen la prioridad de entrada.
     const prioridad = prioridadPorCondiciones(cita.paciente.condiciones);
 
@@ -71,6 +79,7 @@ export class TurnosService {
           citaId: cita.id,
           prioridad,
           consultorio: dto.consultorio ?? cita.prestador.consultorio,
+          ...this.datosDeCobro(dto, usuarioId),
         },
         include: INCLUIR,
       });
@@ -82,13 +91,76 @@ export class TurnosService {
       usuario: usuarioId,
       accion: 'Registro de llegada',
       entidad: `cita/${cita.codigo}`,
-      detalle: `Mostrador · pago en recepción · prioridad ${prioridad}`,
+      // Dice lo que pasó, no lo que la regla supone. Antes era la cadena fija
+      // «Mostrador · pago en recepción», escrita hubiera cobro o no.
+      detalle: `Mostrador · ${cobro.resumen} · prioridad ${prioridad}`,
       estadoPrev: cita.estado,
       estadoNext: 'llego',
     });
 
+    /*
+     * Entrada aparte cuando el desenlace contradice la política. Así «quién eximió a
+     * quién y por qué» se consulta por acción en la vista de auditoría, en vez de
+     * buscar dentro del texto de los registros de llegada.
+     */
+    if (cobro.contradicePolitica) {
+      await this.auditoria.registrar({
+        usuario: usuarioId,
+        accion: 'Excepción de cobro',
+        entidad: `cita/${cita.codigo}`,
+        detalle: dto.cobroNota,
+        estadoPrev: cita.servicio.politicaCosto,
+        estadoNext: dto.cobro,
+      });
+    }
+
     this.gateway.emitirColaActualizada();
     return turno;
+  }
+
+  /**
+   * RN-07.6 · Valida el desenlace del cobro contra la política del servicio y arma lo
+   * que va a la traza.
+   *
+   * No bloquea nada más: si la política del catálogo está mal, la asistente registra
+   * igual dejando nota. Corregir el catálogo es asunto de administración, no del
+   * paciente que está esperando delante.
+   */
+  private resolverCobro(politica: PoliticaCosto, dto: RegistrarLlegadaDto) {
+    const contradicePolitica = exigeNota(politica, dto.cobro);
+
+    if (contradicePolitica && !dto.cobroNota?.trim()) {
+      throw new BadRequestException(
+        dto.cobro === 'exento'
+          ? 'Este servicio se cobra: explica por qué no se cobró (RN-07.6)'
+          : 'Este servicio no tiene costo: explica por qué se cobró (RN-07.6)',
+      );
+    }
+
+    const porPolitica = motivoPorPolitica(politica, dto.cobro);
+    const resumen = dto.cobro === 'cobrado' ? 'cobrado' : 'no se cobró';
+    return {
+      contradicePolitica,
+      resumen: dto.cobroNota
+        ? `${resumen} · «${dto.cobroNota.trim()}»`
+        : porPolitica ? `${resumen} (${porPolitica})` : resumen,
+    };
+  }
+
+  /**
+   * Los cuatro campos de la constancia, juntos y en un solo sitio.
+   *
+   * Extraído a propósito: cuando el kiosko se encienda, la llegada y el cobro dejarán
+   * de ser el mismo acto y la caja completará estos mismos campos por su cuenta. Que
+   * ya estén reunidos es lo que evita rehacerlo.
+   */
+  private datosDeCobro(dto: RegistrarLlegadaDto, usuarioId: string) {
+    return {
+      cobro: dto.cobro,
+      cobroNota: dto.cobroNota?.trim() || null,
+      cobradoPor: usuarioId,
+      cobroTs: new Date(),
+    };
   }
 
   /**

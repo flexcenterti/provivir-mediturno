@@ -349,10 +349,18 @@ const TIPOS: Array<{ id: string; etiqueta: string; ayuda: string }> = [
   { id: 'examen', etiqueta: 'Examen', ayuda: 'Diagnóstico o laboratorio. Suele requerir orden médica.' },
 ];
 
+/**
+ * RN-07.6 · `porcentaje` sale de la lista y se queda en la base.
+ *
+ * Nunca se implementó —no hay dónde guardar el porcentaje ni sobre qué tarifa
+ * aplicarlo, porque la plataforma no maneja importes— y mientras el campo no decidía
+ * nada era inofensivo. Desde que el mostrador lo lee, elegirlo significaría «hay que
+ * cobrar» sin poder decir cuánto. Un servicio que ya lo tuviera se comporta como
+ * costo pleno; si algún día hay tarifario, vuelve.
+ */
 const POLITICAS: Array<{ id: string; etiqueta: string }> = [
   { id: 'costo_pleno', etiqueta: 'Costo pleno' },
   { id: 'sin_costo', etiqueta: 'Sin costo' },
-  { id: 'porcentaje', etiqueta: 'Porcentaje' },
 ];
 
 function FormServicio({ servicio, idsUsados, onCerrar, onGuardado }: {

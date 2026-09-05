@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { api, aHora, hoyIso, type Cita, type Turno } from '../api';
+import { api, aHora, hoyIso, type Cita, type Cobro, type Turno } from '../api';
+import { ModalCita } from './ModalCita';
 
 /**
  * Especificación §2.10 · Mostrador: canal principal de llegada.
@@ -14,6 +15,7 @@ export function Mostrador() {
   const [q, setQ] = useState('');
   const [citas, setCitas] = useState<Cita[] | null>(null);
   const [turno, setTurno] = useState<Turno | null>(null);
+  const [viendo, setViendo] = useState<Cita | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState('');
 
@@ -26,9 +28,7 @@ export function Mostrador() {
 
     setOcupado(true);
     try {
-      // Solo las de hoy: traer las de cualquier fecha obliga a buscar la buena
-      // entre las del mes pasado, con el paciente esperando delante.
-      setCitas(await api.buscarCitas(q.trim(), { desde: hoy, hasta: hoy }));
+      setCitas(await repetirBusqueda());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error');
     } finally {
@@ -36,11 +36,19 @@ export function Mostrador() {
     }
   }
 
-  async function registrar(cita: Cita) {
+  /** Solo las de hoy: con las de cualquier fecha hay que buscar la buena con el
+   *  paciente esperando delante. Se reutiliza al volver del modal de la cita. */
+  async function repetirBusqueda(): Promise<Cita[]> {
+    const r = await api.buscarCitas(q.trim(), { desde: hoy, hasta: hoy });
+    setCitas(r);
+    return r;
+  }
+
+  async function registrar(cita: Cita, cobro: Cobro, cobroNota?: string) {
     setError(''); setOcupado(true);
     try {
       // Con el código exacto: se acabó que el motor elija por su cuenta.
-      setTurno(await api.registrarLlegada({ codigo: cita.codigo }));
+      setTurno(await api.registrarLlegada({ codigo: cita.codigo, cobro, cobroNota }));
       setCitas(null);
       setQ('');
     } catch (err) {
@@ -92,19 +100,16 @@ export function Mostrador() {
           ) : (
             <table className="tabla">
               <thead>
-                <tr><th>Código</th><th>Paciente</th><th>Servicio</th><th>Prestador</th><th>Hora</th><th>Estado</th><th></th></tr>
+                <tr>
+                  <th>Código</th><th>Paciente</th><th>Servicio</th><th>Prestador</th>
+                  <th>Hora</th><th>Cobro</th><th></th>
+                </tr>
               </thead>
               <tbody>
                 {citas.map((c) => (
-                  <tr key={c.id}>
-                    <td><span className="chip">{c.codigo}</span></td>
-                    <td>{c.paciente.apellidos}, {c.paciente.nombres}<br /><span className="muted">{c.paciente.documento}</span></td>
-                    <td>{c.servicio.nombre}</td>
-                    <td>{c.prestador.nombre}</td>
-                    <td>{aHora(c.horaInicio)}</td>
-                    <td>{c.estado.replace(/_/g, ' ')}</td>
-                    <td className="acciones">{accion(c, registrar, reimprimir, ocupado)}</td>
-                  </tr>
+                  <Fila key={c.id} cita={c} ocupado={ocupado}
+                        onRegistrar={registrar} onReimprimir={reimprimir}
+                        onVerCita={() => setViendo(c)} />
                 ))}
               </tbody>
             </table>
@@ -113,37 +118,116 @@ export function Mostrador() {
       )}
 
       {turno && <Ticket turno={turno} />}
+
+      {/* El que no paga se resuelve aquí mismo: antes había que irse a Agenda
+          consolidada con el paciente delante. Es el modal de siempre. */}
+      {viendo && (
+        <ModalCita
+          cita={viendo}
+          onCerrar={() => setViendo(null)}
+          onCambio={() => { setViendo(null); void repetirBusqueda(); }}
+        />
+      )}
     </div>
   );
 }
 
 /**
- * Por qué se puede o no registrar esta cita, dicho en la propia fila.
+ * Una fila de la búsqueda: quién es, qué se le cobra y qué se puede hacer con ella.
  *
- * Antes todo esto era un 404 o un 400 genérico después de pulsar, y la recepcionista
- * no tenía forma de saber si el problema era la cita, el día o que ya estaba hecho.
+ * El principio es que **siga siendo un clic**. El desenlace del cobro viene marcado
+ * según la política del servicio, así que en el camino normal la asistente no toca
+ * nada: pulsa «Registrar llegada» y ya. La fricción aparece solo en la excepción.
  */
-function accion(
-  c: Cita,
-  registrar: (c: Cita) => void,
-  reimprimir: (c: Cita) => void,
-  ocupado: boolean,
-) {
-  if (c.estado === 'cancelada') return <span className="muted">Cita cancelada</span>;
-  if (c.turno) {
-    return (
-      <button className="btn btn-sm btn-ghost" disabled={ocupado} onClick={() => reimprimir(c)}>
-        Reimprimir ticket
-      </button>
-    );
-  }
-  if (c.estado !== 'pendiente_llegada' && c.estado !== 'confirmada') {
-    return <span className="muted">{c.estado.replace(/_/g, ' ')}</span>;
-  }
+function Fila({ cita, ocupado, onRegistrar, onReimprimir, onVerCita }: {
+  cita: Cita;
+  ocupado: boolean;
+  onRegistrar: (c: Cita, cobro: Cobro, nota?: string) => void;
+  onReimprimir: (c: Cita) => void;
+  onVerCita: () => void;
+}) {
+  const sinCosto = cita.servicio.politicaCosto === 'sin_costo';
+  const [cobro, setCobro] = useState<Cobro>(sinCosto ? 'exento' : 'cobrado');
+  const [nota, setNota] = useState('');
+
+  // RN-07.6 · solo hay que explicarse cuando el desenlace contradice la política.
+  const exigeNota = sinCosto === (cobro === 'cobrado');
+  const listo = !exigeNota || nota.trim().length >= 5;
+
+  const yaRegistrada = cita.turno !== null && cita.turno !== undefined;
+  const registrable = !yaRegistrada && (cita.estado === 'pendiente_llegada' || cita.estado === 'confirmada');
+
   return (
-    <button className="btn btn-sm btn-primary" disabled={ocupado} onClick={() => registrar(c)}>
-      Registrar llegada
-    </button>
+    <tr>
+      <td>
+        {/* Abre la ficha: es la salida cuando el paciente no paga. */}
+        <button className="chip chip-boton" onClick={onVerCita} title="Ver la cita">{cita.codigo}</button>
+      </td>
+      <td>
+        {cita.paciente.apellidos}, {cita.paciente.nombres}
+        <br /><span className="muted">{cita.paciente.documento}</span>
+      </td>
+      <td>
+        {cita.servicio.nombre}
+        <br />
+        {/* Nunca una cifra: la plataforma no maneja importes (RN-07.6). */}
+        <span className="muted">{sinCosto ? 'Sin costo (RN-01.2)' : 'Con costo · tarifa en recepción'}</span>
+      </td>
+      <td>{cita.prestador.nombre}</td>
+      <td>{aHora(cita.horaInicio)}</td>
+      <td>
+        {yaRegistrada
+          ? <EtiquetaCobro turno={cita.turno!} />
+          : registrable
+            ? (
+              <>
+                <div className="tabs">
+                  <button className={`tab ${cobro === 'cobrado' ? 'activa' : ''}`}
+                          onClick={() => setCobro('cobrado')}>Cobrado</button>
+                  <button className={`tab ${cobro === 'exento' ? 'activa' : ''}`}
+                          onClick={() => setCobro('exento')}>No se cobró</button>
+                </div>
+                {exigeNota && (
+                  <input className="nota-cobro" value={nota} onChange={(e) => setNota(e.target.value)}
+                         placeholder={cobro === 'exento' ? 'Por qué no se cobró…' : 'Por qué se cobró…'} />
+                )}
+              </>
+            )
+            : <span className="muted">—</span>}
+      </td>
+      <td className="acciones">
+        {cita.estado === 'cancelada' && <span className="muted">Cita cancelada</span>}
+        {yaRegistrada && (
+          <button className="btn btn-sm btn-ghost" disabled={ocupado} onClick={() => onReimprimir(cita)}>
+            Reimprimir ticket
+          </button>
+        )}
+        {registrable && (
+          <button className="btn btn-sm btn-primary" disabled={ocupado || !listo}
+                  onClick={() => onRegistrar(cita, cobro, nota.trim() || undefined)}>
+            Registrar llegada
+          </button>
+        )}
+        {/* El resto de estados —atendida, en atención— no tienen acción, y decirlo
+            es mejor que un botón que devuelve un 400 genérico. */}
+        {!yaRegistrada && !registrable && cita.estado !== 'cancelada' && (
+          <span className="muted">{cita.estado.replace(/_/g, ' ')}</span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+/** Lo que se resolvió en su momento, para la fila ya registrada. */
+function EtiquetaCobro({ turno }: { turno: NonNullable<Cita['turno']> }) {
+  if (!turno.cobro) return <span className="muted">No consta</span>;
+  const hora = turno.cobroTs
+    ? new Date(turno.cobroTs).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+    : '';
+  return (
+    <span className={`tag ${turno.cobro === 'cobrado' ? 't-teal' : 't-amber'}`}>
+      {turno.cobro === 'cobrado' ? 'Cobrado' : 'No se cobró'}{hora && ` ${hora}`}
+    </span>
   );
 }
 
@@ -167,6 +251,8 @@ function Ticket({ turno }: { turno: Turno }) {
     `Prestador   ${turno.cita.prestador.nombre}`,
     `Hora cita   ${aHora(turno.cita.horaInicio)}`,
     `Consultorio ${turno.consultorio ?? '—'}`,
+    // La constancia que se lleva el paciente, y la que se puede reimprimir.
+    `Cobro       ${turno.cobro === 'cobrado' ? 'Cobrado' : turno.cobro === 'exento' ? 'No se cobró' : 'No consta'}`,
     `Llegada     ${new Date(turno.llegadaTs).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false })}`,
     '━━━━━━━━━━━━━━━━━━',
     'Espere el llamado en la sala.',
