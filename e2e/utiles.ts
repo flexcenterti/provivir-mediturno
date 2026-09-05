@@ -41,6 +41,9 @@ export const ADMIN = { email: 'admin@provivir.local', password: 'Provivir2026!' 
 /** Perfil Asistente: sin auditoría, carga masiva, catálogo ni reglas del sistema. */
 export const ASISTENTE = { email: 'asistente@provivir.local', password: 'Provivir2026!' };
 
+/** Rol médico CON ficha (`ao`): es lo que decide si ve su cola o la sala (RN-06.2). */
+export const MEDICO = { email: 'osorio@provivir.local', password: 'Provivir2026!' };
+
 /** Paciente del seed: documento y últimos 4 de su teléfono (+57 300 111 1111). */
 export const PACIENTE = { documento: '12345678', ultimos4: '1111', nombre: 'Carlos' };
 

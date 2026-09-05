@@ -57,7 +57,13 @@ async function main(): Promise<void> {
   for (const u of USUARIOS) {
     await prisma.usuario.upsert({
       where: { email: u.email },
-      update: { nombre: u.nombre, rol: u.rol, hashPassword: hash, activo: true, perfilId: perfiles.get(PERFIL_DE_ROL[u.rol]) },
+      // `prestadorId` también al actualizar: sin él, re-sembrar sobre un usuario que
+      // ya existía sin ficha lo dejaba igual — rol médico y ninguna cola que mostrar
+      // (RN-06.2). Misma clase de fallo que el que había en la API.
+      update: {
+        nombre: u.nombre, rol: u.rol, hashPassword: hash, activo: true,
+        prestadorId: u.prestadorId, perfilId: perfiles.get(PERFIL_DE_ROL[u.rol]),
+      },
       create: { ...u, hashPassword: hash, sedeId: SEDE_ID, perfilId: perfiles.get(PERFIL_DE_ROL[u.rol]) },
     });
   }

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ADMIN, ASISTENTE } from './utiles';
+import { ADMIN, ASISTENTE, MEDICO } from './utiles';
 
 /**
  * Backoffice · lo que usan las asistentes todo el día.
@@ -297,4 +297,60 @@ test('§2.10 · el mostrador busca antes de registrar, en vez de adivinar', asyn
   await campo.fill('Zzyzx');
   await page.getByRole('button', { name: 'Buscar', exact: true }).click();
   await expect(page.getByText(/Si viene sin cita, créasela en Agenda consolidada/)).toBeVisible();
+});
+
+/**
+ * RN-06.2 · la misma entrada de menú sirve a dos oficios, y no puede llamarse igual
+ * en los dos. Lo que decide cuál se abre es si la cuenta tiene ficha de prestador.
+ */
+test('con ficha de prestador la entrada es «Mi consulta» y se puede llamar', async ({ page }) => {
+  await page.goto('');
+  await page.getByLabel('Correo').fill(MEDICO.email);
+  await page.getByLabel('Contraseña').fill(MEDICO.password);
+  await page.getByRole('button', { name: /Entrar|Ingresar/ }).click();
+  await expect(page.getByLabel('Contraseña')).toHaveCount(0, { timeout: 15_000 });
+
+  await page.getByRole('button', { name: 'Mi consulta' }).click();
+  // La no-regresión que importa: el médico sigue viendo su cola y su botón.
+  await expect(page.getByRole('button', { name: 'Llamar al siguiente' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pacientes del día' })).toBeVisible();
+});
+
+test('sin ficha, la misma entrada es «Sala de espera» y no ofrece llamar a ciegas', async ({ page }) => {
+  await page.goto('');
+  await page.getByLabel('Correo').fill(ASISTENTE.email);
+  await page.getByLabel('Contraseña').fill(ASISTENTE.password);
+  await page.getByRole('button', { name: /Entrar|Ingresar/ }).click();
+  await expect(page.getByLabel('Contraseña')).toHaveCount(0, { timeout: 15_000 });
+
+  // Antes aquí solo salía «Este usuario no está asociado a una ficha de prestador».
+  await expect(page.getByRole('button', { name: 'Mi consulta' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Sala de espera' }).click();
+
+  await expect(page.getByRole('heading', { name: 'En sala ahora' })).toBeVisible();
+  await expect(page.getByText(/no está asociado a una ficha/)).toHaveCount(0);
+  /*
+   * Sin botón de llamar mientras se ve toda la sala: el llamado es siempre al
+   * siguiente de la cola de UN profesional, y el motor exige decir cuál.
+   */
+  await expect(page.getByRole('button', { name: 'Llamar al siguiente' })).toHaveCount(0);
+  await expect(page.getByText(/elija un profesional para llamar/i).first()).toBeVisible();
+});
+
+test('RN-06.2 · la ficha del médico se elige de una lista y se puede corregir después', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: 'Administración' }).click();
+  await page.getByRole('button', { name: 'Perfiles y usuarios' }).click();
+  await page.getByRole('button', { name: '2 · Usuarios' }).click();
+
+  // El vínculo se ve en la lista: es lo que decide si esa persona tiene cola.
+  await expect(page.getByText(/🩺/).first()).toBeVisible();
+
+  await page.getByRole('row', { name: /osorio@provivir\.local/ })
+    .getByRole('button', { name: 'Editar' }).click();
+
+  // Desplegable, no texto libre: antes había que teclear el id interno.
+  const ficha = page.getByLabel('Ficha de prestador');
+  await expect(ficha).toBeVisible();
+  await expect(ficha).toHaveJSProperty('tagName', 'SELECT');
 });

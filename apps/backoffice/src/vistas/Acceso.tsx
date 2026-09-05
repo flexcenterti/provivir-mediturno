@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  api, type ClaveEmitida, type DefinicionPermiso, type Perfil, type UsuarioAdmin,
+  api, type ClaveEmitida, type DefinicionPermiso, type Perfil, type Prestador, type UsuarioAdmin,
 } from '../api';
 
 /**
@@ -218,8 +218,10 @@ function FormPerfil({ perfil, catalogo, onCerrar, onGuardado }: {
 function Usuarios() {
   const [usuarios, setUsuarios] = useState<UsuarioAdmin[]>([]);
   const [perfiles, setPerfiles] = useState<Perfil[]>([]);
+  const [prestadores, setPrestadores] = useState<Prestador[]>([]);
   const [clave, setClave] = useState<ClaveEmitida | null>(null);
   const [creando, setCreando] = useState(false);
+  const [editando, setEditando] = useState<UsuarioAdmin | null>(null);
   const [error, setError] = useState('');
 
   const cargar = () => {
@@ -228,7 +230,16 @@ function Usuarios() {
   useEffect(() => {
     cargar();
     void api.perfiles().then(setPerfiles).catch(() => undefined);
+    // Con los desactivados: si no, un usuario atado a una ficha ya retirada no
+    // encontraría su opción y perdería el vínculo al guardar.
+    void api.prestadores(true).then(setPrestadores).catch(() => undefined);
   }, []);
+
+  /** Qué ficha tiene ya cuenta, y de quién. `Usuario.prestadorId` es único. */
+  const ocupadas = new Map(
+    usuarios.filter((u) => u.prestadorId).map((u) => [u.prestadorId!, u.email]),
+  );
+  const nombreDeFicha = (id: string) => prestadores.find((p) => p.id === id)?.nombre ?? id;
 
   async function accion(fn: () => Promise<unknown>) {
     setError('');
@@ -247,11 +258,15 @@ function Usuarios() {
       {clave && <ClaveNueva clave={clave} onCerrar={() => setClave(null)} />}
       {!perfiles.length && <p className="tenue">Crea primero un perfil: todo usuario necesita uno.</p>}
 
-      {creando && (
+      {(creando || editando) && (
         <FormUsuario
           perfiles={perfiles.filter((p) => p.activo)}
-          onCerrar={() => setCreando(false)}
+          prestadores={prestadores}
+          ocupadas={ocupadas}
+          usuario={editando ?? undefined}
+          onCerrar={() => { setCreando(false); setEditando(null); }}
           onCreado={(c) => { setCreando(false); setClave(c); cargar(); }}
+          onGuardado={() => { setEditando(null); cargar(); }}
         />
       )}
 
@@ -266,6 +281,18 @@ function Usuarios() {
                 <strong>{u.nombre}</strong><br />
                 <span className="tenue">{u.email}</span>
                 {!u.activo && <span className="etiqueta"> desactivado</span>}
+                {/* RN-06.2 · el vínculo con la ficha, visible: es lo que decide si la
+                    persona ve su cola en «Mi consulta». */}
+                {u.rol === 'prestador' && (
+                  <>
+                    <br />
+                    <span className="tenue">
+                      {u.prestadorId
+                        ? `🩺 ${nombreDeFicha(u.prestadorId)}`
+                        : '⚠️ médico sin ficha asociada'}
+                    </span>
+                  </>
+                )}
               </td>
               <td>
                 <select
@@ -280,6 +307,7 @@ function Usuarios() {
                 {u.ultimoAcceso ? new Date(u.ultimoAcceso).toLocaleString('es-CO') : 'nunca entró'}
               </td>
               <td className="acciones">
+                <button className="btn btn-ghost" onClick={() => setEditando(u)}>Editar</button>
                 <button className="btn btn-ghost"
                         onClick={() => void accion(async () => setClave(await api.reiniciarClave(u.id)))}>
                   Nueva contraseña
@@ -297,12 +325,32 @@ function Usuarios() {
   );
 }
 
-function FormUsuario({ perfiles, onCerrar, onCreado }: {
+/**
+ * Alta y edición en el mismo formulario.
+ *
+ * Un solo Guardar y un solo PATCH, y no dos desplegables sueltos en la tabla, porque
+ * pasar a Médico exige ficha **en la misma petición** (RN-06.2): con dos guardados
+ * independientes el paso intermedio —médico sin ficha— está prohibido y no habría
+ * forma de llegar al estado final.
+ */
+function FormUsuario({ perfiles, prestadores, ocupadas, usuario, onCerrar, onCreado, onGuardado }: {
   perfiles: Perfil[];
+  prestadores: Prestador[];
+  /** Ficha → correo de la cuenta que ya la tiene. `prestadorId` es único. */
+  ocupadas: Map<string, string>;
+  usuario?: UsuarioAdmin;
   onCerrar: () => void;
   onCreado: (c: ClaveEmitida) => void;
+  onGuardado: () => void;
 }) {
-  const [f, setF] = useState({ nombre: '', email: '', perfilId: perfiles[0]?.id ?? '', rol: 'asistente', prestadorId: '' });
+  const editando = usuario !== undefined;
+  const [f, setF] = useState({
+    nombre: usuario?.nombre ?? '',
+    email: usuario?.email ?? '',
+    perfilId: usuario?.perfil?.id ?? perfiles[0]?.id ?? '',
+    rol: usuario?.rol ?? 'asistente',
+    prestadorId: usuario?.prestadorId ?? '',
+  });
   const [error, setError] = useState('');
   const [guardando, setGuardando] = useState(false);
 
@@ -310,9 +358,19 @@ function FormUsuario({ perfiles, onCerrar, onCreado }: {
     e.preventDefault();
     setGuardando(true); setError('');
     try {
-      onCreado(await api.crearUsuarioAdmin({
-        ...f, prestadorId: f.rol === 'prestador' ? f.prestadorId : undefined,
-      }));
+      if (editando) {
+        await api.actualizarUsuarioAdmin(usuario.id, {
+          nombre: f.nombre, perfilId: f.perfilId, rol: f.rol,
+          // `null` suelta la ficha; el backend lo hace solo al dejar de ser médico,
+          // pero mandarlo explícito evita depender de ese efecto.
+          prestadorId: f.rol === 'prestador' ? f.prestadorId : null,
+        });
+        onGuardado();
+      } else {
+        onCreado(await api.crearUsuarioAdmin({
+          ...f, prestadorId: f.rol === 'prestador' ? f.prestadorId : undefined,
+        }));
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -329,7 +387,11 @@ function FormUsuario({ perfiles, onCerrar, onCreado }: {
       </div>
       <div className="field">
         <label htmlFor="u-email">Correo</label>
-        <input id="u-email" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required />
+        {/* Al editar es de solo lectura: el DTO no lo admite, y cambiar el correo de
+            una cuenta es otra conversación. */}
+        <input id="u-email" type="email" value={f.email} required
+               readOnly={editando} disabled={editando}
+               onChange={(e) => setF({ ...f, email: e.target.value })} />
       </div>
       <div className="field">
         <label htmlFor="u-perfil">Perfil</label>
@@ -339,7 +401,7 @@ function FormUsuario({ perfiles, onCerrar, onCreado }: {
       </div>
       <div className="field">
         <label htmlFor="u-rol">Tipo de cuenta</label>
-        <select id="u-rol" value={f.rol} onChange={(e) => setF({ ...f, rol: e.target.value })}>
+        <select id="u-rol" value={f.rol} onChange={(e) => setF({ ...f, rol: e.target.value as UsuarioAdmin['rol'] })}>
           <option value="asistente">Personal administrativo</option>
           <option value="admin">Administración</option>
           <option value="prestador">Médico</option>
@@ -353,13 +415,27 @@ function FormUsuario({ perfiles, onCerrar, onCreado }: {
       {f.rol === 'prestador' && (
         <div className="field">
           <label htmlFor="u-prestador">Ficha de prestador</label>
-          <input id="u-prestador" value={f.prestadorId} onChange={(e) => setF({ ...f, prestadorId: e.target.value })}
-                 required placeholder="ao" />
+          <select id="u-prestador" value={f.prestadorId} required
+                  onChange={(e) => setF({ ...f, prestadorId: e.target.value })}>
+            <option value="">Seleccione…</option>
+            {prestadores.map((p) => {
+              // Las ya atadas a otra cuenta se muestran y se bloquean: ocultarlas
+              // haría pensar que la ficha no existe, y dejarlas elegibles convertiría
+              // el desplegable en una ruleta contra el índice único.
+              const ocupadaPor = ocupadas.get(p.id);
+              const ajena = ocupadaPor !== undefined && p.id !== usuario?.prestadorId;
+              return (
+                <option key={p.id} value={p.id} disabled={ajena}>
+                  {p.nombre}{ajena ? ` · ya tiene cuenta (${ocupadaPor})` : ''}
+                </option>
+              );
+            })}
+          </select>
         </div>
       )}
       <div className="acciones">
         <button className="btn btn-primary" type="submit" disabled={guardando}>
-          {guardando ? 'Creando…' : 'Crear'}
+          {guardando ? 'Guardando…' : editando ? 'Guardar' : 'Crear'}
         </button>
         <button className="btn btn-ghost" type="button" onClick={onCerrar}>Cancelar</button>
       </div>

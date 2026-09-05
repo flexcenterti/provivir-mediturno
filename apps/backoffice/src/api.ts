@@ -191,7 +191,12 @@ export const api = {
   cancelarCita: (id: string, cuerpo: { motivo: string; notificar?: boolean }) =>
     pedir<Cita>(`/citas/${id}/cancelar`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
 
-  prestadores: () => pedir<Prestador[]>('/prestadores'),
+  /**
+   * `todos` incluye los desactivados. Hace falta en Administración: un usuario atado
+   * a una ficha ya desactivada no encontraría su opción en el desplegable y perdería
+   * el vínculo al guardar.
+   */
+  prestadores: (todos = false) => pedir<Prestador[]>(`/prestadores${todos ? '?todos=true' : ''}`),
   servicios: (todos = false) => pedir<Servicio[]>(`/servicios${todos ? '?todos=true' : ''}`),
   impactoServicio: (id: string) => pedir<ImpactoBaja>(`/servicios/${id}/impacto`),
   desactivarServicio: (id: string) =>
@@ -326,7 +331,14 @@ export const api = {
   usuariosAdmin: () => pedir<UsuarioAdmin[]>('/acceso/usuarios'),
   crearUsuarioAdmin: (u: { email: string; nombre: string; rol: string; perfilId: string; prestadorId?: string }) =>
     pedir<ClaveEmitida>('/acceso/usuarios', { method: 'POST', body: JSON.stringify(u) }),
-  actualizarUsuarioAdmin: (id: string, u: Partial<{ nombre: string; perfilId: string; activo: boolean }>) =>
+  /**
+   * `prestadorId: null` QUITA la ficha; omitirlo la deja como está (RN-06.2). Si se
+   * colapsaran, guardar el nombre de un médico le arrancaría su ficha.
+   */
+  actualizarUsuarioAdmin: (
+    id: string,
+    u: Partial<{ nombre: string; perfilId: string; activo: boolean; rol: string; prestadorId: string | null }>,
+  ) =>
     pedir<UsuarioAdmin>(`/acceso/usuarios/${id}`, { method: 'PATCH', body: JSON.stringify(u) }),
   reiniciarClave: (id: string) =>
     pedir<ClaveEmitida>(`/acceso/usuarios/${id}/clave`, { method: 'POST' }),

@@ -54,4 +54,17 @@ export class ActualizarUsuarioDto {
 
   @IsOptional() @IsBoolean()
   activo?: boolean;
+
+  /** Sigue definiendo el vínculo con la ficha del prestador (RN-06.2). */
+  @IsOptional() @IsIn(ROLES as unknown as string[])
+  rol?: Rol;
+
+  /**
+   * La ficha de prestador. **Ausente y `null` no son lo mismo**: ausente significa
+   * «no lo toques» y `null` significa «quítalo». Colapsarlos haría que guardar el
+   * nombre de un médico le arrancara la ficha, así que la distinción viaja hasta
+   * `resolverVinculo`. `@IsOptional()` deja pasar `null` a propósito.
+   */
+  @IsOptional() @IsString()
+  prestadorId?: string | null;
 }

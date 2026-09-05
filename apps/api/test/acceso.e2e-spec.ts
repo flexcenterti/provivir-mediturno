@@ -312,4 +312,103 @@ describe('Acceso · perfiles y usuarios (e2e)', () => {
       await prisma.perfil.update({ where: { nombre: 'Asistente' }, data: { permisos: antes.permisos } });
     });
   });
+
+  /**
+   * RN-06.2 · el vínculo con la ficha se podía fijar SOLO al crear el usuario, y los
+   * usuarios no se borran: así quedó atrapada en producción una cuenta con rol médico
+   * y sin ficha, sin arreglo posible desde la interfaz.
+   */
+  describe('el vínculo con la ficha de prestador', () => {
+    /*
+     * Cada prueba usa una ficha DISTINTA: los usuarios creados viven hasta el
+     * `afterAll`, así que la ficha que ate una prueba queda ocupada para las demás
+     * — y ese es justo el 409 que otra de ellas comprueba.
+     */
+
+    /** Un usuario administrativo recién hecho, para no tocar los del seed. */
+    async function nuevo(rol = 'asistente'): Promise<{ id: string; email: string }> {
+      const r = await auth(conToken().post('/api/acceso/usuarios'))
+        .send({
+          email: `vinculo.${Date.now()}.${Math.random().toString(36).slice(2, 7)}@prueba.local`,
+          nombre: 'Prueba Vínculo', rol, perfilId: idAdministracion,
+        })
+        .expect(201);
+      creados.push(r.body.id);
+      return r.body;
+    }
+
+    const editar = (id: string, cuerpo: object) =>
+      auth(conToken().patch(`/api/acceso/usuarios/${id}`)).send(cuerpo);
+
+    it('se le asigna la ficha a una cuenta que ya existe', async () => {
+      const u = await nuevo();
+      const r = await editar(u.id, { rol: 'prestador', prestadorId: 'pr' }).expect(200);
+
+      expect(r.body.rol).toBe('prestador');
+      expect(r.body.prestadorId).toBe('pr');
+    });
+
+    it('la ficha que ya tiene otra cuenta se rechaza diciendo cuál', async () => {
+      const u = await nuevo();
+      // `ao` es la del Dr. Osorio en el seed.
+      const r = await editar(u.id, { rol: 'prestador', prestadorId: 'ao' }).expect(409);
+
+      // Sin esto, el índice único devolvería un 500 sin explicación.
+      expect(r.body.message).toMatch(/osorio@provivir\.local/);
+    });
+
+    it('una ficha inventada no se asigna', async () => {
+      const u = await nuevo();
+      await editar(u.id, { rol: 'prestador', prestadorId: 'no-existe' }).expect(404);
+    });
+
+    it('RN-06.2: a un médico no se le puede quitar la ficha', async () => {
+      const u = await nuevo();
+      await editar(u.id, { rol: 'prestador', prestadorId: 'jo' }).expect(200);
+
+      const r = await editar(u.id, { prestadorId: null }).expect(400);
+      expect(r.body.message).toMatch(/RN-06\.2/);
+    });
+
+    it('RN-06.2: no se promueve a médico sin darle ficha', async () => {
+      const u = await nuevo();
+      await editar(u.id, { rol: 'prestador' }).expect(400);
+    });
+
+    /** Un solo guardado: el paso intermedio —médico sin ficha— está prohibido. */
+    it('pasar a administrativo suelta la ficha sola', async () => {
+      const u = await nuevo();
+      await editar(u.id, { rol: 'prestador', prestadorId: 'md' }).expect(200);
+
+      const r = await editar(u.id, { rol: 'asistente' }).expect(200);
+      expect(r.body.rol).toBe('asistente');
+      expect(r.body.prestadorId).toBeNull();
+    });
+
+    /**
+     * La distinción que un refactor borra: si `undefined` se tratara como `null`,
+     * cambiarle el nombre a un médico le arrancaría la ficha.
+     */
+    it('cambiar solo el nombre no toca el vínculo', async () => {
+      const u = await nuevo();
+      await editar(u.id, { rol: 'prestador', prestadorId: 'lp' }).expect(200);
+
+      const r = await editar(u.id, { nombre: 'Nombre Cambiado' }).expect(200);
+      expect(r.body.nombre).toBe('Nombre Cambiado');
+      expect(r.body.prestadorId).toBe('lp');
+      expect(r.body.rol).toBe('prestador');
+    });
+
+    it('el cambio de rol y ficha queda en la traza de auditoría', async () => {
+      const u = await nuevo();
+      await editar(u.id, { rol: 'prestador', prestadorId: 'is' }).expect(200);
+
+      const registro = await prisma.auditoria.findFirstOrThrow({
+        where: { entidad: `usuario/${u.id}`, accion: 'Usuario modificado' },
+        orderBy: { ts: 'desc' },
+      });
+      expect(registro.estadoPrev).toBe('asistente');
+      expect(registro.estadoNext).toBe('prestador · is');
+    });
+  });
 });
