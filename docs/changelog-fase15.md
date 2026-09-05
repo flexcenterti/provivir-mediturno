@@ -1,6 +1,7 @@
 # Changelog · FASE 15 — Constancia de cobro en el mostrador
 
-**Estado:** en verde, sin desplegar. 308 unitarias (API) + 39 (shared) + 296 e2e + 25 de navegador.
+**Estado:** desplegado en producción el 2026-09-04. 308 unitarias (API) + 39 (shared) + 296 e2e +
+25 de navegador.
 
 ## Por qué
 
@@ -164,3 +165,25 @@ avisar a recepción si se despliega en horario de atención.
   llamado con uno sin finalizar, y lo que define el ausentismo.
 - **El kiosko**, apagado. El diseño ya deja el hueco: crearía el turno con `cobro` en
   `null` y la caja lo completaría escribiendo los mismos cuatro campos.
+
+---
+
+## El despliegue
+
+Desplegado el 2026-09-04 a las 22:30, fuera de horario de atención — por el aviso de
+las pestañas abiertas, que reciben un 400 al registrar hasta que se recarguen.
+
+Las dos migraciones aplicadas, y la de datos **tocó exactamente un servicio**: `ctrl`
+pasó a `sin_costo` y los otros veinte siguen en `costo_pleno`. Se comprobó el estado
+previo antes de correrla precisamente para poder afirmarlo: si hubiera movido más de
+uno, significaría que la clínica tiene tipos de cita que no esperábamos.
+
+Los tres turnos que ya existían quedan con `cobro` en `null` — **no consta**, que es lo
+que la regla dice que significa. No se rellenaron: poner `cobrado` en una llegada
+anterior a la regla sería inventar un hecho sobre dinero.
+
+### Verificado en vivo
+
+`/api/health/ready` en `ok` · las dos migraciones en `_prisma_migrations` y ninguna más
+· el enum `CobroMostrador` con sus dos valores · el bundle servido de las tres
+aplicaciones igual al compilado y sin `dist` anidado.

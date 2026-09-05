@@ -19,7 +19,7 @@
 | 12 · Consentimiento de datos en WhatsApp (incluye RN-08.1, el adjunto visible) | **Desplegada** — `docs/changelog-fase12.md` |
 | 13 · Reabrir conversaciones, modificar citas y buscar en el mostrador | **Desplegada** — `docs/changelog-fase13.md` |
 | 14 · Sala compartida y vínculo con la ficha de prestador | **Desplegada** — `docs/changelog-fase14.md` |
-| 15 · Constancia de cobro en el mostrador | **En verde, sin desplegar** — `docs/changelog-fase15.md` |
+| 15 · Constancia de cobro en el mostrador | **Desplegada** — `docs/changelog-fase15.md` |
 
 **Las seis primeras fases están completas.** Lo que falta para producción son credenciales e insumos
 del cliente, no código: ver `docs/checklist-piloto.md` y `despliegue/GUIA-DESPLIEGUE.md`.
