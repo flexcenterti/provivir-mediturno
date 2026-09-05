@@ -1,16 +1,14 @@
 import { minutosEsperando } from '../turnos/turnos.reglas';
 
 /**
- * D6 · la palabra es "prioridad", nunca "urgencia" (RN-05.1).
- * Lo desconocido va al final, no al principio: un valor que nadie reconoce no puede
- * colarse por delante de una prioridad alta de verdad.
+ * Desde cuándo lleva esperando cada conversación.
+ *
+ * Este módulo ordenaba además la bandeja: prioridad y, dentro de ella, quien llevaba
+ * más esperando (RN-05.3). En la fase 18 el cliente cambió el orden al de WhatsApp
+ * —arriba quien acaba de escribir—, así que `ordenarPendientes` y `compararPendientes`
+ * se retiraron. El dato de la espera sigue haciendo falta: se pinta en cada fila, y a
+ * partir de 30 minutos se destaca (RN-08.3).
  */
-const PESO: Record<string, number> = { alta: 0, media: 1, baja: 2 };
-
-export interface FilaPendiente {
-  prioridad: string;
-  minutosEsperando: number;
-}
 
 export interface Relojes {
   escaladaTs: Date | null;
@@ -38,20 +36,4 @@ export function inicioDeEspera(c: Relojes): Date | null {
 export function esperaEnMinutos(c: Relojes): number {
   const desde = inicioDeEspera(c);
   return desde ? minutosEsperando(desde) : 0;
-}
-
-/**
- * RN-05.3 · mientras el cliente no defina los criterios de prioridad (P4), la
- * columna operativa dominante es el TIEMPO DE ESPERA. De ahí el orden: prioridad y,
- * dentro de ella, quien lleva más esperando primero.
- */
-export function compararPendientes(a: FilaPendiente, b: FilaPendiente): number {
-  return (
-    (PESO[a.prioridad] ?? 9) - (PESO[b.prioridad] ?? 9) ||
-    b.minutosEsperando - a.minutosEsperando
-  );
-}
-
-export function ordenarPendientes<T extends FilaPendiente>(filas: T[]): T[] {
-  return [...filas].sort(compararPendientes);
 }

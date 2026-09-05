@@ -19,6 +19,8 @@ import { JwtStrategy } from './jwt.strategy';
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  // `JwtModule` sale fuera para que el gateway pueda verificar el token del handshake:
+  // un websocket no pasa por los guards HTTP, así que tiene que hacerlo él.
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

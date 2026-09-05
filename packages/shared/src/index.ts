@@ -4,3 +4,4 @@ export * from './youtube.js';
 export * from './dominio.js';
 export * from './config-claves.js';
 export * from './festivos.js';
+export * from './bandeja-presentacion.js';

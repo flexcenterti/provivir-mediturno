@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { TurnosGateway } from '../src/turnos/turnos.gateway';
 
 /**
  * Prueba de cierre de la Fase 0 (Guía §2, FASE 0):
@@ -284,6 +285,87 @@ describe('Auth (e2e)', () => {
     it('el readiness reporta si la configuración se cargó', async () => {
       const r = await request(app.getHttpServer()).get('/api/health/ready').expect(200);
       expect(r.body.configuracion).toBe('ok');
+    });
+  });
+
+  /**
+   * Fase 18 · la sala del websocket dejó de ser pública.
+   *
+   * Por `backoffice` viaja el evento `llamado`, que lleva el NOMBRE del paciente, y
+   * hasta ahora `suscribir-backoffice` no verificaba nada: cualquiera que alcanzara el
+   * servidor podía escucharlos. El agujero ya existía; lo que lo hizo urgente es que la
+   * bandeja pasó a depender de esa sala a diario.
+   *
+   * Se llama al gateway directamente con un socket falso: levantar un cliente de
+   * socket.io real solo para esto sería lento y escamoso, y lo que hay que probar es la
+   * decisión, no el transporte.
+   */
+  describe('websocket · la sala del backoffice exige sesión', () => {
+    const socketFalso = (token?: unknown) => {
+      const s = { handshake: { auth: token === undefined ? {} : { token } }, salas: [] as string[], cerrado: false,
+        join(sala: string) { this.salas.push(sala); },
+        disconnect() { this.cerrado = true; } };
+      return s;
+    };
+    type SocketFalso = ReturnType<typeof socketFalso>;
+    const suscribir = (s: SocketFalso) =>
+      app.get(TurnosGateway).suscribirBackoffice(s as never);
+
+    const entrar = async (email: string) =>
+      (await request(app.getHttpServer()).post('/api/auth/login')
+        .send({ email, password: PASSWORD }).expect(200)).body;
+
+    it('con sesión de asistente entra en la sala', async () => {
+      const { accessToken } = await entrar('asistente@provivir.local');
+      const s = socketFalso(accessToken);
+
+      expect(await suscribir(s)).toEqual({ ok: true });
+      expect(s.salas).toContain('backoffice');
+    });
+
+    it('sin token no entra, y además se le desconecta', async () => {
+      const s = socketFalso();
+      expect(await suscribir(s)).toEqual({ ok: false });
+      expect(s.salas).toHaveLength(0);
+      // Un cliente sin sesión no tiene nada más que hacer aquí; dejarlo conectado es
+      // una conexión abierta que nadie va a cerrar.
+      expect(s.cerrado).toBe(true);
+    });
+
+    it('un token inventado no entra', async () => {
+      const s = socketFalso('no.es.un.token');
+      expect(await suscribir(s)).toEqual({ ok: false });
+      expect(s.cerrado).toBe(true);
+    });
+
+    /**
+     * El de refresco vive lo que la sesión entera. Si valiera aquí, quedarse escuchando
+     * ocho horas costaría lo mismo que robarlo una vez.
+     */
+    it('el token de REFRESCO no sirve para escuchar', async () => {
+      const { refreshToken } = await entrar('asistente@provivir.local');
+      const s = socketFalso(refreshToken);
+
+      expect(await suscribir(s)).toEqual({ ok: false });
+      expect(s.cerrado).toBe(true);
+    });
+
+    it('un prestador tiene sesión válida y aun así no entra: le falta el permiso', async () => {
+      const { accessToken } = await entrar('osorio@provivir.local');
+      const s = socketFalso(accessToken);
+
+      expect(await suscribir(s)).toEqual({ ok: false });
+      expect(s.salas).toHaveLength(0);
+    });
+
+    it('un usuario desactivado deja de entrar sin esperar a que caduque su token', async () => {
+      const { accessToken } = await entrar('asistente@provivir.local');
+      await prisma.usuario.update({ where: { email: 'asistente@provivir.local' }, data: { activo: false } });
+      try {
+        expect(await suscribir(socketFalso(accessToken))).toEqual({ ok: false });
+      } finally {
+        await prisma.usuario.update({ where: { email: 'asistente@provivir.local' }, data: { activo: true } });
+      }
     });
   });
 });

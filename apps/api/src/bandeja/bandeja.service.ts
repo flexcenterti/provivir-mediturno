@@ -21,7 +21,7 @@ import {
 import { esTelefono, normalizarIdentidad, variantesDeTelefono } from '../whatsapp/whatsapp.normalizador';
 import { numeroDeContacto } from '../comun/contacto';
 import { armarPagina } from '../comun/paginacion';
-import { esperaEnMinutos, ordenarPendientes } from './bandeja.orden';
+import { esperaEnMinutos } from './bandeja.orden';
 import { PENDIENTES } from './bandeja.filtros';
 import type { BuscarBandejaDto } from './dto/bandeja.dto';
 
@@ -75,29 +75,56 @@ export class BandejaService {
       mensajes: { orderBy: { ts: 'desc' }, take: 1 },
     } satisfies Prisma.ConversacionInclude;
 
-    if (dto.vista === 'pendientes') {
-      // Ordenar por prioridad y espera exige materializar los minutos, que no son
-      // una columna. Son decenas de filas: se traen y se ordenan en memoria.
-      const filas = await this.prisma.conversacion.findMany({ where, include });
-      const ordenadas = ordenarPendientes(filas.map((c) => this.resumir(c)));
-      return armarPagina(
-        ordenadas.slice(dto.salto, dto.salto + dto.porPagina),
-        ordenadas.length,
-        dto,
-      );
-    }
+    const { ids, total } = await this.idsPorActividad(where, dto.salto, dto.porPagina);
+    if (ids.length === 0) return armarPagina([], total, dto);
 
-    const orderBy: Prisma.ConversacionOrderByWithRelationInput =
-      dto.vista === 'cerradas' ? { resueltaTs: 'desc' } : { creadoEn: 'desc' };
+    const filas = await this.prisma.conversacion.findMany({ where: { id: { in: ids } }, include });
+    // `findMany` con un `in` no respeta el orden de la lista: se reordena contra ella.
+    const porId = new Map(filas.map((c) => [c.id, c]));
+    const ordenadas = ids.map((id) => porId.get(id)!).filter(Boolean);
 
-    const [filas, total] = await Promise.all([
-      this.prisma.conversacion.findMany({
-        where, include, orderBy, skip: dto.salto, take: dto.porPagina,
-      }),
-      this.prisma.conversacion.count({ where }),
-    ]);
+    return armarPagina(ordenadas.map((c) => this.resumir(c)), total, dto);
+  }
 
-    return armarPagina(filas.map((c) => this.resumir(c)), total, dto);
+  /**
+   * RN-05.3 · Los ids de una página, ordenados por actividad reciente.
+   *
+   * Hasta la fase 18 los pendientes se ordenaban por prioridad y, dentro de ella, por
+   * quien llevaba más esperando. El cliente lo cambió a lo que hace WhatsApp —arriba
+   * quien acaba de escribir— con la contrapartida de que **la prioridad pasa a estar
+   * siempre visible en la fila**, porque el orden ya no la codifica.
+   *
+   * El filtro se queda en Prisma, que es donde se puede leer, y el orden en SQL, que es
+   * donde se puede hacer: `orderBy` no sabe ordenar por el máximo de una relación. El
+   * `LEFT JOIN LATERAL` se apoya en `@@index([conversacionId, ts])`, que ya existía.
+   *
+   * El `COALESCE` no es adorno: desde la fase 16 una asistente puede abrir un hilo
+   * vacío con «Escribirle», y sin él se hundiría al fondo el mismo día que lo crea.
+   *
+   * El cast es a `text[]` y no a `uuid[]`: Prisma mapea `String @default(uuid())` a
+   * TEXT, y comparar text con uuid no tiene operador en Postgres. Falla en ejecución,
+   * no al compilar, así que solo lo caza una prueba que llegue a la base.
+   */
+  private async idsPorActividad(
+    where: Prisma.ConversacionWhereInput,
+    salto: number,
+    porPagina: number,
+  ): Promise<{ ids: string[]; total: number }> {
+    const candidatas = await this.prisma.conversacion.findMany({ where, select: { id: true } });
+    if (candidatas.length === 0) return { ids: [], total: 0 };
+
+    const filas = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT c.id
+      FROM conversacion c
+      LEFT JOIN LATERAL (
+        SELECT m.ts FROM mensaje m WHERE m.conversacion_id = c.id ORDER BY m.ts DESC LIMIT 1
+      ) u ON true
+      WHERE c.id = ANY(${candidatas.map((c) => c.id)}::text[])
+      ORDER BY COALESCE(u.ts, c.creado_en) DESC
+      LIMIT ${porPagina} OFFSET ${salto}
+    `;
+
+    return { ids: filas.map((f) => f.id), total: candidatas.length };
   }
 
   private filtro(dto: BuscarBandejaDto): Prisma.ConversacionWhereInput {
@@ -157,7 +184,11 @@ export class BandejaService {
       reaperturas: c.reaperturas,
       // RN-08.3 · para que la espera "no se vuelva paisaje".
       minutosEsperando: esperaEnMinutos(c),
-      ultimoMensaje: c.mensajes[0]?.contenido ?? null,
+      /* `transcripcion` primero: en una nota de voz `contenido` es nulo y lo que el
+         paciente dijo está transcrito. Y el tipo va aparte para que la interfaz pueda
+         decir «📎 Imagen» cuando no hay texto ninguno. */
+      ultimoMensaje: c.mensajes[0]?.transcripcion ?? c.mensajes[0]?.contenido ?? null,
+      ultimoMensajeTipo: c.mensajes[0]?.tipo ?? null,
     };
   }
 

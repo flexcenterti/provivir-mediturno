@@ -22,6 +22,7 @@
 | 15 · Constancia de cobro en el mostrador | **Desplegada** — `docs/changelog-fase15.md` |
 | 16 · Hablar con los pacientes que se agendan solos | **Desplegada** — `docs/changelog-fase16.md` |
 | 17 · Una cita por día agendándose solo | **Desplegada** — `docs/changelog-fase17.md` |
+| 18 · Rediseño de la bandeja: dos paneles, sin modal | **En rama** — `docs/changelog-fase18.md` |
 
 **Las seis primeras fases están completas.** Lo que falta para producción son credenciales e insumos
 del cliente, no código: ver `docs/checklist-piloto.md` y `despliegue/GUIA-DESPLIEGUE.md`.
