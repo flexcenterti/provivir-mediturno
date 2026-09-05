@@ -27,9 +27,21 @@ export class TurnosController {
   @Get()
   @Permisos('turnos.ver')
   cola(@Query('prestadorId') prestadorId: string | undefined, @UsuarioActual() usuario: UsuarioAutenticado) {
-    // Un prestador solo ve su propia cola, aunque pida otra.
-    const id = usuario.rol === 'prestador' ? usuario.prestadorId : prestadorId;
-    return this.turnos.cola(id);
+    if (usuario.rol === 'prestador') {
+      /*
+       * Un prestador solo ve su propia cola, aunque pida otra. Y si su cuenta no
+       * tiene ficha, no ve NINGUNA: la versión anterior dejaba el filtro en
+       * `undefined`, y `cola()` sin prestador devuelve la sala entera — o sea que la
+       * cuenta médica a medio configurar veía a todos los pacientes del día. La
+       * intención escrita se invertía justo en el caso que existía en producción.
+       */
+      if (!usuario.prestadorId) return [];
+      return this.turnos.cola(usuario.prestadorId);
+    }
+
+    // Asistencia y administración sí eligen de qué cola: sin `prestadorId` reciben
+    // la sala completa, que es con lo que arranca la pantalla de sala.
+    return this.turnos.cola(prestadorId);
   }
 
   /** RN-07.3 · llamado automático al siguiente en cola. */

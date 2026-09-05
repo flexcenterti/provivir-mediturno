@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { TurnosGateway } from './turnos.gateway';
@@ -6,11 +7,16 @@ import { ConfiguracionService } from '../configuracion/configuracion.service';
 import { esModoNombre, nombreParaPantalla, type ModoNombre } from '../pantallas/nombre-en-pantalla';
 import { minutosEsperando, ordenarCola, prioridadPorCondiciones } from './turnos.reglas';
 import type { LlamarSiguienteDto, PriorizarTurnoDto, RegistrarLlegadaDto } from './dto/turno.dto';
-import { hoyEnSede, type Prioridad } from '@provivir/shared';
+import { hoyEnSede, SEDE_ID, type Prioridad } from '@provivir/shared';
+
+type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
 
 const INCLUIR = {
   cita: { include: { paciente: true, prestador: true, servicio: true } },
 } as const;
+
+/** Mismos márgenes que el motor de citas: con locks, las peticiones hacen cola. */
+const OPCIONES_TX = { maxWait: 15_000, timeout: 20_000 } as const;
 
 @Injectable()
 export class TurnosService {
@@ -85,12 +91,27 @@ export class TurnosService {
     return turno;
   }
 
-  /** Cola del día ordenada por RN-05.2: prioridad primero, luego orden de llegada. */
-  async cola(prestadorId?: string) {
-    const turnos = await this.prisma.turno.findMany({
+  /**
+   * Cola del día ordenada por RN-05.2: prioridad primero, luego orden de llegada.
+   *
+   * **Del día**, literalmente: sin el filtro de fecha, un turno que se quede abierto
+   * de un día para otro sigue apareciendo indefinidamente. Con la cola de un solo
+   * médico apenas se nota; en la vista de toda la sala es lo primero que se ve, con
+   * «esperando 1.440 min». Se usa la fecha de la SEDE, la misma con la que
+   * `registrarLlegada` encontró la cita.
+   *
+   * Ojo con lo que esto no arregla: el turno olvidado desaparece de la vista pero
+   * sigue vivo, y su cita sigue en `llego`. Cerrarlo de verdad es el cierre del día,
+   * que todavía no existe — nadie escribe nunca `ausente`.
+   *
+   * `cliente` permite leerla DENTRO de una transacción, que es lo que necesita
+   * `llamarSiguiente` para que su lock sirva de algo.
+   */
+  async cola(prestadorId?: string, cliente: Tx = this.prisma) {
+    const turnos = await cliente.turno.findMany({
       where: {
         estado: { in: ['en_espera', 'llamado'] },
-        ...(prestadorId ? { cita: { prestadorId } } : {}),
+        cita: { fecha: hoyEnSede(), ...(prestadorId ? { prestadorId } : {}) },
       },
       include: INCLUIR,
     });
@@ -110,11 +131,24 @@ export class TurnosService {
    * a quién llamar; si quiere adelantar a alguien usa la priorización con nota (RN-07.4).
    */
   async llamarSiguiente(dto: LlamarSiguienteDto, usuarioId: string) {
-    const cola = await this.cola(dto.prestadorId);
-    const siguiente = cola.find((t) => t.estado === 'en_espera');
-    if (!siguiente) throw new NotFoundException('No hay pacientes en espera');
-
+    /*
+     * La cola se lee DENTRO de la transacción y detrás de un lock, porque desde que
+     * la asistente también puede llamar hay dos personas sobre la misma cola. Leer
+     * fuera y actualizar por id dejaba que ambas resolvieran el mismo paciente: la
+     * segunda pisaba el `llamadoTs` de la primera y las pantallas lo llamaban dos
+     * veces.
+     *
+     * Con lock y no con una actualización condicional a propósito: así la segunda
+     * persona obtiene EL SIGUIENTE paciente, que es lo que quería, en vez de un
+     * conflicto que no sabría interpretar.
+     */
     const turno = await this.prisma.$transaction(async (tx) => {
+      await this.lockCola(tx, dto.prestadorId);
+
+      const cola = await this.cola(dto.prestadorId, tx);
+      const siguiente = cola.find((t) => t.estado === 'en_espera');
+      if (!siguiente) throw new NotFoundException('No hay pacientes en espera');
+
       const t = await tx.turno.update({
         where: { id: siguiente.id },
         data: {
@@ -126,7 +160,7 @@ export class TurnosService {
       });
       await tx.cita.update({ where: { id: t.citaId }, data: { estado: 'en_atencion' } });
       return t;
-    });
+    }, OPCIONES_TX);
 
     await this.auditoria.registrar({
       usuario: usuarioId,
@@ -164,6 +198,20 @@ export class TurnosService {
     this.gateway.emitirColaActualizada();
 
     return turno;
+  }
+
+  /**
+   * Advisory lock transaccional sobre la cola de UN prestador en el día de hoy.
+   *
+   * Lleva el prestador dentro de la clave para que dos médicos distintos no se
+   * bloqueen entre sí, y el sufijo `:turnos` para no chocar con el lock del motor de
+   * citas (`lockPrestadorFecha`), que usa la misma forma de clave sin sufijo: son
+   * dos colas distintas y compartirlas serializaría el agendamiento con el llamado
+   * sin ninguna razón.
+   */
+  private async lockCola(tx: Tx, prestadorId: string): Promise<void> {
+    const dia = hoyEnSede().toISOString().slice(0, 10);
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${SEDE_ID}:${dia}:${prestadorId}:turnos`}))`;
   }
 
   /**
