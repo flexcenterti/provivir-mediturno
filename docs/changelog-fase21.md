@@ -1,6 +1,6 @@
 # Changelog · FASE 21 — Editar y retirar agendas de prestador
 
-**Estado:** en rama `fase-21-editar-agendas`. **Sin migración.** 333 unitarias (API) +
+**Estado:** desplegado en producción el 2026-09-05. **Sin migración.** 333 unitarias (API) +
 74 (shared) + 404 e2e + 64 de navegador.
 
 ## Por qué
@@ -164,3 +164,29 @@ desbloquear lo que deba estar abierto. Mientras sigan así, no hay autoservicio.
 - **Las citas huérfanas que ya existan no se detectan.** Esta fase evita crear nuevas.
 - **La ocupación cae a 0 % si un día se queda sin franja** teniendo citas. Ya pasaba con el
   bloqueo; arreglarlo exige relacionar `Cita` con `Agenda`.
+
+---
+
+## El despliegue
+
+Desplegado el 2026-09-05 a las 18:50. **Sin migración**, y `migrate status` lo confirma
+contra la base real: siguen siendo 13, ninguna pendiente.
+
+### Verificado en vivo
+
+- Las **tres rutas nuevas** registradas: `PATCH /agendas/:id`, `POST /:id/retirar` y
+  `POST /:id/reactivar`.
+- `/api/health/ready` en `ok`, contenedor `healthy`, **cero errores** en el registro.
+- Bundle del backoffice `index-BFzsO_6b.js`; **la TV y el portal no cambian**, que es lo
+  que debía pasar. Sin `dist` anidado.
+- Caddy no se tocó.
+- Datos intactos salvo el tráfico real de la ventana: 93 pacientes, 25 citas, 27 agendas,
+  13 migraciones.
+
+### Lo que el despliegue NO hace
+
+**Las 27 agendas siguen bloqueadas y sin ofrecer un solo cupo.** Esta fase entrega la
+herramienta, no la corrección: hay que revisarlas una por una y desbloquear lo que deba
+estar abierto. Lo que cambia es que a partir de ahora quitar un sábado o corregir una hora
+ya no exige apagar la franja entera — y al hacerlo se ve por delante qué citas quedarían
+fuera.
