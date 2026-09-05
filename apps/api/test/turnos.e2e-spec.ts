@@ -88,6 +88,19 @@ describe('Cola de sala (integración)', () => {
     return prisma.turno.create({ data: { citaId: cita.id, prioridad: 'baja' } });
   }
 
+  /** Una cita de hoy SIN llegada registrada, para probar el mostrador de verdad. */
+  async function porLlegar(servicioId: 'mg' | 'ctrl') {
+    return prisma.cita.create({
+      data: {
+        codigo: `L${String(++contador).padStart(4, '0')}`,
+        pacienteId, prestadorId: 'ao', servicioId,
+        tipo: servicioId === 'ctrl' ? 'control' : 'general',
+        fecha: hoyEnSede(), horaInicio: 600 + contador, duracionMin: 15,
+        estado: 'confirmada', origen: 'mostrador', sedeId: SEDE_ID,
+      },
+    });
+  }
+
   const token = async (email: string): Promise<string> => {
     const r = await request(http).post('/api/auth/login').send({ email, password: CLAVE }).expect(200);
     return r.body.accessToken;
@@ -213,6 +226,208 @@ describe('Cola de sala (integración)', () => {
       const t = await token('asistente@provivir.local');
       await request(http).post('/api/turnos/llamar-siguiente')
         .set('Authorization', `Bearer ${t}`).send({ prestadorId: 'ao' }).expect(404);
+    });
+  });
+
+  /**
+   * RN-07.6 · La constancia del cobro.
+   *
+   * Antes de esto, `registrarLlegada` escribía SIEMPRE en auditoría la cadena fija
+   * «Mostrador · pago en recepción», hubiera pagado el paciente o no. El sistema
+   * afirmaba un hecho sobre dinero que nunca había comprobado.
+   */
+  describe('constancia del cobro', () => {
+    const llegada = (cuerpo: object) => request(http).post('/api/turnos/llegada')
+      .set('Authorization', `Bearer ${tokenAsistente}`).send(cuerpo);
+
+    let tokenAsistente: string;
+    beforeAll(async () => { tokenAsistente = await token('asistente@provivir.local'); });
+
+    it('sin decir qué pasó con el cobro, no se registra la llegada', async () => {
+      const cita = await porLlegar('mg');
+      const r = await llegada({ codigo: cita.codigo }).expect(400);
+
+      /*
+       * Y lo rechaza la VALIDACIÓN del DTO, no la regla de la nota. Sin esta
+       * comprobación la prueba pasaba igual con el campo puesto como opcional: un
+       * `cobro` ausente contradice la política de cualquier servicio de pago, así que
+       * caía en el 400 de la nota y parecía correcto. `class-validator` devuelve una
+       * lista de mensajes; las reglas del servicio, una cadena.
+       */
+      expect(Array.isArray(r.body.message)).toBe(true);
+      expect(JSON.stringify(r.body.message)).toMatch(/cobro/);
+    });
+
+    it('cobrar un servicio de pago es el camino normal: sin nota', async () => {
+      const cita = await porLlegar('mg');
+      const r = await llegada({ codigo: cita.codigo, cobro: 'cobrado' }).expect(201);
+
+      const turno = await prisma.turno.findUniqueOrThrow({ where: { id: r.body.id } });
+      const asistente = await prisma.usuario.findUniqueOrThrow({ where: { email: 'asistente@provivir.local' } });
+      expect(turno.cobro).toBe('cobrado');
+      expect(turno.cobradoPor).toBe(asistente.id);
+      expect(turno.cobroTs).not.toBeNull();
+      expect(turno.cobroNota).toBeNull();
+    });
+
+    it('no cobrar un servicio de pago exige explicarlo', async () => {
+      const cita = await porLlegar('mg');
+      const r = await llegada({ codigo: cita.codigo, cobro: 'exento' }).expect(400);
+      expect(r.body.message).toMatch(/RN-07\.6/);
+    });
+
+    it('con la explicación sí se registra, y queda guardada', async () => {
+      const cita = await porLlegar('mg');
+      const r = await llegada({
+        codigo: cita.codigo, cobro: 'exento', cobroNota: 'Ya pagó el 04/09, cita movida',
+      }).expect(201);
+
+      const turno = await prisma.turno.findUniqueOrThrow({ where: { id: r.body.id } });
+      expect(turno.cobro).toBe('exento');
+      expect(turno.cobroNota).toBe('Ya pagó el 04/09, cita movida');
+    });
+
+    /** La política ya es la razón: pedir nota aquí sería burocracia. */
+    it('no cobrar un control no exige nada: no tiene costo', async () => {
+      const cita = await porLlegar('ctrl');
+      const r = await llegada({ codigo: cita.codigo, cobro: 'exento' }).expect(201);
+      expect((await prisma.turno.findUniqueOrThrow({ where: { id: r.body.id } })).cobro).toBe('exento');
+    });
+
+    /** La anomalía inversa, la que es fácil olvidar. */
+    it('cobrar un control SÍ exige explicarlo', async () => {
+      const cita = await porLlegar('ctrl');
+      await llegada({ codigo: cita.codigo, cobro: 'cobrado' }).expect(400);
+      await llegada({ codigo: cita.codigo, cobro: 'cobrado', cobroNota: 'Cobró por error de caja' }).expect(201);
+    });
+
+    /** Si falta la nota no puede quedar ni el turno creado ni la cita en `llego`. */
+    it('cuando falta la explicación no queda nada a medias', async () => {
+      const cita = await porLlegar('mg');
+      await llegada({ codigo: cita.codigo, cobro: 'exento' }).expect(400);
+
+      expect(await prisma.turno.findUnique({ where: { citaId: cita.id } })).toBeNull();
+      expect((await prisma.cita.findUniqueOrThrow({ where: { id: cita.id } })).estado).toBe('confirmada');
+    });
+
+    it('la auditoría dice lo que pasó y ya no afirma que se pagó', async () => {
+      const cita = await porLlegar('mg');
+      await llegada({
+        codigo: cita.codigo, cobro: 'exento', cobroNota: 'Convenio empresarial',
+      }).expect(201);
+
+      const registros = await prisma.auditoria.findMany({
+        where: { entidad: `cita/${cita.codigo}` }, orderBy: { ts: 'desc' },
+      });
+      const llegadaReg = registros.find((r) => r.accion === 'Registro de llegada');
+      expect(llegadaReg?.detalle).toMatch(/no se cobró/);
+      // La cadena que mentía en toda llegada.
+      expect(llegadaReg?.detalle).not.toMatch(/pago en recepción/);
+
+      // Entrada aparte, para poder consultarla por acción en vez de buscar en el texto.
+      const excepcion = registros.find((r) => r.accion === 'Excepción de cobro');
+      expect(excepcion?.detalle).toBe('Convenio empresarial');
+      expect(excepcion?.estadoPrev).toBe('costo_pleno');
+      expect(excepcion?.estadoNext).toBe('exento');
+    });
+
+    it('lo normal no genera entrada de excepción', async () => {
+      const cita = await porLlegar('mg');
+      await llegada({ codigo: cita.codigo, cobro: 'cobrado' }).expect(201);
+
+      const excepciones = await prisma.auditoria.count({
+        where: { entidad: `cita/${cita.codigo}`, accion: 'Excepción de cobro' },
+      });
+      expect(excepciones).toBe(0);
+    });
+
+    /** El cobro no participa en el orden de la cola, y no debe empezar. */
+    it('el cobro no altera el orden de la cola', async () => {
+      const a = await porLlegar('mg');
+      const b = await porLlegar('mg');
+      await llegada({ codigo: a.codigo, cobro: 'cobrado' }).expect(201);
+      await llegada({ codigo: b.codigo, cobro: 'exento', cobroNota: 'Cortesía autorizada' }).expect(201);
+
+      const cola = await turnos.cola('ao');
+      const codigos = cola.map((t) => t.cita.codigo);
+      expect(codigos.indexOf(a.codigo)).toBeLessThan(codigos.indexOf(b.codigo));
+    });
+  });
+
+  /**
+   * El defecto que la fase 13 dejó a medias.
+   *
+   * Al reprogramar, la cita vuelve a `confirmada` y su turno queda `cancelado`. Pero
+   * `registrarLlegada` rechazaba si existía CUALQUIER turno, mirara o no su estado:
+   * al paciente al que le mueven la cita no se le podía registrar la llegada nunca.
+   * La prueba de la fase 13 comprobaba solo la mitad que sí se arregló —el estado de
+   * la cita— y por eso pasó inadvertido.
+   */
+  describe('volver a registrar tras una reprogramación', () => {
+    it('la llegada del día nuevo se puede registrar', async () => {
+      const cita = await porLlegar('mg');
+      const t = await token('asistente@provivir.local');
+      const llegada = (cuerpo: object) => request(http).post('/api/turnos/llegada')
+        .set('Authorization', `Bearer ${t}`).send(cuerpo);
+
+      const primera = await llegada({ codigo: cita.codigo, cobro: 'cobrado' }).expect(201);
+
+      /*
+       * Se le llamó y se le movió la cita estando ya en sala: `cerrarTurnoAbierto`
+       * cancela también desde `llamado`, así que un turno cancelado puede arrastrar
+       * su `llamadoTs`. Es lo que hace que limpiarlo importe.
+       */
+      await prisma.turno.update({
+        where: { id: primera.body.id },
+        data: { estado: 'cancelado', llamadoTs: new Date() },
+      });
+      await prisma.cita.update({ where: { id: cita.id }, data: { estado: 'confirmada' } });
+
+      const segunda = await llegada({
+        codigo: cita.codigo, cobro: 'exento', cobroNota: 'Ya pagó en la cita anterior',
+      }).expect(201);
+
+      // Se reutiliza la fila: `citaId` es único y no puede haber dos.
+      expect(segunda.body.id).toBe(primera.body.id);
+
+      const turno = await prisma.turno.findUniqueOrThrow({ where: { id: primera.body.id } });
+      expect(turno.estado).toBe('en_espera');
+      expect(turno.cobro).toBe('exento');
+      // Sin limpiar esto, seguiría saliendo en las pantallas de sala.
+      expect(turno.llamadoTs).toBeNull();
+    });
+
+    /**
+     * Registrar dos veces sigue sin poder hacerse, pero lo frena la CITA, no el turno:
+     * tras la primera queda en `llego` y el buscador solo mira
+     * `pendiente_llegada|confirmada`, así que ni la encuentra. La guarda del turno es
+     * la segunda línea, para un estado incoherente. Conviene saber cuál actúa: si
+     * mañana alguien relaja el filtro de la cita, esta prueba sigue en verde y la de
+     * abajo es la que avisa.
+     */
+    it('registrar dos veces sigue sin poder hacerse', async () => {
+      const cita = await porLlegar('mg');
+      const t = await token('asistente@provivir.local');
+      const llegada = () => request(http).post('/api/turnos/llegada')
+        .set('Authorization', `Bearer ${t}`).send({ codigo: cita.codigo, cobro: 'cobrado' });
+
+      await llegada().expect(201);
+      await llegada().expect(404);
+    });
+
+    it('y con la cita forzada a `confirmada`, la guarda del turno lo impide igual', async () => {
+      const cita = await porLlegar('mg');
+      const t = await token('asistente@provivir.local');
+      const llegada = () => request(http).post('/api/turnos/llegada')
+        .set('Authorization', `Bearer ${t}`).send({ codigo: cita.codigo, cobro: 'cobrado' });
+
+      await llegada().expect(201);
+      // Estado incoherente: turno vivo con la cita sin registrar. No debería ocurrir,
+      // y si ocurre no puede acabar en dos llegadas.
+      await prisma.cita.update({ where: { id: cita.id }, data: { estado: 'confirmada' } });
+
+      const r = await llegada().expect(400);
+      expect(r.body.message).toMatch(/ya fue registrada/);
     });
   });
 });

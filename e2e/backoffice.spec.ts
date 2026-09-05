@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ADMIN, ASISTENTE, MEDICO } from './utiles';
+import { ADMIN, ASISTENTE, MEDICO, PACIENTE } from './utiles';
 
 /**
  * Backoffice · lo que usan las asistentes todo el día.
@@ -353,4 +353,89 @@ test('RN-06.2 · la ficha del médico se elige de una lista y se puede corregir 
   const ficha = page.getByLabel('Ficha de prestador');
   await expect(ficha).toBeVisible();
   await expect(ficha).toHaveJSProperty('tagName', 'SELECT');
+});
+
+/**
+ * RN-07.6 · La constancia del cobro en el mostrador.
+ *
+ * El principio que estas pruebas protegen es que **siga siendo un clic**: el
+ * desenlace viene marcado según la política del servicio y la fricción aparece solo
+ * en la excepción.
+ */
+test('§2.10 · el mostrador deja constancia del cobro sin volverse un formulario', async ({ page }) => {
+  await entrar(page);
+
+  /*
+   * La cita se crea por API y no por la interfaz: el seed no trae citas de hoy, y
+   * montarla clicando por Agenda consolidada haría esta prueba larga y frágil sin
+   * cubrir nada más. Lo que se prueba aquí es la fila del mostrador.
+   */
+  const token = await page.evaluate(() => sessionStorage.getItem('accessToken'));
+  const cabeceras = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  const hoy = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+
+  const pacientes = await (await page.request.get(
+    `/api/pacientes?q=${PACIENTE.documento}`, { headers: cabeceras })).json();
+  const pacienteId = pacientes.datos[0].id;
+
+  const cupos = await (await page.request.get(
+    `/api/cupos?servicioId=mg&fecha=${hoy}&limite=1`, { headers: cabeceras })).json();
+  test.skip(cupos.length === 0, 'Hoy no hay agenda de medicina general (domingo o festivo)');
+
+  const creada = await (await page.request.post('/api/citas', {
+    headers: cabeceras,
+    data: {
+      pacienteId, servicioId: 'mg', fecha: hoy, hora: cupos[0].hora,
+      prestadorId: cupos[0].prestadorId, origen: 'mostrador',
+    },
+  })).json();
+
+  await page.getByRole('button', { name: 'Mostrador' }).click();
+  await page.getByPlaceholder(/Código, documento, nombre o teléfono/).fill(PACIENTE.documento);
+  await page.getByRole('button', { name: 'Buscar', exact: true }).click();
+
+  const fila = page.getByRole('row', { name: new RegExp(creada.cita.codigo) });
+  await expect(fila).toBeVisible();
+
+  // Medicina general se cobra: viene marcado «Cobrado» y NO pide nota. Un clic.
+  await expect(fila.getByRole('button', { name: 'Cobrado' })).toHaveClass(/activa/);
+  await expect(fila.getByPlaceholder(/Por qué/)).toHaveCount(0);
+  await expect(fila.getByRole('button', { name: 'Registrar llegada' })).toBeEnabled();
+
+  // La fricción aparece solo al contradecir la política del servicio.
+  await fila.getByRole('button', { name: 'No se cobró' }).click();
+  await expect(fila.getByPlaceholder(/Por qué no se cobró/)).toBeVisible();
+  await expect(fila.getByRole('button', { name: 'Registrar llegada' })).toBeDisabled();
+
+  await fila.getByPlaceholder(/Por qué no se cobró/).fill('Convenio empresarial');
+  await expect(fila.getByRole('button', { name: 'Registrar llegada' })).toBeEnabled();
+});
+
+test('RN-07.6 · el mostrador nunca muestra una cifra', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: 'Mostrador' }).click();
+
+  /*
+   * Guardarraíl deliberado: la plataforma NO maneja importes, y la forma en que eso
+   * se rompería es que alguien empiece a pintar precios «solo informativos». Si esta
+   * prueba se cae, la conversación es de producto, no de código.
+   */
+  const texto = (await page.locator('.vista').innerText()).replace(/\s+/g, ' ');
+  expect(texto).not.toMatch(/\$\s?\d/);
+  expect(texto).not.toMatch(/\d{2,3}\.\d{3}/);
+});
+
+test('RN-01.2 · el control no ofrece «Porcentaje» como política de costo', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: 'Servicios y exámenes' }).click();
+  await page.getByRole('row', { name: /Ecografía Doppler/ }).getByRole('button', { name: 'Editar' }).click();
+
+  // `porcentaje` nunca se implementó: no hay dónde guardar el porcentaje. Ofrecerlo
+  // ahora que el mostrador lee la política significaría «cobra» sin poder decir cuánto.
+  const politica = page.getByLabel(/Política de costo|Costo/);
+  await expect(politica).toBeVisible();
+  await expect(politica.getByRole('option', { name: 'Porcentaje' })).toHaveCount(0);
 });

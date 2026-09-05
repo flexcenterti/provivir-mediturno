@@ -86,6 +86,23 @@ export class ServiciosService {
         : {}),
     });
 
+    /*
+     * RN-07.6 · La política de costo va en su propia línea, fuera de `cambioMotor`:
+     * no afecta a la agenda, pero desde que el mostrador la lee decide qué desenlace
+     * de cobro viene preseleccionado y cuándo se exige nota. Antes no se registraba en
+     * ningún sitio, y ahora es una decisión con consecuencias en caja.
+     */
+    if (dto.politicaCosto !== undefined && dto.politicaCosto !== previo.politicaCosto) {
+      await this.auditoria.registrar({
+        usuario: usuarioId,
+        accion: 'Política de costo modificada',
+        entidad: `servicio/${id}`,
+        detalle: servicio.nombre,
+        estadoPrev: previo.politicaCosto,
+        estadoNext: servicio.politicaCosto,
+      });
+    }
+
     if (dto.activo === false && previo.activo) await this.efectosDeBaja(id, servicio.nombre, usuarioId);
     if (dto.activo === true && !previo.activo) await this.registrarAlta(id, servicio.nombre, usuarioId);
 

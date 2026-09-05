@@ -479,3 +479,11 @@ tr.inactiva { opacity: .55; }
     margin: 0 !important; }
   .ticket { border: none; background: #fff; font-size: 12pt; padding: 0; }
 }
+
+/* RN-07.6 · la nota del cobro aparece solo cuando el desenlace contradice la
+   política del servicio, dentro de la propia fila del mostrador. */
+.nota-cobro { width: 100%; margin-top: .35rem; padding: .35rem .5rem; font-size: .82rem;
+  border: 1px solid var(--amber); border-radius: 7px; background: #fff; }
+/* El código de la cita abre su ficha: se ve que es pulsable sin dejar de ser un chip. */
+.chip-boton { border: 1px dashed transparent; }
+.chip-boton:hover { border-color: var(--teal); }

@@ -29,6 +29,15 @@ interface ServicioClinica {
   id: string; nombre: string; categoria: string;
   tipo: 'general' | 'control' | 'procedimiento' | 'examen';
   duracionMin: number; requiereOrden: boolean;
+  /**
+   * RN-01.2 · Qué se le cobra. **Obligatorio a propósito**, aunque la base tenga
+   * default: la primera carga no lo declaró en ninguno de los 21 servicios y todos
+   * cayeron en `costo_pleno`, incluido el control — que por regla no tiene costo.
+   * No se notó durante meses porque el campo no decidía nada; desde RN-07.6 el
+   * mostrador lo lee. Que sea obligatorio es lo que impide que el próximo servicio
+   * nazca con la política invisible.
+   */
+  politicaCosto: 'sin_costo' | 'costo_pleno';
   /** RN-13.9 · false = el bot lo describe pero no ofrece agendarlo por chat. */
   agendable?: boolean;
 }
@@ -38,15 +47,15 @@ interface ServicioClinica {
  * comparten servicio y solo cambia la duración de cada uno (RN-01.4).
  */
 export const SERVICIOS: ServicioClinica[] = [
-  { id: 'mg',   nombre: 'Medicina general · Consulta', categoria: 'Medicina general', tipo: 'general', duracionMin: 15, requiereOrden: false },
+  { id: 'mg',   nombre: 'Medicina general · Consulta', categoria: 'Medicina general', tipo: 'general', duracionMin: 15, requiereOrden: false, politicaCosto: 'costo_pleno' },
   // Sin jornada definida por la clínica: existe en el catálogo y el bot puede
   // describirlo, pero todavía no se agenda. Ver la nota en Ingrit Perea.
-  { id: 'mocu', nombre: 'Medicina ocupacional',        categoria: 'Especialista',     tipo: 'general', duracionMin: 20, requiereOrden: false, agendable: false },
-  { id: 'mest', nombre: 'Medicina estética',           categoria: 'Especialista',     tipo: 'general', duracionMin: 15, requiereOrden: false },
-  { id: 'mint', nombre: 'Medicina interna',            categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false },
-  { id: 'odo',  nombre: 'Odontología adultos',         categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false },
-  { id: 'otr',  nombre: 'Otorrinolaringología',        categoria: 'Especialista',     tipo: 'general', duracionMin: 15, requiereOrden: false },
-  { id: 'psi',  nombre: 'Psicología',                  categoria: 'Especialista',     tipo: 'general', duracionMin: 60, requiereOrden: false },
+  { id: 'mocu', nombre: 'Medicina ocupacional',        categoria: 'Especialista',     tipo: 'general', duracionMin: 20, requiereOrden: false, politicaCosto: 'costo_pleno', agendable: false },
+  { id: 'mest', nombre: 'Medicina estética',           categoria: 'Especialista',     tipo: 'general', duracionMin: 15, requiereOrden: false, politicaCosto: 'costo_pleno' },
+  { id: 'mint', nombre: 'Medicina interna',            categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false, politicaCosto: 'costo_pleno' },
+  { id: 'odo',  nombre: 'Odontología adultos',         categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false, politicaCosto: 'costo_pleno' },
+  { id: 'otr',  nombre: 'Otorrinolaringología',        categoria: 'Especialista',     tipo: 'general', duracionMin: 15, requiereOrden: false, politicaCosto: 'costo_pleno' },
+  { id: 'psi',  nombre: 'Psicología',                  categoria: 'Especialista',     tipo: 'general', duracionMin: 60, requiereOrden: false, politicaCosto: 'costo_pleno' },
 
   /*
    * RN-04.7 · Lo que NO se agenda solo.
@@ -64,22 +73,22 @@ export const SERVICIOS: ServicioClinica[] = [
    * no haya agenda, pero conviene confirmarlas antes de que la asistente empiece a
    * agendarlos.
    */
-  { id: 'ctrl', nombre: 'Medicina general · Control',   categoria: 'Medicina general', tipo: 'control', duracionMin: 10, requiereOrden: false, agendable: false },
-  { id: 'lab',  nombre: 'Laboratorio clínico',          categoria: 'Laboratorio',      tipo: 'examen',  duracionMin: 10, requiereOrden: true,  agendable: false },
-  { id: 'rx',   nombre: 'Rayos X',                      categoria: 'Diagnóstico',      tipo: 'examen',  duracionMin: 15, requiereOrden: true,  agendable: false }, // duración ?
-  { id: 'eco',  nombre: 'Ecografía',                    categoria: 'Diagnóstico',      tipo: 'examen',  duracionMin: 20, requiereOrden: true,  agendable: false },
-  { id: 'ecod', nombre: 'Ecografía Doppler',            categoria: 'Diagnóstico',      tipo: 'examen',  duracionMin: 40, requiereOrden: true,  agendable: false },
-  { id: 'drog', nombre: 'Droguería',                    categoria: 'Otros',            tipo: 'general', duracionMin: 15, requiereOrden: false, agendable: false }, // duración ?
-  { id: 'odov', nombre: 'Valoración odontológica',      categoria: 'Especialista',     tipo: 'general', duracionMin: 20, requiereOrden: false, agendable: false }, // duración ?
+  { id: 'ctrl', nombre: 'Medicina general · Control',   categoria: 'Medicina general', tipo: 'control', duracionMin: 10, requiereOrden: false, politicaCosto: 'sin_costo', agendable: false },
+  { id: 'lab',  nombre: 'Laboratorio clínico',          categoria: 'Laboratorio',      tipo: 'examen',  duracionMin: 10, requiereOrden: true,  politicaCosto: 'costo_pleno',  agendable: false },
+  { id: 'rx',   nombre: 'Rayos X',                      categoria: 'Diagnóstico',      tipo: 'examen',  duracionMin: 15, requiereOrden: true,  politicaCosto: 'costo_pleno',  agendable: false }, // duración ?
+  { id: 'eco',  nombre: 'Ecografía',                    categoria: 'Diagnóstico',      tipo: 'examen',  duracionMin: 20, requiereOrden: true,  politicaCosto: 'costo_pleno',  agendable: false },
+  { id: 'ecod', nombre: 'Ecografía Doppler',            categoria: 'Diagnóstico',      tipo: 'examen',  duracionMin: 40, requiereOrden: true,  politicaCosto: 'costo_pleno',  agendable: false },
+  { id: 'drog', nombre: 'Droguería',                    categoria: 'Otros',            tipo: 'general', duracionMin: 15, requiereOrden: false, politicaCosto: 'costo_pleno', agendable: false }, // duración ?
+  { id: 'odov', nombre: 'Valoración odontológica',      categoria: 'Especialista',     tipo: 'general', duracionMin: 20, requiereOrden: false, politicaCosto: 'costo_pleno', agendable: false }, // duración ?
 
   // Especialistas que vienen por fechas sueltas (lista 2 del cliente).
-  { id: 'gin',  nombre: 'Ginecología',                  categoria: 'Especialista',     tipo: 'general', duracionMin: 15, requiereOrden: false, agendable: false },
-  { id: 'oft',  nombre: 'Oftalmología',                 categoria: 'Especialista',     tipo: 'general', duracionMin: 20, requiereOrden: false, agendable: false },
-  { id: 'ped',  nombre: 'Pediatría',                    categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false, agendable: false },
-  { id: 'uro',  nombre: 'Urología',                     categoria: 'Especialista',     tipo: 'general', duracionMin: 15, requiereOrden: false, agendable: false },
-  { id: 'opt',  nombre: 'Optometría',                   categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false, agendable: false },
-  { id: 'nut',  nombre: 'Nutrición',                    categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false, agendable: false },
-  { id: 'tra',  nombre: 'Traumatología',                categoria: 'Especialista',     tipo: 'general', duracionMin: 20, requiereOrden: false, agendable: false },
+  { id: 'gin',  nombre: 'Ginecología',                  categoria: 'Especialista',     tipo: 'general', duracionMin: 15, requiereOrden: false, politicaCosto: 'costo_pleno', agendable: false },
+  { id: 'oft',  nombre: 'Oftalmología',                 categoria: 'Especialista',     tipo: 'general', duracionMin: 20, requiereOrden: false, politicaCosto: 'costo_pleno', agendable: false },
+  { id: 'ped',  nombre: 'Pediatría',                    categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false, politicaCosto: 'costo_pleno', agendable: false },
+  { id: 'uro',  nombre: 'Urología',                     categoria: 'Especialista',     tipo: 'general', duracionMin: 15, requiereOrden: false, politicaCosto: 'costo_pleno', agendable: false },
+  { id: 'opt',  nombre: 'Optometría',                   categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false, politicaCosto: 'costo_pleno', agendable: false },
+  { id: 'nut',  nombre: 'Nutrición',                    categoria: 'Especialista',     tipo: 'general', duracionMin: 30, requiereOrden: false, politicaCosto: 'costo_pleno', agendable: false },
+  { id: 'tra',  nombre: 'Traumatología',                categoria: 'Especialista',     tipo: 'general', duracionMin: 20, requiereOrden: false, politicaCosto: 'costo_pleno', agendable: false },
 ];
 
 interface PrestadorClinica {

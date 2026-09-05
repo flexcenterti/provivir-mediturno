@@ -165,6 +165,15 @@ enum ResultadoConversacion {
   no_convertida
 }
 
+/// RN-07.6 · Cómo se resolvió el cobro en el mostrador. Solo dos desenlaces: si el
+/// paciente no paga, no se registra la llegada — la ausencia de turno es la
+/// constancia. Nunca añadir aquí un `pendiente_pago`: eso es un estado de la cola, y
+/// se descartó a propósito.
+enum CobroMostrador {
+  cobrado
+  exento
+}
+
 enum PoliticaCosto {
   sin_costo
   costo_pleno
@@ -438,6 +447,23 @@ model Turno {
   priorizadoPor    String?     @map("priorizado_por")
   llamadoTs        DateTime?   @map("llamado_ts")
   consultorio      String?
+
+  /// RN-07.6 · Constancia de qué se hizo con el cobro. Sin importes: la plataforma
+  /// registra la decisión, no el dinero.
+  ///
+  /// `null` significa **no consta**, NO «no se cobró»: son las llegadas anteriores a
+  /// la regla, y será también el kiosko, que registra la llegada antes de que el
+  /// paciente pase por caja. Poner `cobrado` en esas filas sería inventar un hecho
+  /// sobre dinero.
+  cobro       CobroMostrador?
+  /// Obligatoria cuando el desenlace contradice la política del servicio (RN-07.6).
+  cobroNota   String?         @map("cobro_nota")
+  /// Quién lo resolvió. No basta la auditoría: ese servicio traga sus propios fallos
+  /// a propósito, y un registro con pérdidas no puede ser el único de algo contiguo
+  /// al dinero. Mismo motivo que `priorizadoPor`.
+  cobradoPor  String?         @map("cobrado_por")
+  /// Separado de `llegadaTs` porque hoy coinciden y con el kiosko no lo harán.
+  cobroTs     DateTime?       @map("cobro_ts")
 
   cita Cita @relation(fields: [citaId], references: [id], onDelete: Cascade)
 

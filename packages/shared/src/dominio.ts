@@ -17,6 +17,30 @@ export type OrigenPaciente = (typeof ORIGENES_PACIENTE)[number];
 export const PRIORIDADES = ['alta', 'media', 'baja'] as const;
 export type Prioridad = (typeof PRIORIDADES)[number];
 
+/**
+ * RN-01.2 · Qué se le cobra al paciente por un servicio.
+ *
+ * `porcentaje` existe en el enum de la base y **no está implementado**: no hay dónde
+ * guardar el porcentaje ni sobre qué tarifa aplicarlo, porque la plataforma no maneja
+ * importes (RN-07.6). Se trata como costo pleno y no se ofrece en la interfaz.
+ */
+export const POLITICAS_COSTO = ['sin_costo', 'costo_pleno', 'porcentaje'] as const;
+export type PoliticaCosto = (typeof POLITICAS_COSTO)[number];
+
+/**
+ * RN-07.6 · Cómo se resolvió el cobro de una llegada, y nada más.
+ *
+ * Solo hay dos desenlaces porque el tercero no llega hasta aquí: si el paciente no
+ * paga, **no se registra la llegada** — se cancela o se reprograma la cita. La
+ * ausencia de turno ES la constancia de que no pagó.
+ *
+ * No hay importes, ni medio de pago, ni recibo: la plataforma deja constancia de la
+ * decisión, no del dinero. Meterlos aquí sería crear una segunda verdad sobre la caja
+ * que se desviaría de la contabilidad de la clínica.
+ */
+export const COBROS = ['cobrado', 'exento'] as const;
+export type Cobro = (typeof COBROS)[number];
+
 /** RN-05.2 · Marcas preferenciales para la cola de atención en sede */
 export const MARCAS_PREFERENCIALES = [
   'Adulto mayor',
