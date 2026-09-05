@@ -350,6 +350,9 @@ tr.inactiva, .inactiva { opacity: .55; }
   white-space: nowrap; }
 
 /* Pantallas de sala: el id se lee por teléfono, así que tiene que ser copiable. */
+/* Separa una acción destructiva del botón primario que se pulsa por reflejo. */
+.acciones.borde-arriba { border-top: 1px solid var(--line); margin-top: .8rem; padding-top: .8rem; }
+
 .uuid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .7rem;
   color: var(--muted); margin-top: .15rem; user-select: all; }
 /* Respaldo de «Copiar enlace» donde el portapapeles no está disponible. */

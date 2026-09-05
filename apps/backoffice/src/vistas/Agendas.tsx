@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { api, hoyIso, type Agenda, type Prestador, type ResultadoBloqueo, type Servicio } from '../api';
+import {
+  aHora, api, hoyIso,
+  type Agenda, type Prestador, type ResultadoBloqueo, type ResultadoImpacto, type Servicio,
+} from '../api';
 
 const DIAS = [
   { n: 1, e: 'Lun' }, { n: 2, e: 'Mar' }, { n: 3, e: 'Mié' }, { n: 4, e: 'Jue' },
@@ -16,14 +19,16 @@ export function Agendas() {
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [filtro, setFiltro] = useState('');
   const [creando, setCreando] = useState(false);
+  const [editando, setEditando] = useState<Agenda | null>(null);
+  const [verRetiradas, setVerRetiradas] = useState(false);
   const [mensual, setMensual] = useState(false);
   const [bloqueando, setBloqueando] = useState<Agenda | null>(null);
   const [error, setError] = useState('');
 
   const recargar = () => {
-    api.agendas(filtro || undefined).then(setAgendas).catch((e: Error) => setError(e.message));
+    api.agendas(filtro || undefined, verRetiradas).then(setAgendas).catch((e: Error) => setError(e.message));
   };
-  useEffect(recargar, [filtro]);
+  useEffect(recargar, [filtro, verRetiradas]);
   useEffect(() => {
     Promise.all([api.prestadores(), api.servicios()])
       .then(([p, s]) => { setPrestadores(p); setServicios(s); })
@@ -52,6 +57,11 @@ export function Agendas() {
           <option value="">Todos los prestadores</option>
           {prestadores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </select>
+        <label className="p-check">
+          <input type="checkbox" checked={verRetiradas}
+                 onChange={(e) => setVerRetiradas(e.target.checked)} />
+          Ver retiradas
+        </label>
         <span className="muted">{agendas.length} agenda(s)</span>
       </div>
 
@@ -74,14 +84,26 @@ export function Agendas() {
                 <td>{a.slotMin} min</td>
                 <td className="muted">{a.consultorio ?? '—'}</td>
                 <td>
-                  {a.bloqueada
-                    ? <span className="tag t-red" title={a.motivoBloqueo ?? ''}>Bloqueada</span>
-                    : <span className="tag t-green">Activa</span>}
+                  {!a.activa
+                    ? <span className="tag t-gray">Retirada</span>
+                    : a.bloqueada
+                      ? <span className="tag t-red" title={a.motivoBloqueo ?? ''}>Bloqueada</span>
+                      : <span className="tag t-green">Activa</span>}
                 </td>
-                <td>
-                  {a.bloqueada
-                    ? <button className="btn btn-ghost" onClick={() => api.desbloquearAgenda(a.id).then(recargar)}>Desbloquear</button>
-                    : <button className="btn btn-ghost" onClick={() => setBloqueando(a)}>Bloquear</button>}
+                <td className="acciones-fila">
+                  {!a.activa ? (
+                    <button className="btn btn-ghost"
+                            onClick={() => api.reactivarAgenda(a.id).then(recargar).catch((e: Error) => setError(e.message))}>
+                      Reactivar
+                    </button>
+                  ) : (
+                    <>
+                      <button className="btn btn-ghost" onClick={() => setEditando(a)}>Editar</button>
+                      {a.bloqueada
+                        ? <button className="btn btn-ghost" onClick={() => api.desbloquearAgenda(a.id).then(recargar)}>Desbloquear</button>
+                        : <button className="btn btn-ghost" onClick={() => setBloqueando(a)}>Bloquear</button>}
+                    </>
+                  )}
                 </td>
               </tr>
             ))}
@@ -90,10 +112,14 @@ export function Agendas() {
         </table>
       </div>
 
-      {creando && (
-        <FormAgenda prestadores={prestadores} servicios={servicios}
-                    onCerrar={() => setCreando(false)}
-                    onGuardado={() => { setCreando(false); recargar(); }} />
+      {(creando || editando) && (
+        /* `key` para que el estado interno se reinicie al pasar de una franja a otra:
+           hoy el modal se monta condicionalmente y funcionaría igual, pero es un seguro
+           de una línea contra que alguien lo deje siempre montado. */
+        <FormAgenda key={editando?.id ?? 'nueva'}
+                    agenda={editando} prestadores={prestadores} servicios={servicios}
+                    onCerrar={() => { setCreando(false); setEditando(null); }}
+                    onGuardado={() => { setCreando(false); setEditando(null); recargar(); }} />
       )}
       {mensual && (
         <ProgramacionMensual prestadores={prestadores} servicios={servicios}
@@ -109,28 +135,78 @@ export function Agendas() {
   );
 }
 
-function FormAgenda({ prestadores, servicios, onCerrar, onGuardado }: {
-  prestadores: Prestador[]; servicios: Servicio[]; onCerrar: () => void; onGuardado: () => void;
+/**
+ * RN-06.6 · El mismo formulario para crear y para corregir.
+ *
+ * El panel de impacto aparece **dentro de este modal** y no en uno encima, y la razón no
+ * es estética: «Volver a editar» conserva lo tecleado. Con un segundo modal, cancelar
+ * tira el formulario entero y hay que rehacerlo.
+ */
+function FormAgenda({ agenda, prestadores, servicios, onCerrar, onGuardado }: {
+  agenda: Agenda | null; prestadores: Prestador[]; servicios: Servicio[];
+  onCerrar: () => void; onGuardado: () => void;
 }) {
-  const [modo, setModo] = useState<'semanal' | 'calendario'>('semanal');
+  const editando = agenda !== null;
+  const [modo, setModo] = useState<'semanal' | 'calendario'>(agenda?.modo ?? 'semanal');
   const [f, setF] = useState({
-    prestadorId: '', fecha: hoyIso(), horaIni: '08:00', horaFin: '12:00',
-    slotMin: 15, servicioId: '', consultorio: '',
+    prestadorId: agenda?.prestadorId ?? '',
+    fecha: agenda?.fecha?.slice(0, 10) ?? hoyIso(),
+    horaIni: agenda?.horaIni ?? '08:00',
+    horaFin: agenda?.horaFin ?? '12:00',
+    slotMin: agenda?.slotMin ?? 15,
+    servicioId: agenda?.servicioId ?? '',
+    consultorio: agenda?.consultorio ?? '',
   });
-  const [dias, setDias] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [dias, setDias] = useState<number[]>(agenda?.diasSemana ?? [1, 2, 3, 4, 5]);
   const [error, setError] = useState('');
+  const [impacto, setImpacto] = useState<ResultadoImpacto | null>(null);
 
-  async function guardar() {
+  const cuerpo = () => ({
+    modo,
+    ...(modo === 'semanal' ? { diasSemana: dias } : { fecha: f.fecha }),
+    horaIni: f.horaIni, horaFin: f.horaFin, slotMin: Number(f.slotMin),
+    servicioId: f.servicioId, consultorio: f.consultorio,
+  });
+
+  async function guardar(confirmar = false) {
     setError('');
     try {
-      await api.crearAgenda({
-        prestadorId: f.prestadorId, modo,
-        ...(modo === 'semanal' ? { diasSemana: dias } : { fecha: f.fecha }),
-        horaIni: f.horaIni, horaFin: f.horaFin, slotMin: Number(f.slotMin),
-        ...(f.servicioId ? { servicioId: f.servicioId } : {}),
-        ...(f.consultorio ? { consultorio: f.consultorio } : {}),
-      });
-      onGuardado();
+      if (!editando) {
+        await api.crearAgenda({
+          prestadorId: f.prestadorId, modo,
+          ...(modo === 'semanal' ? { diasSemana: dias } : { fecha: f.fecha }),
+          horaIni: f.horaIni, horaFin: f.horaFin, slotMin: Number(f.slotMin),
+          ...(f.servicioId ? { servicioId: f.servicioId } : {}),
+          ...(f.consultorio ? { consultorio: f.consultorio } : {}),
+        });
+        onGuardado();
+        return;
+      }
+
+      const r = await api.actualizarAgenda(agenda.id, { ...cuerpo(), confirmar });
+      /*
+       * Un solo clic en el caso normal: si no hay citas afectadas, el servidor ya aplicó
+       * el cambio y no hay nada que confirmar. Arreglar el consultorio o ampliar media
+       * hora no puede costar dos pasos.
+       */
+      if (r.simulacion) setImpacto(r);
+      else onGuardado();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error');
+    }
+  }
+
+  async function retirar(confirmar = false) {
+    if (!agenda) return;
+    if (!confirmar && !confirm(
+      `¿Retirar la franja ${agenda.horaIni}–${agenda.horaFin}?\n\n`
+      + 'Dejará de ofrecer cupos. Se puede volver a activar desde «Ver retiradas».',
+    )) return;
+    setError('');
+    try {
+      const r = await api.retirarAgenda(agenda.id, confirmar);
+      if (r.simulacion) setImpacto(r);
+      else onGuardado();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error');
     }
@@ -139,12 +215,15 @@ function FormAgenda({ prestadores, servicios, onCerrar, onGuardado }: {
   return (
     <div className="modal-fondo" onClick={onCerrar}>
       <div className="modal ancho" onClick={(e) => e.stopPropagation()}>
-        <h3>Nueva agenda</h3>
+        <h3>{editando ? 'Editar agenda' : 'Nueva agenda'}</h3>
         {error && <div className="error">{error}</div>}
 
         <div className="field">
-          <label>Prestador</label>
-          <select value={f.prestadorId} onChange={(e) => setF({ ...f, prestadorId: e.target.value })}>
+          <label htmlFor="ag-prestador">Prestador</label>
+          {/* Al editar no se cambia: mover una franja a otro médico no es corregirla, es
+              retirar una y crear otra — y el impacto calculado sería el del otro. */}
+          <select id="ag-prestador" value={f.prestadorId} disabled={editando}
+                  onChange={(e) => setF({ ...f, prestadorId: e.target.value })}>
             <option value="">Seleccione…</option>
             {prestadores.map((p) => <option key={p.id} value={p.id}>{p.nombre} · {p.especialidad}</option>)}
           </select>
@@ -180,37 +259,37 @@ function FormAgenda({ prestadores, servicios, onCerrar, onGuardado }: {
           </div>
         ) : (
           <div className="field">
-            <label>Fecha</label>
-            <input type="date" value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
+            <label htmlFor="ag-fecha">Fecha</label>
+            <input id="ag-fecha" type="date" value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
           </div>
         )}
 
         <div className="grid-2">
           <div className="field">
-            <label>Desde</label>
-            <input type="time" value={f.horaIni} onChange={(e) => setF({ ...f, horaIni: e.target.value })} />
+            <label htmlFor="ag-desde">Desde</label>
+            <input id="ag-desde" type="time" value={f.horaIni} onChange={(e) => setF({ ...f, horaIni: e.target.value })} />
           </div>
           <div className="field">
-            <label>Hasta</label>
-            <input type="time" value={f.horaFin} onChange={(e) => setF({ ...f, horaFin: e.target.value })} />
+            <label htmlFor="ag-hasta">Hasta</label>
+            <input id="ag-hasta" type="time" value={f.horaFin} onChange={(e) => setF({ ...f, horaFin: e.target.value })} />
           </div>
         </div>
 
         <div className="grid-2">
           <div className="field">
-            <label>Fracción de atención (min)</label>
-            <input type="number" min={5} max={240} step={5} value={f.slotMin}
+            <label htmlFor="ag-slot">Fracción de atención (min)</label>
+            <input id="ag-slot" type="number" min={5} max={240} step={5} value={f.slotMin}
                    onChange={(e) => setF({ ...f, slotMin: Number(e.target.value) })} />
           </div>
           <div className="field">
-            <label>Consultorio</label>
-            <input value={f.consultorio} onChange={(e) => setF({ ...f, consultorio: e.target.value })} />
+            <label htmlFor="ag-consultorio">Consultorio</label>
+            <input id="ag-consultorio" value={f.consultorio} onChange={(e) => setF({ ...f, consultorio: e.target.value })} />
           </div>
         </div>
 
         <div className="field">
-          <label>Servicio principal (opcional)</label>
-          <select value={f.servicioId} onChange={(e) => setF({ ...f, servicioId: e.target.value })}>
+          <label htmlFor="ag-servicio">Servicio principal (opcional)</label>
+          <select id="ag-servicio" value={f.servicioId} onChange={(e) => setF({ ...f, servicioId: e.target.value })}>
             <option value="">Sin especificar</option>
             {servicios.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </select>
@@ -220,10 +299,56 @@ function FormAgenda({ prestadores, servicios, onCerrar, onGuardado }: {
           </span>
         </div>
 
-        <div className="acciones">
-          <button className="btn btn-primary" onClick={guardar} disabled={!f.prestadorId}>Crear</button>
-          <button className="btn btn-ghost" onClick={onCerrar}>Cancelar</button>
-        </div>
+        {impacto ? (
+          <>
+            <div className="error">{impacto.mensaje}</div>
+            {impacto.citas.length > 0 && (
+              <table className="tabla">
+                <thead><tr><th>Código</th><th>Paciente</th><th>Fecha</th><th>Teléfono</th><th></th></tr></thead>
+                <tbody>
+                  {impacto.citas.map((c) => (
+                    <tr key={c.id}>
+                      <td><span className="chip">{c.codigo}</span></td>
+                      <td>{c.paciente.apellidos}, {c.paciente.nombres}</td>
+                      <td>{c.fecha.slice(0, 10)} · {aHora(c.horaInicio)}</td>
+                      <td>{c.paciente.telefono ?? '—'}</td>
+                      <td>
+                        {c.motivo === 'ya_estaba_fuera'
+                          && <span className="tag t-gray" title="No la causa este cambio">Ya estaba fuera</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {impacto.truncado && (
+              <p className="nota">Se listan las primeras {impacto.citas.length} de {impacto.citasAfectadas}.</p>
+            )}
+            <div className="acciones">
+              <button className="btn btn-danger" onClick={() => void guardar(true)}>
+                Guardar de todas formas
+              </button>
+              {/* Vuelve al formulario CON lo tecleado: por eso el panel vive aquí dentro. */}
+              <button className="btn btn-ghost" onClick={() => setImpacto(null)}>Volver a editar</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="acciones">
+              <button className="btn btn-primary" onClick={() => void guardar()} disabled={!f.prestadorId}>
+                {editando ? 'Guardar' : 'Crear'}
+              </button>
+              <button className="btn btn-ghost" onClick={onCerrar}>Cancelar</button>
+            </div>
+            {editando && (
+              /* Separado del botón que se pulsa por reflejo: un destructivo pegado a
+                 «Guardar» es un accidente esperando. */
+              <div className="acciones borde-arriba">
+                <button className="btn btn-danger" onClick={() => void retirar()}>Retirar franja</button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
