@@ -428,8 +428,8 @@ function FormPantalla({ pantalla, servicios, onCerrar, onGuardado, onEliminar }:
         {error && <div className="error">{error}</div>}
 
         <div className="field">
-          <label>Nombre</label>
-          <input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} />
+          <label htmlFor="p-nombre">Nombre</label>
+          <input id="p-nombre" value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} />
         </div>
 
         <div className="field">
@@ -453,13 +453,13 @@ function FormPantalla({ pantalla, servicios, onCerrar, onGuardado, onEliminar }:
 
         <div className="grid-2">
           <div className="field">
-            <label>Turnos visibles</label>
-            <input type="number" min={1} max={12} value={f.turnosVisibles}
+            <label htmlFor="p-turnos">Turnos visibles</label>
+            <input id="p-turnos" type="number" min={1} max={12} value={f.turnosVisibles}
                    onChange={(e) => setF({ ...f, turnosVisibles: Number(e.target.value) })} />
           </div>
           <div className="field">
-            <label>Sonido al llamar</label>
-            <select value={f.sonido ? 'si' : 'no'} onChange={(e) => setF({ ...f, sonido: e.target.value === 'si' })}>
+            <label htmlFor="p-sonido">Sonido al llamar</label>
+            <select id="p-sonido" value={f.sonido ? 'si' : 'no'} onChange={(e) => setF({ ...f, sonido: e.target.value === 'si' })}>
               <option value="si">Sí</option>
               <option value="no">No</option>
             </select>
@@ -467,8 +467,8 @@ function FormPantalla({ pantalla, servicios, onCerrar, onGuardado, onEliminar }:
         </div>
 
         <div className="field">
-          <label>Mensaje institucional</label>
-          <textarea rows={2} value={f.mensaje} onChange={(e) => setF({ ...f, mensaje: e.target.value })} />
+          <label htmlFor="p-mensaje">Mensaje institucional</label>
+          <textarea id="p-mensaje" rows={2} value={f.mensaje} onChange={(e) => setF({ ...f, mensaje: e.target.value })} />
         </div>
 
         <label className="p-check">
@@ -489,14 +489,14 @@ function FormPantalla({ pantalla, servicios, onCerrar, onGuardado, onEliminar }:
               <PistaYoutube valor={f.canalYoutube} />
             </div>
             <div className="field">
-              <label>Videos institucionales (uno por línea)</label>
-              <textarea rows={3} value={f.videosPromo}
+              <label htmlFor="p-videos">Videos institucionales (uno por línea)</label>
+              <textarea id="p-videos" rows={3} value={f.videosPromo}
                         onChange={(e) => setF({ ...f, videosPromo: e.target.value })}
                         placeholder="https://youtube.com/watch?v=..." />
             </div>
             <div className="field">
-              <label>Intervalo del video institucional (min)</label>
-              <input type="number" min={1} max={120} value={f.intervaloInstitucionalMin}
+              <label htmlFor="p-intervalo">Intervalo del video institucional (min)</label>
+              <input id="p-intervalo" type="number" min={1} max={120} value={f.intervaloInstitucionalMin}
                      onChange={(e) => setF({ ...f, intervaloInstitucionalMin: Number(e.target.value) })} />
               <span className="p-ayuda">
                 Cada tantos minutos se interrumpe el canal para pasar el video institucional completo.
