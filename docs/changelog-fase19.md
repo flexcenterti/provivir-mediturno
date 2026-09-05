@@ -1,7 +1,7 @@
 # Changelog · FASE 19 — Las pantallas de llamado, funcionando
 
 **Estado:** en rama `fase-19-pantallas-de-sala`. **Sin migración.** 315 unitarias (API) +
-71 (shared) + 370 e2e + 53 de navegador.
+67 (shared) + 370 e2e + 53 de navegador.
 
 ## Por qué
 
@@ -135,7 +135,7 @@ delante.
 
 ## Pruebas
 
-**315 unitarias (API) + 71 (shared) + 370 e2e de API + 53 de navegador**, todas en verde.
+**315 unitarias (API) + 67 (shared) + 370 e2e de API + 53 de navegador**, todas en verde.
 Las de navegador eran 42 al cerrar la fase 18. La cobertura de WebSocket y de
 `GET /pantallas/:id/estado` pasa de **cero** a existir.
 
