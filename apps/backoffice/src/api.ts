@@ -522,6 +522,8 @@ export interface Conversacion {
   /** RN-08.3 - para que la espera no se vuelva paisaje. */
   minutosEsperando: number;
   ultimoMensaje: string | null;
+  /** Para poder decir «📎 Imagen» cuando el adjunto no trae texto. */
+  ultimoMensajeTipo: string | null;
 }
 
 export interface MensajeConversacion {

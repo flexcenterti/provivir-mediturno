@@ -108,11 +108,13 @@ test('RN-13.3 · lo que la base no cubre escala en vez de aproximar', async ({ p
     .toBeVisible({ timeout: 15_000 });
 });
 
-test('RN-09.9.8 · los interesados se ven en la bandeja, bajo las escaladas', async ({ page }) => {
+test('RN-09.9.8 · los interesados son un filtro más de la bandeja', async ({ page }) => {
   await entrar(page);
   await page.getByRole('button', { name: /Bandeja asistente/ }).click();
 
   await expect(page.getByRole('heading', { name: 'Bandeja de la asistente' })).toBeVisible();
+  // Ya no están debajo de todo: son un chip más de la misma lista. La regex, por el contador.
+  await page.getByRole('button', { name: /^Interesados/ }).click();
   await expect(page.getByRole('heading', { name: 'Interesados sin agendar' })).toBeVisible();
 
   await page.screenshot({ path: 'e2e/capturas/bandeja.png', fullPage: true });
@@ -271,23 +273,124 @@ test('la bandeja separa pendientes de cerradas y deja filtrar las propias', asyn
   await page.getByRole('button', { name: 'Cerradas', exact: true }).click();
   await expect(page.getByText(/Se pueden reabrir para seguir atendiéndolas/)).toBeVisible();
 
-  // El histórico añade rango de fechas; los pendientes no lo necesitan.
+  /*
+   * El rango de fechas ahora vive plegado tras su propio chip: siempre visible robaba
+   * dos campos de ancho a una columna de 380px que casi nunca los usa.
+   */
+  await expect(page.getByLabel(/Desde/)).toHaveCount(0);
+  await page.getByRole('button', { name: /Fechas/ }).click();
   await expect(page.getByLabel(/Desde/)).toBeVisible();
 
   // Con varias asistentes trabajando a la vez, saber cuáles son las tuyas.
   await expect(page.getByText('Solo las mías')).toBeVisible();
 
-  // La tercera vista: un hilo que el bot resolvió solo no está ni en pendientes
-  // (pide `escalada` o `reabiertaTs`) ni en cerradas (pide `resueltaTs`, que solo
-  // escribe una persona). Sin esta pestaña no había forma de llegar a él.
+  // «Todas» incluye las que el bot resolvió solo, que no salen en las otras dos.
   await page.getByRole('button', { name: 'Todas', exact: true }).click();
   await expect(page.getByText(/las que el bot resolvió solo/)).toBeVisible();
-  await expect(page.getByRole('columnheader', { name: 'Situación' })).toBeVisible();
-  // Buscar un paciente concreto es para lo que sirve, así que el rango también.
-  await expect(page.getByLabel(/Desde/)).toBeVisible();
 
+  // Y en pendientes no hay rango: ni el campo ni el chip que lo despliega.
   await page.getByRole('button', { name: 'Pendientes', exact: true }).click();
   await expect(page.getByLabel(/Desde/)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Fechas/ })).toHaveCount(0);
+});
+
+/**
+ * Fase 18 · el encargo del cliente, literal: «la interfaz de gestión de conversaciones
+ * es muy compleja». Era una tabla de seis columnas y un modal que la tapaba entera, así
+ * que para pasar de una conversación a la siguiente había que cerrarlo.
+ */
+test('abrir una conversación no tapa la lista', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: /Bandeja asistente/ }).click();
+
+  const lista = page.locator('.bandeja-lista');
+  await lista.locator('.fila-conv').first().click();
+
+  // Las dos cosas a la vez, que es el punto entero del rediseño.
+  await expect(page.locator('.bandeja-hilo .burbuja').first()).toBeVisible();
+  await expect(lista).toBeVisible();
+  await expect(page.locator('.modal')).toHaveCount(0);
+  await expect(page.locator('.fila-activa')).toHaveCount(1);
+});
+
+test('se pasa de una conversación a la siguiente sin cerrar nada', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: /Bandeja asistente/ }).click();
+  await page.getByRole('button', { name: 'Todas', exact: true }).click();
+
+  const filas = page.locator('.bandeja-lista .fila-conv');
+  await filas.nth(0).click();
+  const primera = await page.locator('.bandeja-hilo h3').textContent();
+
+  // Sin ningún clic de cierre por el medio: se pulsa la siguiente y ya.
+  await filas.nth(1).click();
+  await expect(page.locator('.bandeja-hilo h3')).not.toHaveText(primera ?? '');
+  await expect(page.locator('.fila-activa')).toHaveCount(1);
+});
+
+test('el hilo dice quién escribió cada mensaje y separa los días', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: /Bandeja asistente/ }).click();
+  await page.locator('.bandeja-lista .fila-conv').first().click();
+
+  await expect(page.locator('.burbuja.de-paciente').first()).toBeVisible();
+  await expect(page.locator('.burbuja.de-clinica').first()).toBeVisible();
+  // El bot y una persona eran indistinguibles antes de la fase 12.
+  await expect(page.locator('.burbuja.de-clinica time').first()).toContainText(/Asistente virtual|Paula/);
+  // Un mensaje de ayer y dos de hoy: tiene que haber dos separadores.
+  await expect(page.locator('.chat-dia')).toHaveCount(2);
+  await expect(page.getByText('Hoy', { exact: true })).toBeVisible();
+});
+
+/**
+ * `situacion()` es la máquina de estados más delicada de la pantalla y no tenía ni una
+ * prueba: decide si se puede escribir, si hay que reabrir o si solo cabe plantilla.
+ */
+test('fuera de la ventana de 24 h no se puede escribir, y se dice por qué', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: /Bandeja asistente/ }).click();
+
+  /*
+   * Se localiza por su previsualización y no por el buscador: el buscador va contra el
+   * paciente (nombre, documento, teléfono), no contra el texto de los mensajes.
+   * La segunda conversación del seed lleva cuatro días sin mensaje entrante.
+   */
+  await page.locator('.bandeja-lista .fila-conv')
+    .filter({ hasText: 'orden médica' }).first().click();
+  await expect(page.locator('.aviso-ventana')).toContainText(/más de 24 h/);
+  await expect(page.locator('.redactor textarea')).toBeDisabled();
+});
+
+test('sin conversación elegida se explica qué hacer', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: /Bandeja asistente/ }).click();
+
+  await expect(page.getByText(/Elige una conversación/)).toBeVisible();
+  await expect(page.locator('.burbuja')).toHaveCount(0);
+});
+
+test('el chip de interesados abre su conversación a la derecha', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: /Bandeja asistente/ }).click();
+  await page.getByRole('button', { name: /^Interesados/ }).click();
+
+  await expect(page.getByRole('heading', { name: 'Interesados sin agendar' })).toBeVisible();
+  // «Escribirle yo» era un botón dentro de una tabla aparte; ahora la fila es el botón.
+  await page.locator('.bandeja-lista .fila-conv').first().click();
+  await expect(page.locator('.bandeja-hilo .burbuja').first()).toBeVisible();
+});
+
+test('tomar una conversación la pone a tu nombre sin recargar', async ({ page }) => {
+  await entrar(page);
+  await page.getByRole('button', { name: /Bandeja asistente/ }).click();
+  await page.locator('.bandeja-lista .fila-conv').first().click();
+
+  await page.getByRole('button', { name: 'Tomar', exact: true }).click();
+
+  // En la cabecera y en la fila: prueba de que el refresco cruzado lista↔hilo funciona.
+  // `.hilo-cab .nota` y no `.bandeja-hilo .nota`: el redactor tiene la suya.
+  await expect(page.locator('.hilo-cab .nota')).toContainText('(tú)');
+  await expect(page.locator('.fila-activa')).toContainText('tú');
 });
 
 test('§2.10 · el mostrador busca antes de registrar, en vez de adivinar', async ({ page }) => {

@@ -1,29 +1,4 @@
-import { compararPendientes, esperaEnMinutos, inicioDeEspera, ordenarPendientes } from './bandeja.orden';
-
-describe('orden de la bandeja', () => {
-  const fila = (prioridad: string, minutosEsperando: number) => ({ prioridad, minutosEsperando });
-
-  it('RN-05.3: la prioridad manda, y dentro de ella quien lleva más esperando', () => {
-    const orden = ordenarPendientes([
-      fila('baja', 200), fila('alta', 5), fila('media', 90), fila('alta', 60), fila('media', 10),
-    ]);
-    expect(orden).toEqual([
-      fila('alta', 60), fila('alta', 5), fila('media', 90), fila('media', 10), fila('baja', 200),
-    ]);
-  });
-
-  /** Una prioridad que nadie reconoce no puede colarse por delante de una alta. */
-  it('lo desconocido va al final', () => {
-    expect(ordenarPendientes([fila('inventada', 999), fila('baja', 1)]))
-      .toEqual([fila('baja', 1), fila('inventada', 999)]);
-  });
-
-  it('no altera la lista que recibe', () => {
-    const original = [fila('baja', 1), fila('alta', 1)];
-    ordenarPendientes(original);
-    expect(original[0]!.prioridad).toBe('baja');
-  });
-});
+import { esperaEnMinutos, inicioDeEspera } from './bandeja.orden';
 
 /**
  * El reloj de la espera cambia con la reapertura: si siguiera contando desde el
@@ -73,12 +48,5 @@ describe('desde cuándo se cuenta la espera', () => {
     const reabiertaTs = hace(5);
     expect(inicioDeEspera({ escaladaTs: null, reabiertaTs, iniciadaTs: hace(4320) }))
       .toBe(reabiertaTs);
-  });
-});
-
-describe('compararPendientes', () => {
-  it('empate total: se queda como estaba', () => {
-    expect(compararPendientes({ prioridad: 'alta', minutosEsperando: 10 },
-                              { prioridad: 'alta', minutosEsperando: 10 })).toBe(0);
   });
 });

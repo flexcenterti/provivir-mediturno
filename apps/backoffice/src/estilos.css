@@ -135,7 +135,7 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
   font-weight: 700; min-width: 20px; height: 20px; border-radius: 999px;
   display: inline-flex; align-items: center; justify-content: center; padding: 0 .35rem; }
 .espera-larga { color: var(--red); font-weight: 700; }
-.chat { max-height: 45vh; overflow-y: auto; display: flex; flex-direction: column;
+.chat { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column;
   gap: .5rem; padding: .8rem; background: #F3F6F7; border-radius: 11px; margin: .6rem 0; }
 .burbuja { max-width: 78%; padding: .55rem .75rem; border-radius: 12px; font-size: .87rem;
   display: flex; flex-direction: column; gap: .2rem; }
@@ -149,7 +149,7 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
 .adjunto-imagen { display: block; margin-bottom: .35rem; }
 .adjunto-imagen img { max-width: 100%; max-height: 260px; border-radius: 9px; display: block; }
 .adjunto-audio { display: block; width: 100%; max-width: 260px; margin-bottom: .35rem; }
-.modal textarea { width: 100%; padding: .6rem .75rem; border: 1px solid var(--line);
+.modal textarea, .redactor textarea { width: 100%; padding: .6rem .75rem; border: 1px solid var(--line);
   border-radius: 9px; background: #FBFCFC; resize: vertical; }
 
 /* ══════════ Administración ══════════ */
@@ -249,7 +249,7 @@ code { font-family: var(--fm); font-size: .82rem; background: #EDF1F2; padding: 
 }
 .aviso-clave p { font-size: .9rem; opacity: .8; margin: .25rem 0 .75rem; }
 
-tr.inactiva { opacity: .55; }
+tr.inactiva, .inactiva { opacity: .55; }
 
 .etiqueta {
   display: inline-block;
@@ -473,7 +473,8 @@ tr.inactiva { opacity: .55; }
   body { background: #fff; }
   .lateral, .topbar, .sin-imprimir { display: none !important; }
   /* Sin esto, el `grid` deja el ticket desplazado 240px aunque la barra no se pinte. */
-  .consola { display: block !important; min-height: 0 !important; }
+  /* `height` además de `min-height`: la bandeja fija 100vh y el ticket saldría dentro. */
+  .consola { display: block !important; min-height: 0 !important; height: auto !important; }
   .contenido, .vista { padding: 0 !important; margin: 0 !important; max-width: none !important; }
   .zona-ticket { box-shadow: none !important; border: none !important; padding: 0 !important;
     margin: 0 !important; }
@@ -487,3 +488,101 @@ tr.inactiva { opacity: .55; }
 /* El código de la cita abre su ficha: se ve que es pulsable sin dejar de ser un chip. */
 .chip-boton { border: 1px dashed transparent; }
 .chip-boton:hover { border-color: var(--teal); }
+
+/* ══════════ Bandeja de dos paneles (fase 18) ══════════ */
+
+/*
+ * `.consola` es `min-height:100vh`, así que la fila del grid mide lo que mide el
+ * contenido y ningún hijo puede tener scroll propio — un `overflow-y:auto` sobre una
+ * caja de altura indefinida no hace nada. La bandeja necesita lo contrario, y es la
+ * única: por eso va por clase y no se toca `.consola` a secas, que gobierna 17 vistas.
+ */
+@media (min-width: 821px) {
+  .consola.plena { height: 100vh; }
+  /* 17 entradas de menú no caben en 800px de alto: sin esto se corta «Cerrar sesión». */
+  .consola.plena .lateral { overflow-y: auto; }
+  .consola.plena .contenido { display: flex; flex-direction: column; overflow: hidden; }
+  .consola.plena .topbar { flex: none; }
+  .consola.plena .vista { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+}
+
+/*
+ * Contenedor de consulta y no media query de ventana: con la barra de 240px, a 1024px
+ * de ventana quedan 720px útiles y una query a 820 no se entera. Lo recomienda el
+ * comentario de más arriba en este mismo archivo.
+ */
+.consola.plena .contenido { container-type: inline-size; container-name: area; }
+
+.bandeja {
+  display: grid; gap: 1rem; flex: 1; min-height: 0;
+  /* `minmax(0,1fr)` y no `1fr`: con `1fr` el mínimo es el contenido, y una burbuja
+     larga ensancharía la columna en vez de partir la línea. */
+  grid-template-columns: minmax(320px, 400px) minmax(0, 1fr);
+}
+.bandeja > .card { margin-bottom: 0; display: flex; flex-direction: column; min-height: 0; }
+.bandeja .hd { flex: none; }
+/* `min-height:0` en cada eslabón o el scroll se va a la ventana en vez de al panel. */
+.bandeja-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.bandeja-pie { flex: none; border-top: 1px solid var(--line); padding: .5rem 1.15rem;
+  font-size: .76rem; color: var(--muted); display: flex; align-items: center; gap: .6rem; }
+
+/* ── Filtros ── */
+.bandeja-filtros { display: flex; flex-direction: column; gap: .5rem; width: 100%; }
+.chips-filtro { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+/* Un borde separa el grupo excluyente de los modificadores: se lee que no son lo mismo. */
+.chips-filtro .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .25rem; }
+.chip-num { margin-left: .35rem; background: rgba(0,0,0,.12); border-radius: 999px;
+  padding: 0 .3rem; font-size: .72rem; font-weight: 700; }
+.chip-sel.activo .chip-num { background: rgba(255,255,255,.25); }
+.chip-punto { margin-left: .3rem; color: var(--teal); font-size: 1rem; line-height: 0; }
+.chip-sel.activo .chip-punto { color: #fff; }
+.rango-fechas { display: flex; gap: .5rem; flex-wrap: wrap; }
+.rango-fechas label { font-size: .78rem; color: var(--muted); display: flex;
+  align-items: center; gap: .35rem; }
+.rango-fechas input { padding: .35rem .5rem; border: 1px solid var(--line);
+  border-radius: 8px; background: #fff; }
+
+/* ── La fila ── */
+.lista-conv { list-style: none; }
+.fila-conv { display: flex; flex-direction: column; gap: .15rem; width: 100%;
+  text-align: left; padding: .6rem .9rem; border-bottom: 1px solid var(--line); }
+/*
+ * El hover NO puede ser `teal-soft`: es el color de `.fila-activa`, y la seleccionada y
+ * la que está bajo el ratón se verían idénticas. El hover baja a gris y la activa gana
+ * además una barra a la izquierda.
+ */
+.fila-conv:hover { background: #F7FAFA; }
+.fila-conv.fila-activa { box-shadow: inset 3px 0 0 var(--teal); }
+.fc-l1, .fc-l3 { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+.fc-nombre, .fc-prev, .fc-motivo, .fc-atiende {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-nombre { font-weight: 600; flex: 1; font-size: .9rem; }
+.fc-cuando { flex: none; font-size: .72rem; color: var(--muted); }
+.fc-prev { font-size: .82rem; color: var(--muted); }
+.fc-l3 { font-size: .74rem; color: var(--muted); }
+.fc-motivo { flex: 1; }
+.fc-atiende { flex: none; max-width: 40%; }
+
+/* ── El hilo ── */
+.hilo-cab { display: flex; flex-direction: column; gap: .2rem; flex: 1; min-width: 0; }
+.hilo-cab h3 { font-size: 1rem; margin: 0; }
+.hilo-avisos { flex: none; padding: .8rem 1.15rem 0; }
+.hilo-avisos .aviso-ventana:last-child, .hilo-avisos .error:last-child { margin-bottom: 0; }
+.bandeja-hilo .chat { margin: .8rem 1.15rem; }
+.redactor { flex: none; border-top: 1px solid var(--line); padding: .8rem 1.15rem; }
+.redactor textarea { width: 100%; }
+.redactor .acciones { margin-top: .5rem; }
+.chat-dia { align-self: center; margin: .3rem 0; }
+/* La píldora aparece cuando llega algo y estás leyendo historial: no se te arranca la vista. */
+.chat-nuevo { position: sticky; bottom: .4rem; align-self: center; z-index: 1; }
+
+@container area (max-width: 760px) {
+  /* Como WhatsApp en móvil: o la lista o el hilo, nunca los dos apretados. */
+  .bandeja { grid-template-columns: 1fr; }
+  .bandeja.con-abierta .bandeja-lista { display: none; }
+  .bandeja:not(.con-abierta) .bandeja-hilo { display: none; }
+  .bandeja-volver { display: inline-flex; }
+  /* Aquí la página vuelve a scrollear como documento, así que el chat recupera tope. */
+  .chat { max-height: 60vh; }
+}
+.bandeja-volver { display: none; }

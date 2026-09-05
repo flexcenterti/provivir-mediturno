@@ -45,6 +45,8 @@
 Motivo, prioridad, **tiempo esperando** e historial completo con los adjuntos del paciente.
 Orden: prioridad y, dentro de ella, quien lleva más esperando — porque mientras el cliente no defina
 los criterios de prioridad (P4), la columna operativa dominante es el tiempo de espera (RN-05.3).
+**Superado en la fase 18**: la bandeja pasó a ordenarse por actividad reciente, con la
+etiqueta de prioridad siempre visible. Ver `docs/rn-05-3-orden-de-la-bandeja.md`.
 La asistente toma, responde por WhatsApp y resuelve sin salir de la plataforma.
 **Burbuja roja con el conteo en el menú lateral, sin sonido** (decisión explícita del cliente).
 

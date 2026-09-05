@@ -168,7 +168,12 @@ function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => 
   }, [usuario.permisos]);
 
   return (
-    <div className="consola">
+    /*
+     * La bandeja es la única pantalla de tipo «aplicación»: dos columnas que scrollean
+     * por separado. El resto siguen siendo documentos que crecen hacia abajo, así que la
+     * altura fija se activa por clase y no se le impone a `.consola` a secas.
+     */
+    <div className={`consola${vista === 'bandeja' ? ' plena' : ''}`}>
       <aside className="lateral">
         <div className="brand">
           <div className="brand-mark">CPP</div>
