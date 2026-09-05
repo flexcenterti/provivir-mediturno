@@ -8,9 +8,12 @@ import type { PrismaClient } from '@prisma/client';
  * horario de la clínica queda en git, con su historial, en vez de repartido en
  * formularios que nadie puede auditar.
  *
- * No se carga desde el backoffice porque son ~26 franjas de agenda y la interfaz **no
- * tiene forma de corregir ni borrar una agenda** (solo bloquearla): una franja mal
- * tecleada se queda para siempre.
+ * No se carga desde el backoffice porque son ~26 franjas de agenda y teclearlas a mano
+ * es lento y no queda auditado en un sitio revisable.
+ *
+ * (Desde la fase 21 la interfaz **sí** corrige y retira agendas —RN-06.6—, así que una
+ * franja mal tecleada ya no se queda para siempre. Lo que sigue siendo cierto es lo de
+ * abajo: reejecutar esto descarta los ajustes hechos a mano.)
  *
  * Lo que NO está aquí, deliberadamente:
  *   · consultorios — el cliente no los envió; se rellenan desde el backoffice

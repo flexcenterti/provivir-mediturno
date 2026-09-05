@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { AgendasService } from './agendas.service';
-import { BloquearAgendaDto, CrearAgendaDto, ProgramacionMensualDto } from './dto/agenda.dto';
+import {
+  ActualizarAgendaDto, BloquearAgendaDto, CrearAgendaDto, ProgramacionMensualDto, RetirarAgendaDto,
+} from './dto/agenda.dto';
 import { Permisos } from '../auth/decorators/permisos.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
 import type { UsuarioAutenticado } from '../auth/auth.types';
@@ -15,8 +17,11 @@ export class AgendasController {
   constructor(private readonly agendas: AgendasService) {}
 
   @Get()
-  listar(@Query('prestadorId') prestadorId?: string) {
-    return this.agendas.listar(prestadorId);
+  listar(
+    @Query('prestadorId') prestadorId?: string,
+    @Query('incluirRetiradas') incluirRetiradas?: string,
+  ) {
+    return this.agendas.listar(prestadorId, incluirRetiradas === 'true');
   }
 
   @Post()
@@ -30,6 +35,41 @@ export class AgendasController {
   @Permisos('agenda.editar')
   programacionMensual(@Body() dto: ProgramacionMensualDto, @UsuarioActual() usuario: UsuarioAutenticado) {
     return this.agendas.programacionMensual(dto, usuario.id);
+  }
+
+  /**
+   * RN-06.6 · corregir días y horas. Misma mecánica que el bloqueo: sin `confirmar`
+   * devuelve el impacto y no toca nada.
+   */
+  @Patch(':id')
+  @Permisos('agenda.editar')
+  actualizar(
+    @Param('id') id: string,
+    @Body() dto: ActualizarAgendaDto,
+    @UsuarioActual() usuario: UsuarioAutenticado,
+  ) {
+    return this.agendas.actualizar(id, dto, usuario.id);
+  }
+
+  /**
+   * RN-06.6 · retirar una franja. POST y no DELETE porque no es un borrado: es una
+   * transición de estado con inversa —`reactivar`— y necesita cuerpo para `confirmar` y
+   * respuesta con el impacto.
+   */
+  @Post(':id/retirar')
+  @Permisos('agenda.editar')
+  retirar(
+    @Param('id') id: string,
+    @Body() dto: RetirarAgendaDto,
+    @UsuarioActual() usuario: UsuarioAutenticado,
+  ) {
+    return this.agendas.retirar(id, dto, usuario.id);
+  }
+
+  @Post(':id/reactivar')
+  @Permisos('agenda.editar')
+  reactivar(@Param('id') id: string, @UsuarioActual() usuario: UsuarioAutenticado) {
+    return this.agendas.reactivar(id, usuario.id);
   }
 
   /** RN-06.3 · sin `confirmar` devuelve el impacto; con `confirmar` lo aplica. */
