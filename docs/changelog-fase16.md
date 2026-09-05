@@ -1,6 +1,6 @@
 # Changelog · FASE 16 — Hablar con los pacientes que se agendan solos
 
-**Estado:** en rama `fase-16-contacto-autoagendados`. 314 unitarias (API) + 39 (shared) +
+**Estado:** desplegado en producción el 2026-09-05. 314 unitarias (API) + 39 (shared) +
 319 e2e + 26 de navegador.
 
 ## Por qué
@@ -155,3 +155,52 @@ deshabilitado diciendo por qué.
 - **Índice único parcial** `UNIQUE (telefono) WHERE resuelta_ts IS NULL`, que respaldaría
   en la base lo que hoy garantiza solo el lock.
 - **Cierre del día**, que sigue sin existir.
+
+---
+
+## El despliegue
+
+Desplegado el 2026-09-05 a las 09:59 (14:59 UTC), **en horario de atención**: nada de esta
+fase rompe una pestaña abierta durante el relevo, a diferencia de la fase 15.
+
+**La migración tocó lo que tenía que tocar y nada más:** de 11 a 12, y la única aplicada
+fue `conversacion_iniciada_por_asistente`. La columna quedó nullable y sin rellenar.
+
+**`plantilla_contacto_inicial` llegó sola**, por la reconciliación de `asegurarBase()`, sin
+tocar la base a mano. Las seis plantillas siguen vacías, que es lo que hay hasta que el
+cliente las tramite ante Meta.
+
+### El tamaño real del problema
+
+Antes de desplegar, en producción:
+
+| | |
+|---|---|
+| Conversaciones en total | 337 |
+| Visibles en «Pendientes» (escaladas) | 19 |
+| Visibles en «Cerradas» | 238 |
+| **Invisibles: ni en una vista ni en la otra** | **80** |
+
+Ochenta conversaciones que existían y a las que nadie podía llegar. Con la pestaña nueva
+son alcanzables, y el buscador por nombre o documento las recorre.
+
+Dato colateral: **cero reabiertas**. Por eso la burbuja del menú era correcta por
+casualidad pese a los dos contadores divergentes — el defecto habría aparecido el primer
+día que una asistente reabriera algo, que es justo lo que la fase 13 acababa de habilitar.
+
+### Verificado en vivo
+
+`/api/health/ready` en `ok` con `db`, `sede` y `configuracion` en `ok` · las tres rutas
+nuevas registradas (`POST /api/bandeja`, `GET /api/citas/:id/contacto`, y `vista=todas`
+sobre la de siempre) · el bundle servido idéntico al compilado en las tres aplicaciones,
+con el `index.html` apuntando a él y sin `dist` anidado · ningún error en el registro desde
+el relevo.
+
+**Los datos no se perdieron, y no estaban quietos:** durante la ventana los conteos
+subieron —74 pacientes, 345 conversaciones, 5.055 mensajes— porque había pacientes
+escribiendo por WhatsApp mientras se desplegaba. Ninguno bajó. Citas, turnos y usuarios
+sin cambio.
+
+Respaldos previos comprobados con contenido real, no solo con código de salida:
+`~/respaldo-2026-09-05-0952.sql.gz` (627 K, 9.611 líneas, 26 bloques `COPY` y el cierre
+`PostgreSQL database dump complete`) y `~/web-pre-fase16-2026-09-05-0953.tgz`.
