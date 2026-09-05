@@ -60,8 +60,26 @@ export class TurnosService {
 
     if (!cita) throw new NotFoundException('No se encontró una cita de hoy pendiente de llegada');
 
+    /*
+     * `Turno.citaId` es único, así que una cita solo puede tener una fila de turno —
+     * y hasta ahora cualquier fila existente bloqueaba la llegada, mirara o no su
+     * estado. Eso dejaba fuera un caso real: al reprogramar, el turno queda
+     * `cancelado` y la cita vuelve a `confirmada`, pero el día bueno el mostrador
+     * seguía respondiendo «la llegada ya fue registrada». Al paciente al que le
+     * mueven la cita no se le podía registrar la llegada NUNCA.
+     *
+     * La fase 13 arregló el estado de la cita y dejó esto sin ver; la prueba que
+     * escribió comprobaba solo esa mitad.
+     *
+     * Se reutiliza la fila en vez de levantar el `@unique`: convertir `Cita.turno` en
+     * una lista tocaría el buscador, el ticket, los tipos del cliente y la cola, y es
+     * desproporcionado. Lo que se pierde —el cobro anterior— vive en auditoría, que
+     * es append-only y es su sitio.
+     */
     const existente = await this.prisma.turno.findUnique({ where: { citaId: cita.id } });
-    if (existente) throw new BadRequestException('La llegada de esta cita ya fue registrada');
+    if (existente && existente.estado !== 'cancelado') {
+      throw new BadRequestException('La llegada de esta cita ya fue registrada');
+    }
 
     /*
      * RN-07.6 · La nota se exige ANTES de tocar nada: si falta, no puede quedar ni el
@@ -73,16 +91,23 @@ export class TurnosService {
     // RN-05.2 · las marcas preferenciales del paciente definen la prioridad de entrada.
     const prioridad = prioridadPorCondiciones(cita.paciente.condiciones);
 
+    const datos = {
+      prioridad,
+      consultorio: dto.consultorio ?? cita.prestador.consultorio,
+      ...this.datosDeCobro(dto, usuarioId),
+    };
+
     const turno = await this.prisma.$transaction(async (tx) => {
-      const t = await tx.turno.create({
-        data: {
-          citaId: cita.id,
-          prioridad,
-          consultorio: dto.consultorio ?? cita.prestador.consultorio,
-          ...this.datosDeCobro(dto, usuarioId),
-        },
-        include: INCLUIR,
-      });
+      const t = existente
+        ? await tx.turno.update({
+            where: { id: existente.id },
+            // La llegada anterior quedó cancelada: esta empieza de cero. Sin
+            // limpiar `llamadoTs` seguiría apareciendo en las pantallas de sala.
+            data: { ...datos, estado: 'en_espera', llegadaTs: new Date(), llamadoTs: null },
+            include: INCLUIR,
+          })
+        : await tx.turno.create({ data: { citaId: cita.id, ...datos }, include: INCLUIR });
+
       await tx.cita.update({ where: { id: cita.id }, data: { estado: 'llego' } });
       return t;
     });

@@ -154,8 +154,14 @@ function Fila({ cita, ocupado, onRegistrar, onReimprimir, onVerCita }: {
   const exigeNota = sinCosto === (cobro === 'cobrado');
   const listo = !exigeNota || nota.trim().length >= 5;
 
-  const yaRegistrada = cita.turno !== null && cita.turno !== undefined;
-  const registrable = !yaRegistrada && (cita.estado === 'pendiente_llegada' || cita.estado === 'confirmada');
+  /*
+   * Un turno `cancelado` es el de una llegada anterior que se anuló al mover la cita:
+   * no cuenta como registrada, y el paciente puede volver a presentarse. Tratarlo
+   * como registrada es lo que dejaba a esa persona sin poder registrar la llegada.
+   */
+  const turnoVivo = cita.turno && cita.turno.estado !== 'cancelado' ? cita.turno : null;
+  const cobroAnterior = cita.turno?.estado === 'cancelado' ? cita.turno : null;
+  const registrable = !turnoVivo && (cita.estado === 'pendiente_llegada' || cita.estado === 'confirmada');
 
   return (
     <tr>
@@ -176,8 +182,8 @@ function Fila({ cita, ocupado, onRegistrar, onReimprimir, onVerCita }: {
       <td>{cita.prestador.nombre}</td>
       <td>{aHora(cita.horaInicio)}</td>
       <td>
-        {yaRegistrada
-          ? <EtiquetaCobro turno={cita.turno!} />
+        {turnoVivo
+          ? <EtiquetaCobro turno={turnoVivo} />
           : registrable
             ? (
               <>
@@ -191,13 +197,20 @@ function Fila({ cita, ocupado, onRegistrar, onReimprimir, onVerCita }: {
                   <input className="nota-cobro" value={nota} onChange={(e) => setNota(e.target.value)}
                          placeholder={cobro === 'exento' ? 'Por qué no se cobró…' : 'Por qué se cobró…'} />
                 )}
+                {/* Se le movió la cita: que la asistente vea qué se resolvió la vez
+                    anterior antes de decidir si vuelve a cobrar. */}
+                {cobroAnterior?.cobro && (
+                  <span className="muted">
+                    En la llegada anterior: {cobroAnterior.cobro === 'cobrado' ? 'cobrado' : 'no se cobró'}
+                  </span>
+                )}
               </>
             )
             : <span className="muted">—</span>}
       </td>
       <td className="acciones">
         {cita.estado === 'cancelada' && <span className="muted">Cita cancelada</span>}
-        {yaRegistrada && (
+        {turnoVivo && (
           <button className="btn btn-sm btn-ghost" disabled={ocupado} onClick={() => onReimprimir(cita)}>
             Reimprimir ticket
           </button>
@@ -210,7 +223,7 @@ function Fila({ cita, ocupado, onRegistrar, onReimprimir, onVerCita }: {
         )}
         {/* El resto de estados —atendida, en atención— no tienen acción, y decirlo
             es mejor que un botón que devuelve un 400 genérico. */}
-        {!yaRegistrada && !registrable && cita.estado !== 'cancelada' && (
+        {!turnoVivo && !registrable && cita.estado !== 'cancelada' && (
           <span className="muted">{cita.estado.replace(/_/g, ' ')}</span>
         )}
       </td>

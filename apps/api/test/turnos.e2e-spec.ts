@@ -353,4 +353,81 @@ describe('Cola de sala (integración)', () => {
       expect(codigos.indexOf(a.codigo)).toBeLessThan(codigos.indexOf(b.codigo));
     });
   });
+
+  /**
+   * El defecto que la fase 13 dejó a medias.
+   *
+   * Al reprogramar, la cita vuelve a `confirmada` y su turno queda `cancelado`. Pero
+   * `registrarLlegada` rechazaba si existía CUALQUIER turno, mirara o no su estado:
+   * al paciente al que le mueven la cita no se le podía registrar la llegada nunca.
+   * La prueba de la fase 13 comprobaba solo la mitad que sí se arregló —el estado de
+   * la cita— y por eso pasó inadvertido.
+   */
+  describe('volver a registrar tras una reprogramación', () => {
+    it('la llegada del día nuevo se puede registrar', async () => {
+      const cita = await porLlegar('mg');
+      const t = await token('asistente@provivir.local');
+      const llegada = (cuerpo: object) => request(http).post('/api/turnos/llegada')
+        .set('Authorization', `Bearer ${t}`).send(cuerpo);
+
+      const primera = await llegada({ codigo: cita.codigo, cobro: 'cobrado' }).expect(201);
+
+      /*
+       * Se le llamó y se le movió la cita estando ya en sala: `cerrarTurnoAbierto`
+       * cancela también desde `llamado`, así que un turno cancelado puede arrastrar
+       * su `llamadoTs`. Es lo que hace que limpiarlo importe.
+       */
+      await prisma.turno.update({
+        where: { id: primera.body.id },
+        data: { estado: 'cancelado', llamadoTs: new Date() },
+      });
+      await prisma.cita.update({ where: { id: cita.id }, data: { estado: 'confirmada' } });
+
+      const segunda = await llegada({
+        codigo: cita.codigo, cobro: 'exento', cobroNota: 'Ya pagó en la cita anterior',
+      }).expect(201);
+
+      // Se reutiliza la fila: `citaId` es único y no puede haber dos.
+      expect(segunda.body.id).toBe(primera.body.id);
+
+      const turno = await prisma.turno.findUniqueOrThrow({ where: { id: primera.body.id } });
+      expect(turno.estado).toBe('en_espera');
+      expect(turno.cobro).toBe('exento');
+      // Sin limpiar esto, seguiría saliendo en las pantallas de sala.
+      expect(turno.llamadoTs).toBeNull();
+    });
+
+    /**
+     * Registrar dos veces sigue sin poder hacerse, pero lo frena la CITA, no el turno:
+     * tras la primera queda en `llego` y el buscador solo mira
+     * `pendiente_llegada|confirmada`, así que ni la encuentra. La guarda del turno es
+     * la segunda línea, para un estado incoherente. Conviene saber cuál actúa: si
+     * mañana alguien relaja el filtro de la cita, esta prueba sigue en verde y la de
+     * abajo es la que avisa.
+     */
+    it('registrar dos veces sigue sin poder hacerse', async () => {
+      const cita = await porLlegar('mg');
+      const t = await token('asistente@provivir.local');
+      const llegada = () => request(http).post('/api/turnos/llegada')
+        .set('Authorization', `Bearer ${t}`).send({ codigo: cita.codigo, cobro: 'cobrado' });
+
+      await llegada().expect(201);
+      await llegada().expect(404);
+    });
+
+    it('y con la cita forzada a `confirmada`, la guarda del turno lo impide igual', async () => {
+      const cita = await porLlegar('mg');
+      const t = await token('asistente@provivir.local');
+      const llegada = () => request(http).post('/api/turnos/llegada')
+        .set('Authorization', `Bearer ${t}`).send({ codigo: cita.codigo, cobro: 'cobrado' });
+
+      await llegada().expect(201);
+      // Estado incoherente: turno vivo con la cita sin registrar. No debería ocurrir,
+      // y si ocurre no puede acabar en dos llegadas.
+      await prisma.cita.update({ where: { id: cita.id }, data: { estado: 'confirmada' } });
+
+      const r = await llegada().expect(400);
+      expect(r.body.message).toMatch(/ya fue registrada/);
+    });
+  });
 });
