@@ -1,6 +1,6 @@
 # Changelog · FASE 19 — Las pantallas de llamado, funcionando
 
-**Estado:** en rama `fase-19-pantallas-de-sala`. **Sin migración.** 315 unitarias (API) +
+**Estado:** desplegado en producción el 2026-09-05. **Sin migración.** 315 unitarias (API) +
 67 (shared) + 370 e2e + 53 de navegador.
 
 ## Por qué
@@ -237,3 +237,60 @@ siguiente: el tablero tiene que amanecer vacío.
   propia.
 - **Nadie ha llamado a un turno en producción todavía.** Hasta que ocurra, toda esta cadena
   está probada pero no usada.
+
+---
+
+## El despliegue
+
+Desplegado el 2026-09-05 a las 19:45, en **dos releases**, y la separación sirvió para lo
+que se puso: verificar el transporte a solas, antes de que ningún bundle cambiara.
+
+`prisma migrate status` contra la base real: **12 migraciones, las mismas, esquema al día.**
+
+### El momento que justifica la fase
+
+Antes del relevo, medido:
+
+```
+/tiempo-real/  →  404
+/socket.io/    →  200 text/html   (el index del backoffice)
+```
+
+Después de desplegar **solo la API**, sin tocar un bundle ni el proxy:
+
+```
+0{"sid":"rSMz2qN5vcIKFbrFAAAA","upgrades":["websocket"],"pingInterval":25000,…}
+```
+
+Y de extremo a extremo desde fuera de la red, con un cliente real:
+
+```
+CONECTADO por websocket
+suscribir-pantalla -> {"ok":true}
+```
+
+`websocket`, no el polling de respaldo. **Es la primera conexión de tiempo real que este
+proyecto tiene en producción.** Con eso solo, antes del segundo release, la bandeja de la
+fase 18 empezó a refrescar en vivo.
+
+### Verificado en vivo
+
+- `/api/health/ready` en `ok`; el contenedor `healthy`.
+- Las cinco rutas nuevas registradas: `POST /pantallas`, `DELETE /pantallas/:id`,
+  `POST /turnos/:id/rellamar`, y las que ya estaban.
+- Bundles servidos: backoffice `index-hXmXJcXm.js` y TV `index-BVJpWIcn.js` cambiaron;
+  **el portal quedó en `index-Duhw44L6.js`, byte por byte el mismo de antes** — esta fase no
+  lo toca y así se comprueba. Sin `dist` anidado.
+- CSP de `/tv`: `connect-src 'self' wss://provivir.exagos.co`.
+- Caddy `validate` antes de `reload`. Sigue con dos semanas de uptime: se recargó, no se
+  reinició.
+- Sin errores ni 500 en el registro.
+- Datos: 91 pacientes, 25 citas, 456 conversaciones, 6.313 mensajes — **uno más** que antes
+  del relevo, tráfico real de WhatsApp durante la ventana. 12 migraciones. Y **0 pantallas**,
+  que es lo acordado: el alta la hace el cliente.
+
+### Lo que todavía no se ha ejercitado
+
+Nadie ha llamado un turno en producción — cero `llamado_ts` en toda la historia. La cadena
+completa (crear pantalla → abrirla en el televisor → pulsar OK en el mando → llamar) está
+probada pero **no usada**, y esa verificación solo se puede hacer en la sede.
