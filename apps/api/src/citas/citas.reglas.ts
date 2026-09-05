@@ -110,6 +110,42 @@ export function cumpleAnticipacionMinima(
  * RN-04.4 · un servicio de N cupos ocupa N × slot: la duración efectiva ya viene
  * calculada por el llamador, y aquí solo se exige que quepa completa antes del cierre.
  */
+/**
+ * ¿Este cupo es LEGAL en esta franja?
+ *
+ * Es el predicado de pertenencia del conjunto que `generarCupos` produce, y por eso vive
+ * pegado a él: la propiedad «todo cupo generado cabe, y todo cupo que cabe se genera» es
+ * lo que impide que el motor de cupos y las validaciones se separen con el tiempo.
+ *
+ * Las tres condiciones tapan agujeros distintos:
+ * - **empieza dentro** y **termina dentro**: una cita de 40 minutos que arranca a las
+ *   11:45 en una franja que cierra a las 12:00 no cabe, aunque su inicio sí esté dentro.
+ * - **alineada al slot**: mover `horaIni` de 07:00 a 07:10 deja las citas dentro del rango
+ *   y sin embargo desalineadas, o sea inválidas para reprogramar.
+ *
+ * Estaba escrita dos veces, palabra por palabra, en `validarCupo` y en `tieneFranjaPara`.
+ */
+export function cabeEnFranja(cupo: Cupo, franja: FranjaAgenda): boolean {
+  return (
+    cupo.horaInicio >= franja.horaIni
+    && cupo.horaInicio + cupo.duracionMin <= franja.horaFin
+    && (cupo.horaInicio - franja.horaIni) % franja.slotMin === 0
+  );
+}
+
+/**
+ * ¿Este cupo PISA esta franja, aunque no sea legal en ella?
+ *
+ * No es lo mismo que `cabeEnFranja` y la diferencia importa. Para decidir si una cita se
+ * ve afectada por quitar una franja hay que preguntar «¿vive aquí dentro?», no «¿sería
+ * legal aquí?»: una cita desalineada —creada cuando el `slotMin` era otro— o que desborda
+ * el cierre **no cabe** pero **sí está ahí**. Usar el predicado estricto para eso
+ * sub-reportaría el impacto en un diálogo de confirmación, que es el peor fallo posible.
+ */
+export function intersectaFranja(cupo: Cupo, franja: FranjaAgenda): boolean {
+  return seSolapan(cupo.horaInicio, cupo.duracionMin, franja.horaIni, franja.horaFin - franja.horaIni);
+}
+
 export function generarCupos(franja: FranjaAgenda, duracionMin: number): Cupo[] {
   const cupos: Cupo[] = [];
   for (let h = franja.horaIni; h + duracionMin <= franja.horaFin; h += franja.slotMin) {
