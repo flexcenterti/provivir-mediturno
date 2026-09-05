@@ -13,6 +13,11 @@ interface Llamado {
   repetido?: boolean;
 }
 
+interface Anuncio {
+  id: string;
+  url: string;
+}
+
 interface ConfigPantalla {
   id: string;
   nombre: string;
@@ -86,6 +91,41 @@ function FranjaSonido({ onActivar }: { onActivar: () => void }) {
 }
 
 /**
+ * El reloj de la cabecera, con la hora del SERVIDOR.
+ *
+ * Los sticks HDMI baratos no traen reloj de batería y arrancan con la zona horaria mal,
+ * y un reloj equivocado colgado en la pared de una sala de espera es peor que no tener
+ * ninguno. El servidor manda su hora en cada sondeo, se guarda el desfase una vez y a
+ * partir de ahí la pantalla avanza sola.
+ *
+ * Vale además como indicador de vida: un televisor congelado es hoy indistinguible de
+ * una mañana tranquila, y un reloj que avanza lo distingue de un vistazo.
+ *
+ * Componente propio para que su tic no vuelva a renderizar el árbol que contiene el
+ * reproductor de YouTube.
+ */
+function Reloj({ desfaseMs }: { desfaseMs: number }) {
+  const [ahora, setAhora] = useState(() => new Date());
+
+  useEffect(() => {
+    /*
+     * Se re-arma al minuto exacto siguiente en vez de un `setInterval(1000)`: se pintan
+     * horas y minutos, así que un tic por segundo son 86.400 renders al día en un
+     * aparato que ya está peleando con un iframe de YouTube.
+     */
+    const t = setTimeout(() => setAhora(new Date()), 60_000 - (Date.now() % 60_000));
+    return () => clearTimeout(t);
+  }, [ahora]);
+
+  const t = new Date(ahora.getTime() + desfaseMs);
+  const opciones = { timeZone: 'America/Bogota' } as const;
+  const dia = t.toLocaleDateString('es-CO', { ...opciones, weekday: 'short', day: 'numeric', month: 'short' });
+  const hora = t.toLocaleTimeString('es-CO', { ...opciones, hour: '2-digit', minute: '2-digit' });
+
+  return <span className="tv-reloj"><strong>{hora}</strong> {dia}</span>;
+}
+
+/**
  * RN-11 · Pantalla de sala en modo kiosk. Ruta final: /tv/:pantallaId.
  * El id de pantalla viene por query (?pantalla=…) para no depender de un router.
  */
@@ -93,6 +133,14 @@ export function App() {
   const pantallaId = new URLSearchParams(location.search).get('pantalla') ?? '';
   const [config, setConfig] = useState<ConfigPantalla | null>(null);
   const [llamados, setLlamados] = useState<Llamado[]>([]);
+  /*
+   * `anuncios` y `ahora` viven en su propio estado y NO dentro de `config`: si entraran
+   * ahí, la comparación de abajo no coincidiría nunca y el reproductor de YouTube se
+   * recrearía cada 60 s.
+   */
+  const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
+  const [desfaseMs, setDesfaseMs] = useState(0);
+  const [caidos, setCaidos] = useState<string[]>([]);
   const [error, setError] = useState('');
   const socketRef = useRef<Socket | null>(null);
   /* El anuncio cuelga del socket, no del estado: ver el comentario del handler. */
@@ -115,6 +163,10 @@ export function App() {
             JSON.stringify(prev) === JSON.stringify(d.pantalla) ? prev : d.pantalla
           ));
           setLlamados(d.llamados);
+          setAnuncios(d.anuncios ?? []);
+          // El reloj se alinea con el servidor, no con el aparato: los sticks HDMI
+          // baratos no traen reloj y arrancan con la zona horaria mal.
+          if (d.ahora) setDesfaseMs(new Date(d.ahora).getTime() - Date.now());
         })
         .catch((e: Error) => setError(e.message));
 
@@ -152,13 +204,23 @@ export function App() {
 
   const visibles = llamados.slice(0, config.turnosVisibles);
   const actual = visibles[0];
+  /*
+   * Un anuncio que no carga sale de la franja entera. Dos carteles se ven bien; dos
+   * carteles y un icono de imagen rota en la pared, no. Y si caen todos, `data-anuncios`
+   * pasa a `no` y la franja desaparece en vez de dejar una banda negra bajo el video
+   * que parece una avería del televisor.
+   */
+  const vivos = anuncios.filter((a) => !caidos.includes(a.id));
 
   return (
     <div className="tv">
       <header className="tv-cab">
         <div className="brand-mark">CPP</div>
         <h1>Centro de Profesionales & Provivir · CPP Principal</h1>
-        <span className="tv-sala">{config.nombre}</span>
+        <span className="tv-cab-derecha">
+          <Reloj desfaseMs={desfaseMs} />
+          <span className="tv-sala">{config.nombre}</span>
+        </span>
         {sonido.estado === 'sin-voz' && (
           <span className="tv-aviso" title="Falta el paquete de voz en español en el televisor">
             Sin voz en español
@@ -168,7 +230,16 @@ export function App() {
 
       {sonido.estado === 'pendiente' && <FranjaSonido onActivar={sonido.activar} />}
 
-      <div className="tv-cuerpo">
+      <div
+        className="tv-cuerpo"
+        /*
+         * Atributos de datos y no clases compuestas: componer clases deja combinaciones
+         * sin CSS que solo se descubren en la sala, y esto es greppable y afirmable
+         * desde una prueba de navegador.
+         */
+        data-media={config.media ? 'si' : 'no'}
+        data-anuncios={vivos.length ? 'si' : 'no'}
+      >
         <section className="tv-turnos">
           {actual ? (
             <div className="tv-actual">
@@ -201,6 +272,20 @@ export function App() {
         </section>
 
         {config.media && <FrameMultimedia config={config} />}
+
+        {vivos.length > 0 && (
+          <section className="tv-anuncios">
+            {vivos.map((a) => (
+              <div className="tv-anuncio" key={a.id}>
+                {/* `alt` vacío: son decorativos, y esta pantalla no tiene usuario que
+                    los navegue. Sin `loading="lazy"`: están a la vista y un hueco en la
+                    pared no es aceptable. */}
+                <img src={a.url} alt=""
+                     onError={() => setCaidos((c) => [...c, a.id])} />
+              </div>
+            ))}
+          </section>
+        )}
       </div>
 
       {config.mensaje && <footer className="tv-pie">{config.mensaje}</footer>}

@@ -190,16 +190,17 @@ model Sede {
   horario   String
   creadoEn  DateTime @default(now()) @map("creado_en")
 
-  pacientes      Paciente[]
-  prestadores    Prestador[]
-  agendas        Agenda[]
-  citas          Cita[]
-  conversaciones Conversacion[]
-  pantallas      Pantalla[]
-  usuarios       Usuario[]
-  perfiles       Perfil[]
-  articulos      KbArticulo[]
-  seguimientos   Seguimiento[]
+  pacientes        Paciente[]
+  prestadores      Prestador[]
+  agendas          Agenda[]
+  citas            Cita[]
+  conversaciones   Conversacion[]
+  pantallas        Pantalla[]
+  anuncios         AnuncioSala[]
+  usuarios         Usuario[]
+  perfiles         Perfil[]
+  articulos        KbArticulo[]
+  seguimientos     Seguimiento[]
   diasNoLaborables DiaNoLaborable[]
   consentimientos  ConsentimientoWhatsapp[]
 
@@ -231,11 +232,11 @@ model Paciente {
   creadoEn      DateTime       @default(now()) @map("creado_en")
   actualizadoEn DateTime       @updatedAt @map("actualizado_en")
 
-  sede           Sede                @relation(fields: [sedeId], references: [id])
-  historial      HistorialServicio[]
-  citas          Cita[]
-  conversaciones Conversacion[]
-  seguimientos   Seguimiento[]
+  sede            Sede                     @relation(fields: [sedeId], references: [id])
+  historial       HistorialServicio[]
+  citas           Cita[]
+  conversaciones  Conversacion[]
+  seguimientos    Seguimiento[]
   consentimientos ConsentimientoWhatsapp[]
 
   @@index([documento])
@@ -395,28 +396,28 @@ model DiaNoLaborable {
 // ─────────────────────────── Citas · el núcleo (RN-01 a RN-04) ───────────────────────────
 
 model Cita {
-  id            String     @id @default(uuid())
+  id                String     @id @default(uuid())
   /// Código de atención, único por sede y día
-  codigo        String
-  pacienteId    String     @map("paciente_id")
-  prestadorId   String     @map("prestador_id")
-  servicioId    String     @map("servicio_id")
-  tipo          TipoCita
+  codigo            String
+  pacienteId        String     @map("paciente_id")
+  prestadorId       String     @map("prestador_id")
+  servicioId        String     @map("servicio_id")
+  tipo              TipoCita
   /// RN-01.3 · Un control exige su consulta origen y debe caer dentro de la ventana del prestador
-  citaOrigenId  String?    @map("cita_origen_id")
-  fecha         DateTime   @db.Date
+  citaOrigenId      String?    @map("cita_origen_id")
+  fecha             DateTime   @db.Date
   /// Hora de inicio en minutos desde medianoche — aritmética de solapamiento sin ambigüedad de zona horaria
-  horaInicio    Int        @map("hora_inicio")
-  duracionMin   Int        @map("duracion_min")
-  estado        EstadoCita @default(confirmada)
-  origen        OrigenCita
-  observacion   String?
+  horaInicio        Int        @map("hora_inicio")
+  duracionMin       Int        @map("duracion_min")
+  estado            EstadoCita @default(confirmada)
+  origen            OrigenCita
+  observacion       String?
   /// Por qué se canceló. Campo propio porque antes el motivo pisaba `observacion` y
   /// se llevaba por delante lo que hubiera anotado quien agendó.
-  motivoCancelacion String? @map("motivo_cancelacion")
-  sedeId        String     @map("sede_id")
-  creadoEn      DateTime   @default(now()) @map("creado_en")
-  actualizadoEn DateTime   @updatedAt @map("actualizado_en")
+  motivoCancelacion String?    @map("motivo_cancelacion")
+  sedeId            String     @map("sede_id")
+  creadoEn          DateTime   @default(now()) @map("creado_en")
+  actualizadoEn     DateTime   @updatedAt @map("actualizado_en")
 
   paciente   Paciente  @relation(fields: [pacienteId], references: [id])
   prestador  Prestador @relation(fields: [prestadorId], references: [id])
@@ -455,15 +456,15 @@ model Turno {
   /// la regla, y será también el kiosko, que registra la llegada antes de que el
   /// paciente pase por caja. Poner `cobrado` en esas filas sería inventar un hecho
   /// sobre dinero.
-  cobro       CobroMostrador?
+  cobro      CobroMostrador?
   /// Obligatoria cuando el desenlace contradice la política del servicio (RN-07.6).
-  cobroNota   String?         @map("cobro_nota")
+  cobroNota  String?         @map("cobro_nota")
   /// Quién lo resolvió. No basta la auditoría: ese servicio traga sus propios fallos
   /// a propósito, y un registro con pérdidas no puede ser el único de algo contiguo
   /// al dinero. Mismo motivo que `priorizadoPor`.
-  cobradoPor  String?         @map("cobrado_por")
+  cobradoPor String?         @map("cobrado_por")
   /// Separado de `llegadaTs` porque hoy coinciden y con el kiosko no lo harán.
-  cobroTs     DateTime?       @map("cobro_ts")
+  cobroTs    DateTime?       @map("cobro_ts")
 
   cita Cita @relation(fields: [citaId], references: [id], onDelete: Cascade)
 
@@ -475,34 +476,34 @@ model Turno {
 // ─────────────────────────── Conversaciones WhatsApp (RN-08, RN-09) ───────────────────────────
 
 model Conversacion {
-  id         String             @id @default(uuid())
-  pacienteId String?            @map("paciente_id")
-  telefono   String
-  estado     EstadoConversacion @default(ia_activa)
-  intencion  String?
-  confianza  Int?
-  escalada   Boolean            @default(false)
+  id          String             @id @default(uuid())
+  pacienteId  String?            @map("paciente_id")
+  telefono    String
+  estado      EstadoConversacion @default(ia_activa)
+  intencion   String?
+  confianza   Int?
+  escalada    Boolean            @default(false)
   /// RN-08.3 · Marca temporal del escalamiento: alimenta la columna "tiempo esperando"
-  escaladaTs DateTime?          @map("escalada_ts")
-  motivo     String?
-  prioridad  Prioridad          @default(baja)
-  tomadaPor  String?            @map("tomada_por")
-  resueltaTs DateTime?          @map("resuelta_ts")
+  escaladaTs  DateTime?          @map("escalada_ts")
+  motivo      String?
+  prioridad   Prioridad          @default(baja)
+  tomadaPor   String?            @map("tomada_por")
+  resueltaTs  DateTime?          @map("resuelta_ts")
   /// Cuándo se reabrió una conversación ya cerrada. Es el reloj operativo de la
   /// bandeja: "esperando" se cuenta desde aquí, no desde el escalamiento original.
   ///
   /// Existe como campo propio, en vez de pisar `escalada`/`escaladaTs`, porque las
   /// métricas se calculan sobre el estado ACTUAL y no sobre una foto: reutilizarlos
   /// inflaría las escalaciones de un mes ya reportado.
-  reabiertaTs DateTime?         @map("reabierta_ts")
-  reaperturas Int               @default(0)
+  reabiertaTs DateTime?          @map("reabierta_ts")
+  reaperturas Int                @default(0)
   /// Cuándo una asistente abrió la conversación desde el backoffice, sin que el
   /// paciente hubiera escrito. Espejo de `reabiertaTs`, y por el mismo motivo: un
   /// hilo sin escalar ni reabrir no entra en «pendientes», y ponerle `escalada: true`
   /// falsearía las escalaciones de un mes ya reportado. Es también su reloj de espera.
-  iniciadaTs  DateTime?         @map("iniciada_ts")
-  sedeId     String             @map("sede_id")
-  creadoEn   DateTime           @default(now()) @map("creado_en")
+  iniciadaTs  DateTime?          @map("iniciada_ts")
+  sedeId      String             @map("sede_id")
+  creadoEn    DateTime           @default(now()) @map("creado_en")
 
   // ── Interés comercial (RN-09.9.1) · dispara la secuencia de seguimiento
   interesComercial  InteresComercial       @default(nulo) @map("interes_comercial")
@@ -619,6 +620,38 @@ model Pantalla {
   sede Sede @relation(fields: [sedeId], references: [id])
 
   @@map("pantalla")
+}
+
+/**
+ * RN-11.7 · Anuncios de la franja inferior del televisor.
+ *
+ * Son de SEDE, no de pantalla: los mismos en todos los televisores. Por eso no hay
+ * `pantallaId` y **no debe haberlo** — el día que un anuncio tenga que salir en un solo
+ * televisor, eso es un modelo distinto, no una columna más aquí. De ahí el nombre:
+ * `AnuncioPantalla` habría invitado a añadirla.
+ */
+model AnuncioSala {
+  id     String @id @default(uuid())
+  sedeId String @map("sede_id")
+
+  /// SOLO el nombre del archivo (`<uuid>.png`), nunca una ruta: la raíz la pone el
+  /// servidor y así la travesía de directorios es imposible por construcción.
+  /// `Mensaje.mediaPath` guarda la ruta entera y por eso necesita una guarda; aquí no.
+  archivo String
+  /// El MIME que se OLFATEÓ, no el que declaró el navegador ni el que sugiere la
+  /// extensión. Es el que se validó y es el que se sirve: un solo hecho, no dos.
+  mime           String
+  bytes          Int
+  /// Para que el operador sepa cuál es cuál. Solo se pinta: nunca es ruta ni cabecera.
+  nombreOriginal String @map("nombre_original")
+  /// Quién va a la izquierda de la franja es una decisión comercial, no una fecha.
+  orden    Int      @default(0)
+  creadoEn DateTime @default(now()) @map("creado_en")
+
+  sede Sede @relation(fields: [sedeId], references: [id])
+
+  @@index([sedeId, orden])
+  @@map("anuncio_sala")
 }
 
 // ─────────────────────────── Usuarios y auditoría ───────────────────────────

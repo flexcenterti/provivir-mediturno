@@ -2,6 +2,7 @@ export * from './roles.js';
 export * from './permisos.js';
 export * from './youtube.js';
 export * from './llamado-voz.js';
+export * from './imagenes.js';
 export * from './dominio.js';
 export * from './config-claves.js';
 export * from './festivos.js';

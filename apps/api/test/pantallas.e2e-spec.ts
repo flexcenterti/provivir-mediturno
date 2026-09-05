@@ -4,6 +4,8 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { TurnosService } from '../src/turnos/turnos.service';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { hoyEnSede, SEDE_ID } from '@provivir/shared';
 
 /**
@@ -250,6 +252,162 @@ describe('Pantallas de sala (integración)', () => {
     });
   });
 
+  /**
+   * RN-11.7 · Los anuncios de la franja del televisor.
+   *
+   * Es la primera vez que el sistema sirve bytes subidos por un usuario desde un
+   * endpoint público sin autenticar. Es una clase de superficie nueva, no una más.
+   */
+  describe('anuncios de sala', () => {
+    // Un PNG de 1×1 de verdad: la validación mira la firma, no la extensión.
+    const PNG = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const DIR = join(process.env.DIR_MEDIA || 'media', 'anuncios');
+
+    async function limpiarAnuncios() {
+      await prisma.anuncioSala.deleteMany({ where: { sedeId: SEDE_ID } });
+    }
+
+    const subir = async (contenido: Buffer, nombre = 'cartel.png') => {
+      const t = await admin();
+      return request(http).post('/api/pantallas/anuncios')
+        .set('Authorization', `Bearer ${t}`)
+        .attach('archivo', contenido, nombre);
+    };
+
+    beforeEach(limpiarAnuncios);
+    afterAll(limpiarAnuncios);
+
+    /*
+     * Mata: poner una guarda de permisos en `GET /:id/imagen`. La franja saldría vacía
+     * en todos los televisores y perfecta en el backoffice, que es la peor combinación
+     * posible para diagnosticarlo.
+     */
+    it('una imagen subida se consulta SIN sesión', async () => {
+      const r = await subir(PNG);
+      expect(r.status).toBe(201);
+
+      const img = await request(http).get(`/api/pantallas/anuncios/${r.body.id}/imagen`).expect(200);
+      expect(img.headers['content-type']).toBe('image/png');
+      expect(Buffer.from(img.body)).toEqual(PNG);
+    });
+
+    /*
+     * Mata: confiar en que ya lo pone Caddy. En `:3000` —desarrollo y esta misma
+     * suite— no lo pone nadie, y este endpoint sirve bytes de un usuario sin autenticar.
+     */
+    it('se sirve con nosniff y cacheable un año', async () => {
+      const r = await subir(PNG);
+      const img = await request(http).get(`/api/pantallas/anuncios/${r.body.id}/imagen`).expect(200);
+
+      expect(img.headers['x-content-type-options']).toBe('nosniff');
+      // Al revés que el adjunto de un paciente, que es `private, no-store`: un id apunta
+      // a un archivo fijo para siempre. Mata copiar de `bandeja` sin pensarlo.
+      expect(img.headers['cache-control']).toContain('public');
+      expect(img.headers['cache-control']).toContain('immutable');
+    });
+
+    /*
+     * Mata: validar solo por la extensión, que es lo que hacen hoy los otros dos
+     * endpoints de subida del sistema. Y mata también guardar el archivo antes de
+     * validarlo: se comprueba que el directorio no ganó ninguno.
+     */
+    it('un archivo con extensión de imagen y contenido falso da 400 y no deja nada en disco', async () => {
+      const antes = existsSync(DIR) ? (await import('node:fs/promises')).readdir(DIR) : Promise.resolve([]);
+      const cuantosAntes = (await antes).length;
+
+      const r = await subir(Buffer.from('<!doctype html><script>alert(1)</script>'), 'malo.png');
+      expect(r.status).toBe(400);
+      expect(r.body.message).toMatch(/no es una imagen/i);
+
+      const despues = existsSync(DIR) ? await (await import('node:fs/promises')).readdir(DIR) : [];
+      expect(despues.length).toBe(cuantosAntes);
+      expect(await prisma.anuncioSala.count({ where: { sedeId: SEDE_ID } })).toBe(0);
+    });
+
+    /*
+     * Mata: dejar el tope solo en la interfaz. Cinco carteles lado a lado en un
+     * televisor no se leen. Y afirmar el 409 concreto mata cambiarlo por un 400: la
+     * petición está bien formada, lo que lo impide es el estado del recurso.
+     */
+    it('el quinto anuncio da 409 y no crea fila', async () => {
+      for (let i = 0; i < 4; i++) expect((await subir(PNG, `c${i}.png`)).status).toBe(201);
+
+      const r = await subir(PNG, 'quinto.png');
+      expect(r.status).toBe(409);
+      expect(await prisma.anuncioSala.count({ where: { sedeId: SEDE_ID } })).toBe(4);
+    });
+
+    /*
+     * Mata: borrar solo la fila. Los bytes se quedarían para siempre en un volumen que
+     * nadie mira, y esta es la única prueba que lo ve.
+     */
+    it('retirar borra la fila y el archivo del disco', async () => {
+      const r = await subir(PNG);
+      const fila = await prisma.anuncioSala.findUniqueOrThrow({ where: { id: r.body.id } });
+      const ruta = join(DIR, fila.archivo);
+      expect(existsSync(ruta)).toBe(true);
+
+      const t = await admin();
+      await request(http).delete(`/api/pantallas/anuncios/${r.body.id}`)
+        .set('Authorization', `Bearer ${t}`).expect(204);
+
+      expect(existsSync(ruta)).toBe(false);
+      await request(http).get(`/api/pantallas/anuncios/${r.body.id}/imagen`).expect(404);
+    });
+
+    /*
+     * Mata: construir la ruta antes de comprobar que la fila existe. `join(dir,
+     * undefined)` lanza, y un endpoint público devolvería 500 donde tocaba un 404.
+     */
+    it('un id que no existe da 404, no un error del servidor', async () => {
+      await request(http)
+        .get('/api/pantallas/anuncios/00000000-0000-0000-0000-000000000000/imagen')
+        .expect(404);
+    });
+
+    /* Mata: dejar la subida o el retiro en `pantallas.ver`, que la asistente tiene. */
+    it('subir y retirar exigen pantallas.editar', async () => {
+      const t = await token('asistente@provivir.local');
+      await request(http).post('/api/pantallas/anuncios')
+        .set('Authorization', `Bearer ${t}`).attach('archivo', PNG, 'x.png').expect(403);
+
+      const propio = await subir(PNG);
+      await request(http).delete(`/api/pantallas/anuncios/${propio.body.id}`)
+        .set('Authorization', `Bearer ${t}`).expect(403);
+    });
+
+    /*
+     * Mata: reordenar sin transacción, o intercambiar solo los dos valores que se
+     * cruzan. Lo segundo no movería nada cuando los `orden` heredados están repetidos.
+     */
+    it('mover a la izquierda intercambia con el vecino y persiste', async () => {
+      const a = await subir(PNG, 'a.png');
+      const b = await subir(PNG, 'b.png');
+      const t = await admin();
+
+      const r = await request(http).patch(`/api/pantallas/anuncios/${b.body.id}/mover`)
+        .set('Authorization', `Bearer ${t}`).send({ direccion: 'izquierda' }).expect(200);
+
+      expect(r.body.map((x: { id: string }) => x.id)).toEqual([b.body.id, a.body.id]);
+      const guardados = await prisma.anuncioSala.findMany({
+        where: { sedeId: SEDE_ID }, orderBy: { orden: 'asc' },
+      });
+      expect(guardados.map((x) => x.id)).toEqual([b.body.id, a.body.id]);
+    });
+
+    /* Mata: mover el primero a la izquierda y romper, en vez de no hacer nada. */
+    it('mover más allá del borde no hace nada', async () => {
+      const a = await subir(PNG, 'a.png');
+      const t = await admin();
+      const r = await request(http).patch(`/api/pantallas/anuncios/${a.body.id}/mover`)
+        .set('Authorization', `Bearer ${t}`).send({ direccion: 'izquierda' }).expect(200);
+      expect(r.body).toHaveLength(1);
+    });
+  });
+
   describe('el estado que consume el televisor', () => {
     /*
      * Mata: quitar `cita: { fecha: hoyEnSede() }` de `ultimosLlamados`. Nadie escribe
@@ -304,6 +462,49 @@ describe('Pantallas de sala (integración)', () => {
 
       const r = await request(http).get(`/api/pantallas/${p.id}/estado`).expect(200);
       expect(r.body.llamados.map((l: { turnoId: string }) => l.turnoId)).toEqual([suyo.id]);
+    });
+
+    /*
+     * Mata: quitar el `orderBy` del listado. Postgres devuelve el orden físico, que
+     * coincide con el de inserción HASTA EL PRIMER UPDATE: el defecto aparecería
+     * semanas después, la primera vez que alguien reordene la franja.
+     */
+    it('los anuncios llegan en el orden guardado', async () => {
+      const p = await prisma.pantalla.create({
+        data: { nombre: `${PREFIJO}Con anuncios`, servicios: ['mg'], sedeId: SEDE_ID },
+      });
+      await prisma.anuncioSala.createMany({
+        data: [
+          { archivo: 'aaaaaaaa-0000-4000-8000-000000000001.png', mime: 'image/png', bytes: 1, nombreOriginal: 'segundo', orden: 1, sedeId: SEDE_ID },
+          { archivo: 'aaaaaaaa-0000-4000-8000-000000000002.png', mime: 'image/png', bytes: 1, nombreOriginal: 'primero', orden: 0, sedeId: SEDE_ID },
+        ],
+      });
+
+      const r = await request(http).get(`/api/pantallas/${p.id}/estado`).expect(200);
+      const nombres = await prisma.anuncioSala.findMany({ orderBy: { orden: 'asc' } });
+      expect(r.body.anuncios.map((a: { id: string }) => a.id)).toEqual(nombres.map((n) => n.id));
+      expect(r.body.anuncios[0].url).toBe(`/api/pantallas/anuncios/${nombres[0]!.id}/imagen`);
+
+      await prisma.anuncioSala.deleteMany({ where: { sedeId: SEDE_ID } });
+    });
+
+    /*
+     * Mata: meter `ahora` dentro de `pantalla`. La TV compara ese objeto para no
+     * reemplazar la configuración cuando no cambió; con la hora dentro no coincidiría
+     * jamás y el reproductor de YouTube se recrearía cada 60 s, matando los videos
+     * institucionales de más de un minuto. Es un defecto de la TV que solo se puede
+     * cazar desde aquí.
+     */
+    it('la hora del servidor viaja fuera de `pantalla`, no dentro', async () => {
+      const p = await prisma.pantalla.create({
+        data: { nombre: `${PREFIJO}Con hora`, servicios: ['mg'], sedeId: SEDE_ID },
+      });
+      const r = await request(http).get(`/api/pantallas/${p.id}/estado`).expect(200);
+
+      expect(typeof r.body.ahora).toBe('string');
+      expect(Math.abs(new Date(r.body.ahora).getTime() - Date.now())).toBeLessThan(10_000);
+      expect(r.body.pantalla).not.toHaveProperty('ahora');
+      expect(r.body.pantalla).not.toHaveProperty('anuncios');
     });
 
     /* Sin este uso, `turnos` quedaría importado y sin utilidad en la suite. */

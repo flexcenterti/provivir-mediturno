@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  aHora, api, refrescarSesion, token, type DiaNoLaborable, type EstadoKiosko, type Pantalla,
-  type RegistroAuditoria, type ResultadoDiaNoLaborable, type Servicio, type TrabajoCarga,
+  aHora, api, subirArchivo, type AnuncioSala, type DiaNoLaborable, type EstadoKiosko,
+  type Pantalla, type RegistroAuditoria, type ResultadoDiaNoLaborable, type Servicio,
+  type TrabajoCarga,
 } from '../api';
 import { Acceso } from './Acceso';
 import { interpretarYoutube } from '@provivir/shared';
@@ -70,26 +71,7 @@ function CargaMasiva() {
   async function subir(archivo: File, ruta: string) {
     setSubiendo(true); setError(''); setAviso('');
     try {
-      const form = new FormData();
-      form.append('archivo', archivo);
-      // FormData no pasa por `pedir` —fija Content-Type JSON—, así que la
-      // renovación silenciosa hay que pedirla a mano: subir un CSV de 50.000
-      // contactos justo cuando vence el token no puede costar el archivo.
-      const enviar = async () =>
-        fetch(`/api${ruta}`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token.leer()}` },
-          body: form,
-        });
-
-      let r = await enviar();
-      if (r.status === 401 && (await refrescarSesion())) r = await enviar();
-
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        throw new Error(d.message ?? 'No fue posible cargar el archivo');
-      }
-      const cuerpo = await r.json();
+      const cuerpo = await subirArchivo<{ mensaje?: string }>(ruta, archivo);
       setAviso(cuerpo.mensaje ?? `Procesado: ${JSON.stringify(cuerpo)}`);
       recargar();
     } catch (e) {
@@ -273,6 +255,114 @@ function CopiarEnlace({ pantallaId }: { pantallaId: string }) {
   );
 }
 
+/** Lo que se le recomienda al cliente, con la cuenta hecha para tres en 1920 px. */
+const RECOMENDACION = '1200 × 480 px (proporción 5:2), PNG o JPG, menos de 2 MB.';
+const MAX_ANUNCIOS = 4;
+
+/**
+ * RN-11.7 · Los anuncios de la franja del televisor.
+ *
+ * Tarjeta aparte y NO dentro de `FormPantalla`. La razón no es de orden, es de modelo
+ * mental: ese modal configura UNA pantalla, y meter ahí un recurso compartido enseñaría
+ * lo contrario de lo que hace — alguien subiría un anuncio dentro de «TV · Sala 2» y
+ * aparecería en todos los televisores. Es el peor desenlace posible de esta función.
+ */
+function AnunciosSala() {
+  const [anuncios, setAnuncios] = useState<AnuncioSala[]>([]);
+  const [subiendo, setSubiendo] = useState(false);
+  const [error, setError] = useState('');
+  const archivo = useRef<HTMLInputElement>(null);
+
+  const recargar = () => { api.anuncios().then(setAnuncios).catch((e: Error) => setError(e.message)); };
+  useEffect(recargar, []);
+
+  const lleno = anuncios.length >= MAX_ANUNCIOS;
+
+  async function subir(f: File) {
+    setSubiendo(true); setError('');
+    try {
+      await api.subirAnuncio(f);
+      recargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSubiendo(false);
+      if (archivo.current) archivo.current.value = '';
+    }
+  }
+
+  async function retirar(a: AnuncioSala) {
+    if (!confirm(
+      `¿Retirar «${a.nombreOriginal}»?\n\n`
+      + 'Desaparecerá de todos los televisores y el archivo se borra: habría que volver '
+      + 'a subirlo.',
+    )) return;
+    setError('');
+    try {
+      await api.eliminarAnuncio(a.id);
+      recargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error');
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3>Anuncios de la sala</h3>
+      {error && <div className="error">{error}</div>}
+      <p className="nota">
+        <strong>Se ven en todos los televisores</strong>, en la franja de abajo, en este
+        mismo orden. {RECOMENDACION} Evita el fondo transparente con letras blancas: la
+        franja es blanca. Máximo {MAX_ANUNCIOS}.
+      </p>
+
+      {anuncios.length === 0 && (
+        <p className="muted">
+          Todavía no hay anuncios. Sin ninguno, la franja no aparece y el video ocupa
+          toda la altura.
+        </p>
+      )}
+
+      <div className="anuncios-rejilla">
+        {anuncios.map((a, i) => (
+          <figure className="anuncio-ficha" key={a.id}>
+            {/* La misma ruta pública que usa el televisor: si esta miniatura se ve, el
+                televisor la va a ver. Si está rota, el televisor está roto — y te
+                enteras aquí en vez de caminando hasta la sala de espera. */}
+            <img src={api.urlAnuncio(a.id)} alt={a.nombreOriginal} />
+            <figcaption>
+              <span className="muted">{a.nombreOriginal}</span>
+              <span className="muted">{Math.round(a.bytes / 1024)} KB</span>
+            </figcaption>
+            <div className="acciones-fila">
+              <button className="btn btn-ghost btn-sm" disabled={i === 0}
+                      aria-label={`Mover ${a.nombreOriginal} a la izquierda`}
+                      onClick={() => api.moverAnuncio(a.id, 'izquierda').then(setAnuncios)}>‹</button>
+              <button className="btn btn-ghost btn-sm" disabled={i === anuncios.length - 1}
+                      aria-label={`Mover ${a.nombreOriginal} a la derecha`}
+                      onClick={() => api.moverAnuncio(a.id, 'derecha').then(setAnuncios)}>›</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => void retirar(a)}>Retirar</button>
+            </div>
+          </figure>
+        ))}
+      </div>
+
+      <div className="acciones">
+        <input ref={archivo} type="file" accept="image/png,image/jpeg,image/webp"
+               disabled={lleno || subiendo}
+               onChange={(e) => { const f = e.target.files?.[0]; if (f) void subir(f); }} />
+        <span className="muted">{anuncios.length} de {MAX_ANUNCIOS}</span>
+      </div>
+      {/* Un control deshabilitado sin motivo es un fallo del sistema para quien lo mira. */}
+      {lleno && (
+        <span className="p-ayuda">
+          Ya hay {MAX_ANUNCIOS}. Retira uno para subir otro: más no se leen desde la sala.
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** RN-11 · Configuración por sala/servicio, con el frame multimedia. */
 function Pantallas() {
   const [pantallas, setPantallas] = useState<Pantalla[]>([]);
@@ -310,6 +400,7 @@ function Pantallas() {
   return (
     <>
       {error && <div className="error">{error}</div>}
+      <AnunciosSala />
       <div className="card">
         <div className="acciones">
           <button className="btn btn-primary" onClick={() => setCreando(true)}>Nueva pantalla</button>

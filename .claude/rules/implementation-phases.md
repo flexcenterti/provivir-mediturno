@@ -23,7 +23,8 @@
 | 16 · Hablar con los pacientes que se agendan solos | **Desplegada** — `docs/changelog-fase16.md` |
 | 17 · Una cita por día agendándose solo | **Desplegada** — `docs/changelog-fase17.md` |
 | 18 · Rediseño de la bandeja: dos paneles, sin modal | **Desplegada** — `docs/changelog-fase18.md` |
-| 19 · Las pantallas de llamado, funcionando (RN-11.5, RN-11.6) | **En rama** — `docs/changelog-fase19.md` |
+| 19 · Las pantallas de llamado, funcionando (RN-11.5, RN-11.6) | **Desplegada** — `docs/changelog-fase19.md` |
+| 20 · La sala de espera con el reparto de la guía de TV (RN-11.7) | **En rama** — `docs/changelog-fase20.md` |
 
 **Las seis primeras fases están completas.** Lo que falta para producción son credenciales e insumos
 del cliente, no código: ver `docs/checklist-piloto.md` y `despliegue/GUIA-DESPLIEGUE.md`.
