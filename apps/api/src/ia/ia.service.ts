@@ -328,7 +328,9 @@ export class IaService {
             fecha: String(args.fecha),
             prestadorId: args.prestadorId || undefined,
             limite: 6,
-          } as never, { autoservicio: true });
+            // RN-10.5 · con el paciente identificado el motor puede decir «ya tienes
+            // cita ese día» antes de que el modelo le negocie una hora imposible.
+          } as never, { autoservicio: true, pacienteId: ctx.pacienteId ?? undefined });
 
           return {
             cupos: cupos.map((c) => ({
@@ -357,7 +359,8 @@ export class IaService {
             } as never,
             'ia',
             // RN-04.6 · el paciente agenda solo por WhatsApp: no puede tomar cupos de hoy.
-            { autoservicio: true },
+            // RN-10.5 · y una sola cita por día: para otra, que llame.
+            { autoservicio: true, pacienteId },
           );
 
           if (!r.creada) {

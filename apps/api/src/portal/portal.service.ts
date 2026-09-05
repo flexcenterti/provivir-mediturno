@@ -113,13 +113,23 @@ export class PortalService {
    * Los cupos salen del MISMO motor que usa el backoffice (Arquitectura §6):
    * el portal no calcula reglas, solo muestra lo que el motor ofrece.
    */
-  cupos(dto: CuposPortalDto) {
+  async cupos(dto: CuposPortalDto) {
+    /*
+     * RN-10.5 · Sin sesión se sigue pudiendo mirar horarios: la lista es pública y
+     * exigir identificarse para curiosear sería un paso nuevo por una regla que no es
+     * suya. Con sesión inválida tampoco se rompe aquí — `agendar` la vuelve a
+     * verificar y ahí sí falla, que es donde importa.
+     */
+    const pacienteId = dto.sesion
+      ? await this.verificarSesion(dto.sesion).catch(() => undefined)
+      : undefined;
+
     return this.citas.cupos({
       servicioId: dto.servicioId,
       fecha: dto.fecha,
       prestadorId: dto.prestadorId,
       limite: dto.limite ?? 12,
-    } as never, { autoservicio: true });
+    } as never, { autoservicio: true, pacienteId });
   }
 
   /** RN-10.2 · confirmación con código único de atención. */
@@ -137,7 +147,8 @@ export class PortalService {
       } as never,
       'portal',
       // RN-04.6 · el paciente agenda solo: no puede tomar cupos de hoy.
-      { autoservicio: true },
+      // RN-10.5 · y una sola cita por día: para otra, que llame.
+      { autoservicio: true, pacienteId },
     );
 
     if (!r.creada) {
