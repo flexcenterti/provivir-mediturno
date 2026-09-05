@@ -12,6 +12,10 @@ import {
   type CitaExistente, type Cupo,
 } from './citas.reglas';
 import { RecordatoriosService } from '../recordatorios/recordatorios.service';
+import { VentanaService } from '../whatsapp/ventana.service';
+import { variantesDeTelefono } from '../whatsapp/whatsapp.normalizador';
+import { numeroDeContacto } from '../comun/contacto';
+import { CLAVE_PLANTILLA_CONTACTO } from '../whatsapp/whatsapp.plantillas';
 import type { CancelarCitaDto, ConsultarCuposDto, CrearCitaDto, ReprogramarCitaDto } from './dto/cita.dto';
 
 type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>;
@@ -70,6 +74,7 @@ export class CitasService {
     private readonly auditoria: AuditoriaService,
     private readonly configuracion: ConfiguracionService,
     private readonly recordatorios: RecordatoriosService,
+    private readonly ventana: VentanaService,
   ) {}
 
   // ─────────────────────── Consulta de cupos ───────────────────────
@@ -442,6 +447,101 @@ export class CitasService {
     });
     if (!cita) throw new NotFoundException('Cita no encontrada');
     return cita;
+  }
+
+  /**
+   * Si al paciente se le pudo avisar de su cita, y si no, por qué.
+   *
+   * Nace de una pregunta con respuesta incómoda: quien agenda por el portal no
+   * recibe la confirmación. Nunca escribió por WhatsApp, así que no hay ventana de
+   * 24 h, y sin plantilla aprobada el envío se descarta. Quedaba una línea de
+   * auditoría que nadie mira, y en la pantalla de la asistente esa cita se veía
+   * igual que cualquier otra.
+   *
+   * Hacen falta las DOS fuentes. La ventana dice si se le puede escribir ahora, pero
+   * no si el aviso salió; y la auditoría dice cómo terminó el último intento, pero no
+   * si la puerta sigue abierta. Con solo la ventana no se distingue «no se intentó»
+   * de «Meta lo rechazó».
+   *
+   * Va aparte de `porId` a propósito: `ModalCita` recibe la cita ya cargada por la
+   * lista que la contiene, y meter estas dos consultas dentro se las cobraría también
+   * al mostrador y al dashboard, que no las miran.
+   *
+   * Devuelve hechos, no frases: el texto lo arma la interfaz, que es quien sabe a
+   * quién se lo está diciendo.
+   */
+  async estadoDeContacto(id: string) {
+    const cita = await this.prisma.cita.findUnique({
+      where: { id },
+      select: { codigo: true, creadoEn: true, paciente: { select: { whatsapp: true, telefono: true } } },
+    });
+    if (!cita) throw new NotFoundException('Cita no encontrada');
+
+    /**
+     * Si el botón de escribirle puede llegar a hacer algo. Mientras el cliente no
+     * apruebe la plantilla en Meta, WhatsApp no deja salir un primer mensaje: más
+     * vale decirlo al lado del botón que dejar que la asistente lo pulse y falle.
+     */
+    const plantillaContactoConfigurada =
+      this.configuracion.texto(CLAVE_PLANTILLA_CONTACTO, '').trim() !== '';
+
+    const telefono = numeroDeContacto(cita.paciente);
+    if (!telefono) {
+      return {
+        telefono: null, nuncaHaEscrito: true, plantillaContactoConfigurada,
+        ventana: { dentro: false, ultimoEntranteTs: null, expiraTs: null },
+        conversacion: null, ultimoEnvio: null,
+      };
+    }
+
+    const [ventana, conversacion, ultimoEnvio] = await Promise.all([
+      this.ventana.estado(telefono),
+      this.prisma.conversacion.findFirst({
+        where: { telefono: { in: variantesDeTelefono(telefono) } },
+        orderBy: [{ resueltaTs: { sort: 'asc', nulls: 'first' } }, { creadoEn: 'desc' }],
+        select: { id: true, estado: true, resueltaTs: true },
+      }),
+      /*
+       * La entidad se compone con el CÓDIGO de la cita, no con su id: así es como lo
+       * escribe `RecordatoriosService`, y buscar por el uuid no devolvería nada — lo
+       * que en pantalla se vería idéntico a «todavía no consta».
+       *
+       * Pero el código es único por sede y DÍA (`@@unique([sedeId, fecha, codigo])`),
+       * no para siempre: `cita/MG-001` se repite cada jornada, y la auditoría no se
+       * borra. Sin acotar por `creadoEn` esto mostraría el desenlace del envío de otra
+       * cita distinta —la del martes diciendo lo que pasó con la del lunes—, que es
+       * peor que no mostrar nada. Nada de esta cita puede ser anterior a ella misma.
+       *
+       * Y descendente: la auditoría es de solo añadir, así que de una cita con varios
+       * intentos interesa el último. Ascendente diría que no llegó cuando el reintento
+       * sí salió.
+       */
+      this.prisma.auditoria.findFirst({
+        where: {
+          entidad: `cita/${cita.codigo}`,
+          accion: { contains: ' enviado' },
+          ts: { gte: cita.creadoEn },
+        },
+        orderBy: { ts: 'desc' },
+        select: { accion: true, detalle: true, ts: true },
+      }),
+    ]);
+
+    return {
+      telefono,
+      /** Lo que explica casi siempre por qué no le llegó nada: no hay ventana que abrir. */
+      nuncaHaEscrito: ventana.ultimoEntranteTs === null,
+      plantillaContactoConfigurada,
+      ventana: {
+        dentro: ventana.dentro,
+        ultimoEntranteTs: ventana.ultimoEntranteTs,
+        expiraTs: ventana.expiraTs,
+      },
+      conversacion: conversacion
+        ? { id: conversacion.id, estado: conversacion.estado, resuelta: conversacion.resueltaTs !== null }
+        : null,
+      ultimoEnvio,
+    };
   }
 
   /** Especificación §2.7 · buscador por código, nombre del paciente o documento. */

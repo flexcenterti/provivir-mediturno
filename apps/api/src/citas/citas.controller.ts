@@ -44,6 +44,19 @@ export class CitasController {
   }
 
   /**
+   * Si al paciente le llegó el aviso de su cita, y si no, por qué.
+   *
+   * Con `pacientes.ver` y no con `citas.gestionar`: lo que devuelve es el estado de
+   * contacto de una persona —su número y cuándo escribió—, no el de la cita. El
+   * perfil Asistente ya lo tiene.
+   */
+  @Get('citas/:id/contacto')
+  @Permisos('pacientes.ver')
+  contacto(@Param('id') id: string) {
+    return this.citas.estadoDeContacto(id);
+  }
+
+  /**
    * Si el cupo se ocupó entre la oferta y la confirmación, responde con alternativas
    * en vez de un error seco: la IA y el portal necesitan seguir la conversación.
    */
