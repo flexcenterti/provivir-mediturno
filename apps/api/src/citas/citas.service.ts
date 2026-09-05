@@ -11,7 +11,9 @@ import {
   generarCupos, ordenarPorCompactacion, primeraFechaAgendable, superaCitasDelDia,
   violaIntercaladoEnAgenda,
   type CitaExistente, type Cupo,
+  cabeEnFranja,
 } from './citas.reglas';
+import { aFranjaAgenda } from '../agendas/agendas.reglas';
 import { RecordatoriosService } from '../recordatorios/recordatorios.service';
 import { VentanaService } from '../whatsapp/ventana.service';
 import { variantesDeTelefono } from '../whatsapp/whatsapp.normalizador';
@@ -775,15 +777,7 @@ export class CitasService {
   /** ¿Alguna franja del prestador ese día contiene el cupo, alineado al slot? */
   private async tieneFranjaPara(prestadorId: string, fecha: Date, cupo: Cupo): Promise<boolean> {
     const agendas = await this.agendas.vigentesEnFecha(prestadorId, fecha);
-    return agendas.some((a) => {
-      const ini = aMinutos(a.horaIni);
-      const fin = aMinutos(a.horaFin);
-      return (
-        cupo.horaInicio >= ini &&
-        cupo.horaInicio + cupo.duracionMin <= fin &&
-        (cupo.horaInicio - ini) % a.slotMin === 0
-      );
-    });
+    return agendas.some((a) => cabeEnFranja(cupo, aFranjaAgenda(a)));
   }
 
   /** Revalida TODAS las reglas dentro de la transacción, justo antes de insertar. */
@@ -807,13 +801,8 @@ export class CitasService {
 
     // El servicio declarado en la agenda es informativo (franja principal), no una
     // restricción: un mismo prestador atiende consulta y control en la misma franja.
-    const cabeEnAlguna = agendasDelDia.some((a) => {
-      const ini = aMinutos(a.horaIni);
-      const fin = aMinutos(a.horaFin);
-      const alineado = (args.cupo.horaInicio - ini) % a.slotMin === 0;
-      return args.cupo.horaInicio >= ini && args.cupo.horaInicio + args.cupo.duracionMin <= fin && alineado;
-    });
-    if (!cabeEnAlguna) {
+    const cabe = agendasDelDia.some((a) => cabeEnFranja(args.cupo, aFranjaAgenda(a)));
+    if (!cabe) {
       throw new ConflictException('El horario solicitado está fuera de la agenda del prestador');
     }
 

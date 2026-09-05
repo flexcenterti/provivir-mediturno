@@ -312,7 +312,18 @@ export const api = {
   actualizarServicio: (id: string, cuerpo: object) =>
     pedir<Servicio>(`/servicios/${id}`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
 
-  agendas: (prestadorId?: string) => pedir<Agenda[]>(`/agendas${prestadorId ? `?prestadorId=${prestadorId}` : ''}`),
+  agendas: (prestadorId?: string, incluirRetiradas = false) => {
+    const q = new URLSearchParams();
+    if (prestadorId) q.set('prestadorId', prestadorId);
+    if (incluirRetiradas) q.set('incluirRetiradas', 'true');
+    return pedir<Agenda[]>(`/agendas${q.toString() ? `?${q}` : ''}`);
+  },
+  /** RN-06.6 · sin `confirmar` devuelve el impacto y no toca nada. */
+  actualizarAgenda: (id: string, cuerpo: object) =>
+    pedir<ResultadoImpacto>(`/agendas/${id}`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
+  retirarAgenda: (id: string, confirmar: boolean) =>
+    pedir<ResultadoImpacto>(`/agendas/${id}/retirar`, { method: 'POST', body: JSON.stringify({ confirmar }) }),
+  reactivarAgenda: (id: string) => pedir<Agenda>(`/agendas/${id}/reactivar`, { method: 'POST' }),
   crearAgenda: (cuerpo: object) => pedir<Agenda>('/agendas', { method: 'POST', body: JSON.stringify(cuerpo) }),
   programacionMensual: (cuerpo: object) =>
     pedir<{ programadas: number }>('/agendas/programacion-mensual', { method: 'POST', body: JSON.stringify(cuerpo) }),
@@ -663,6 +674,18 @@ export interface ResultadoBloqueo {
   citasAfectadas: number;
   citas: Cita[];
   mensaje: string;
+}
+
+/** RN-06.6 · lo que devuelven editar y retirar, simulado o aplicado. */
+export interface ResultadoImpacto {
+  simulacion: boolean;
+  citasAfectadas: number;
+  citas: Array<Cita & { motivo: 'sale_de_franja' | 'ya_estaba_fuera' }>;
+  /** El CONTEO nunca se trunca; la lista sí. */
+  truncado: boolean;
+  recuperadas: number;
+  mensaje: string;
+  agenda: Agenda | null;
 }
 
 /** RN-06.5 · un día en que la sede no atiende. */

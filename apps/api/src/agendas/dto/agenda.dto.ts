@@ -72,6 +72,38 @@ export class ProgramacionMensualDto {
   reemplazar?: boolean;
 }
 
+/**
+ * RN-06.6 · Parche de una franja.
+ *
+ * **`prestadorId` NO está aquí a propósito.** Mover una franja a otro médico no es
+ * editarla: es retirar una y crear otra, y con otro impacto sobre las citas. Como el
+ * pipe global lleva `forbidNonWhitelisted`, mandarlo devuelve 400 sin escribir una sola
+ * validación.
+ */
+export class ActualizarAgendaDto {
+  @IsOptional() @IsIn(['semanal', 'calendario']) modo?: 'semanal' | 'calendario';
+
+  @IsOptional() @IsArray() @ArrayMaxSize(7)
+  @Type(() => Number) @IsInt({ each: true }) @Min(1, { each: true }) @Max(7, { each: true })
+  diasSemana?: number[];
+
+  @IsOptional() @IsString() @Matches(FECHA, { message: 'Fecha inválida (AAAA-MM-DD)' })
+  fecha?: string;
+
+  @IsOptional() @IsString() @Matches(HORA, { message: 'Hora de inicio inválida (HH:MM)' }) horaIni?: string;
+  @IsOptional() @IsString() @Matches(HORA, { message: 'Hora de fin inválida (HH:MM)' }) horaFin?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(5) @Max(240) slotMin?: number;
+  @IsOptional() @IsString() servicioId?: string;
+  @IsOptional() @IsString() @MaxLength(60) consultorio?: string;
+
+  /** Sin él se devuelve el impacto y no se toca nada. Igual que en el bloqueo. */
+  @IsOptional() @IsBoolean() confirmar?: boolean;
+}
+
+export class RetirarAgendaDto {
+  @IsOptional() @IsBoolean() confirmar?: boolean;
+}
+
 export class BloquearAgendaDto {
   @IsString() @MaxLength(300)
   motivo!: string;

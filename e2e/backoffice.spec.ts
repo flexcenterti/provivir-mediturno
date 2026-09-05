@@ -777,3 +777,111 @@ test('RN-11.7 · un archivo que no es una imagen se rechaza y lo dice', async ({
 
   await expect(page.getByText(/no es una imagen/i)).toBeVisible();
 });
+
+// ─────────────── Fase 21 · editar y retirar agendas ───────────────
+
+let contadorFranjas = 0;
+
+/**
+ * Crea una franja propia por API y devuelve su marca.
+ *
+ * La marca es **única por llamada**: las retiradas de las pruebas anteriores siguen
+ * listándose al activar «Ver retiradas», y con una marca compartida la fila que se busca
+ * es ambigua. Depender de las franjas del seed, además, haría la prueba del día.
+ */
+async function franjaDePrueba(request: import('@playwright/test').APIRequestContext): Promise<string> {
+  const marca = `C-f21-${++contadorFranjas}`;
+  const login = await request.post('http://localhost:3000/api/auth/login', { data: ADMIN });
+  const { accessToken, token } = await login.json();
+  const headers = { Authorization: `Bearer ${accessToken ?? token}` };
+
+  // Se limpian las de este prestador para que la tabla sea predecible.
+  const previas = await (await request.get('http://localhost:3000/api/agendas?prestadorId=jo', { headers })).json();
+  for (const a of previas) {
+    await request.post(`http://localhost:3000/api/agendas/${a.id}/retirar`, { headers, data: { confirmar: true } });
+  }
+
+  const r = await request.post('http://localhost:3000/api/agendas', {
+    headers,
+    data: {
+      prestadorId: 'jo', modo: 'semanal', diasSemana: [1, 2],
+      horaIni: '07:00', horaFin: '12:00', slotMin: 15,
+      consultorio: marca,
+    },
+  });
+  expect(r.status(), 'no se pudo crear la franja de prueba').toBe(201);
+  return marca;
+}
+
+/*
+ * Mata: reutilizar `FormAgenda` sin inicializarlo desde la fila. Se abriría vacío —sería
+ * «Nueva agenda» con otro título— y guardar crearía una franja duplicada en vez de
+ * corregir la que hay. Y el texto del botón es literalmente lo que marcó el cliente en
+ * su captura.
+ */
+test('RN-06.6 · «Editar» abre la franja con sus valores y el botón dice Guardar', async ({ page, request }) => {
+  const marca = await franjaDePrueba(request);
+  await entrar(page);
+  await page.getByRole('button', { name: 'Gestión de agendas' }).click();
+  await page.getByRole('combobox').first().selectOption('jo');
+
+  await page.getByRole('row').filter({ hasText: marca }).getByRole('button', { name: 'Editar' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Editar agenda' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Guardar' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Crear', exact: true })).toHaveCount(0);
+  // Los valores de la fila, no los del formulario en blanco.
+  await expect(page.getByLabel('Desde')).toHaveValue('07:00');
+  await expect(page.getByLabel('Hasta')).toHaveValue('12:00');
+  // Mover la franja a otro médico no es editarla.
+  await expect(page.getByLabel('Prestador')).toBeDisabled();
+});
+
+/*
+ * Mata: no guardar los días, o no recargar la tabla tras guardar. Es el «adicionar y
+ * eliminar días de atención» que pidió el cliente, y sin la recarga parece que no se
+ * guardó y se acaban creando franjas de más.
+ */
+test('RN-06.6 · se añade un día y la tabla lo refleja', async ({ page, request }) => {
+  const marca = await franjaDePrueba(request);
+  await entrar(page);
+  await page.getByRole('button', { name: 'Gestión de agendas' }).click();
+  await page.getByRole('combobox').first().selectOption('jo');
+  const fila = page.getByRole('row').filter({ hasText: marca });
+  await expect(fila).toContainText('Lun, Mar');
+
+  await fila.getByRole('button', { name: 'Editar' }).click();
+  await page.getByRole('button', { name: 'Mié', exact: true }).click();
+  await page.getByRole('button', { name: 'Guardar' }).click();
+
+  await expect(page.getByRole('row').filter({ hasText: marca })).toContainText('Lun, Mar, Mié');
+});
+
+/*
+ * Mata: retirar sin confirmar, o no dejar camino de vuelta. Un borrado lógico que solo se
+ * puede deshacer por SQL es un borrado duro con filas muertas de propina.
+ */
+test('RN-06.6 · retirar una franja pide confirmación, y se puede reactivar', async ({ page, request }) => {
+  const marca = await franjaDePrueba(request);
+  await entrar(page);
+  await page.getByRole('button', { name: 'Gestión de agendas' }).click();
+  await page.getByRole('combobox').first().selectOption('jo');
+
+  let texto = '';
+  page.once('dialog', (d) => { texto = d.message(); void d.accept(); });
+
+  await page.getByRole('row').filter({ hasText: marca }).getByRole('button', { name: 'Editar' }).click();
+  await page.getByRole('button', { name: 'Retirar franja' }).click();
+
+  expect(texto).toContain('07:00');
+  await expect(page.getByRole('row').filter({ hasText: marca })).toHaveCount(0);
+
+  // Y vuelve, que es lo que distingue una baja lógica de un borrado.
+  await page.getByLabel('Ver retiradas').check();
+  const retirada = page.getByRole('row').filter({ hasText: marca });
+  await expect(retirada).toContainText('Retirada');
+  await retirada.getByRole('button', { name: 'Reactivar' }).click();
+
+  await page.getByLabel('Ver retiradas').uncheck();
+  await expect(page.getByRole('row').filter({ hasText: marca })).toContainText('Lun, Mar');
+});

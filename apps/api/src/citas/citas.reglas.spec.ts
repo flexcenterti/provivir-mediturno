@@ -4,6 +4,7 @@ import {
   elegirPorMenorCarga, superaCitasDelDia,
   generarCupos, ordenarPorCompactacion, porcentajeOcupacion, primeraFechaAgendable,
   seSolapan, violaIntercaladoEnAgenda,
+  cabeEnFranja, intersectaFranja,
   type CitaExistente,
 } from './citas.reglas';
 import { aMinutos } from '@provivir/shared';
@@ -378,5 +379,101 @@ describe('RN-10.5 · una cita por día agendándose solo', () => {
     expect(CITAS_POR_DIA_AUTOSERVICIO).toBe(1);
     expect(superaCitasDelDia(CITAS_POR_DIA_AUTOSERVICIO)).toBe(true);
     expect(superaCitasDelDia(CITAS_POR_DIA_AUTOSERVICIO - 1)).toBe(false);
+  });
+});
+
+/**
+ * RN-06 · Los dos predicados de pertenencia a una franja, que NO son el mismo.
+ *
+ * `cabeEnFranja` dice si un cupo es legal ahí; `intersectaFranja`, si lo pisa. La
+ * diferencia decide si una previsualización de impacto reporta de más o de menos.
+ */
+describe('cabeEnFranja', () => {
+  const MANANA = { horaIni: 7 * 60, horaFin: 12 * 60, slotMin: 15 };
+
+  /* Mata: usar `>` en el inicio — el primer cupo de la jornada dejaría de existir. */
+  it('el cupo que abre la jornada cabe, y el que la cierra justo también', () => {
+    expect(cabeEnFranja({ horaInicio: 7 * 60, duracionMin: 15 }, MANANA)).toBe(true);
+    expect(cabeEnFranja({ horaInicio: 11 * 60 + 45, duracionMin: 15 }, MANANA)).toBe(true);
+  });
+
+  /*
+   * Mata: comparar solo `horaInicio`, que es lo que hace hoy el detector de citas
+   * afectadas por un bloqueo. 11:45 SÍ está alineada al slot de 15, así que lo único que
+   * la descarta es que termine a las 12:15 — con una hora desalineada la prueba pasaría
+   * por el otro chequeo y no probaría nada de la duración.
+   */
+  it('un cupo que termina después del cierre no cabe, aunque empiece dentro', () => {
+    expect(cabeEnFranja({ horaInicio: 11 * 60 + 45, duracionMin: 30 }, MANANA)).toBe(false);
+    expect(cabeEnFranja({ horaInicio: 11 * 60 + 30, duracionMin: 30 }, MANANA)).toBe(true);
+  });
+
+  /*
+   * Mata: quitar el `% slotMin`. Es la condición menos evidente y la más cara: mover
+   * `horaIni` de 07:00 a 07:10 deja todas las citas dentro del rango pero desalineadas,
+   * o sea irreprogramables — y sin esto el cambio no reportaría impacto ninguno.
+   */
+  it('un cupo desalineado al slot no cabe', () => {
+    expect(cabeEnFranja({ horaInicio: 7 * 60 + 30, duracionMin: 15 }, MANANA)).toBe(true);
+    expect(cabeEnFranja({ horaInicio: 7 * 60 + 30, duracionMin: 15 },
+      { ...MANANA, horaIni: 7 * 60 + 10 })).toBe(false);
+  });
+
+  /* Mata: alinear contra medianoche (`h % slot`) en vez de contra el inicio de la franja. */
+  it('el alineamiento es contra el inicio de la franja, no contra la medianoche', () => {
+    const desde710 = { horaIni: 7 * 60 + 10, horaFin: 12 * 60, slotMin: 15 };
+    expect(cabeEnFranja({ horaInicio: 7 * 60 + 10, duracionMin: 15 }, desde710)).toBe(true);
+    expect(cabeEnFranja({ horaInicio: 7 * 60 + 25, duracionMin: 15 }, desde710)).toBe(true);
+    expect(cabeEnFranja({ horaInicio: 7 * 60 + 15, duracionMin: 15 }, desde710)).toBe(false);
+  });
+
+  /*
+   * Mata: cualquier `<=` ↔ `<` en UNA SOLA de las dos funciones. Es la prueba que impide
+   * que el motor de cupos y la validación se separen: todo lo que el generador produce
+   * tiene que caber, y todo lo que cabe tiene que producirlo.
+   */
+  it('todo cupo generado cabe, y todo cupo que cabe se genera', () => {
+    for (const franja of [
+      { horaIni: 7 * 60, horaFin: 12 * 60, slotMin: 15 },
+      { horaIni: 7 * 60 + 10, horaFin: 11 * 60 + 50, slotMin: 20 },
+      { horaIni: 13 * 60, horaFin: 16 * 60 + 30, slotMin: 30 },
+    ]) {
+      for (const duracion of [15, 20, 40]) {
+        const generados = generarCupos(franja, duracion);
+        expect(generados.every((c) => cabeEnFranja(c, franja))).toBe(true);
+
+        const caben: number[] = [];
+        for (let h = 0; h < 24 * 60; h++) {
+          if (cabeEnFranja({ horaInicio: h, duracionMin: duracion }, franja)) caben.push(h);
+        }
+        expect(generados.map((c) => c.horaInicio)).toEqual(caben);
+      }
+    }
+  });
+});
+
+describe('intersectaFranja', () => {
+  const MANANA = { horaIni: 7 * 60, horaFin: 12 * 60, slotMin: 15 };
+
+  /*
+   * Mata: usar `cabeEnFranja` para calcular el impacto. Estas dos citas NO son legales
+   * en la franja —una empieza antes de abrir, la otra desborda el cierre— pero viven
+   * dentro de ella, y quitarla las deja huérfanas. El predicado estricto las daría por
+   * no afectadas, que es sub-reportar el impacto en un diálogo de confirmación.
+   */
+  it('lo que pisa la franja cuenta, aunque no sea legal en ella', () => {
+    expect(intersectaFranja({ horaInicio: 6 * 60 + 50, duracionMin: 30 }, MANANA)).toBe(true);
+    expect(intersectaFranja({ horaInicio: 11 * 60 + 50, duracionMin: 30 }, MANANA)).toBe(true);
+    expect(intersectaFranja({ horaInicio: 7 * 60 + 5, duracionMin: 15 }, MANANA)).toBe(true);
+    // …y ninguna de las tres es legal ahí.
+    expect(cabeEnFranja({ horaInicio: 6 * 60 + 50, duracionMin: 30 }, MANANA)).toBe(false);
+    expect(cabeEnFranja({ horaInicio: 11 * 60 + 50, duracionMin: 30 }, MANANA)).toBe(false);
+    expect(cabeEnFranja({ horaInicio: 7 * 60 + 5, duracionMin: 15 }, MANANA)).toBe(false);
+  });
+
+  /* Mata: `<` → `<=` en los bordes — una cita que empieza al cerrar contaría como dentro. */
+  it('lo que solo toca el borde no pisa', () => {
+    expect(intersectaFranja({ horaInicio: 12 * 60, duracionMin: 15 }, MANANA)).toBe(false);
+    expect(intersectaFranja({ horaInicio: 6 * 60 + 45, duracionMin: 15 }, MANANA)).toBe(false);
   });
 });
