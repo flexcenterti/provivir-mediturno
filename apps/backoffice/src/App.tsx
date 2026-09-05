@@ -3,7 +3,7 @@ import { api, sesion, token, type UsuarioSesion } from './api';
 import { Dashboard } from './vistas/Dashboard';
 import { Consolidada } from './vistas/Consolidada';
 import { Mostrador } from './vistas/Mostrador';
-import { VistaPrestador } from './vistas/Prestador';
+import { VistaSala } from './vistas/Sala';
 import { Bandeja } from './vistas/Bandeja';
 import { Pacientes } from './vistas/Pacientes';
 import { Catalogo } from './vistas/Catalogo';
@@ -121,10 +121,33 @@ export function App() {
   return <Consola usuario={usuario} onSalir={() => { token.borrar(); setUsuario(null); }} />;
 }
 
+/**
+ * La entrada de turnos vale para dos oficios distintos y no puede llamarse igual en
+ * los dos: «Mi consulta» no le dice nada a una asistente, que lo que abre es la sala
+ * de todos. Se adapta aquí y no en `MENU` porque esa constante es de módulo y no
+ * conoce al usuario; como el título de la barra superior se deriva de esta misma
+ * lista, se adapta solo.
+ */
+function adaptar(entrada: Entrada, usuario: UsuarioSesion): Entrada {
+  if (entrada.id !== 'prestador' || usuario.prestadorId) return entrada;
+  return {
+    ...entrada,
+    etiqueta: 'Sala de espera',
+    icono: '🪑',
+    titulo: 'Sala de espera',
+    subtitulo: 'Todos los pacientes en espera · elija un profesional para llamar al siguiente',
+  };
+}
+
 function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => void }) {
   // Una sección sin entradas visibles no pinta su rótulo.
   const secciones = MENU
-    .map((s) => ({ ...s, items: s.items.filter((i) => usuario.permisos.includes(i.permiso)) }))
+    .map((s) => ({
+      ...s,
+      items: s.items
+        .filter((i) => usuario.permisos.includes(i.permiso))
+        .map((i) => adaptar(i, usuario)),
+    }))
     .filter((s) => s.items.length > 0);
   const entradas = secciones.flatMap((s) => s.items);
 
@@ -215,11 +238,7 @@ function Consola({ usuario, onSalir }: { usuario: UsuarioSesion; onSalir: () => 
         {vista === 'auditoria' && <Administracion inicial="auditoria" />}
         {vista === 'pantallas' && <Administracion inicial="pantallas" />}
         {vista === 'administracion' && <Administracion />}
-        {vista === 'prestador' && (
-          usuario.prestadorId
-            ? <VistaPrestador prestadorId={usuario.prestadorId} />
-            : <p className="nota">Este usuario no está asociado a una ficha de prestador.</p>
-        )}
+        {vista === 'prestador' && <VistaSala usuario={usuario} />}
       </main>
     </div>
   );

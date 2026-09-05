@@ -6,6 +6,8 @@ import { generarPassword } from '../auth/password';
 import { hashearPassword } from '../auth/argon2.opciones';
 import type { ActualizarPerfilDto, ActualizarUsuarioDto, CrearPerfilDto, CrearUsuarioDto } from './dto/acceso.dto';
 import { asegurarPerfilesBase } from '../cli/usuarios.comun';
+import { resolverVinculo } from './acceso.reglas';
+import type { Rol } from '@provivir/shared';
 
 /**
  * Perfiles de acceso y usuarios.
@@ -187,16 +189,81 @@ export class AccesoService implements OnModuleInit {
       );
     }
 
-    if (dto.activo === false || dto.perfilId) await this.exigirQueQuedeAlguienGestionando(undefined, id);
+    // También al cambiar el rol: `perfilId` es opcional, y sin perfil la
+    // autorización cae al perfil base del rol.
+    if (dto.activo === false || dto.perfilId || dto.rol) {
+      await this.exigirQueQuedeAlguienGestionando(undefined, id);
+    }
 
+    const vinculo = await this.resolverFicha(actual, dto);
+
+    /*
+     * El `data` se arma campo a campo y NO con `data: dto`. Con el vínculo de por
+     * medio hay combinaciones que las reglas acaban de rechazar o de corregir —una
+     * ficha que se suelta sola—, y volcar el DTO tal cual las escribiría igual.
+     */
     const actualizado = await this.prisma.usuario.update({
-      where: { id }, data: dto,
-      select: { id: true, email: true, nombre: true, activo: true },
+      where: { id },
+      data: {
+        ...(dto.nombre !== undefined ? { nombre: dto.nombre } : {}),
+        ...(dto.perfilId !== undefined ? { perfilId: dto.perfilId } : {}),
+        ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
+        rol: vinculo.rol,
+        prestadorId: vinculo.prestadorId,
+      },
+      select: {
+        id: true, email: true, nombre: true, activo: true, rol: true, prestadorId: true,
+        perfil: { select: { id: true, nombre: true, activo: true } },
+      },
     });
+
+    const comoEstaba = `${actual.rol}${actual.prestadorId ? ` · ${actual.prestadorId}` : ''}`;
+    const comoQueda = `${vinculo.rol}${vinculo.prestadorId ? ` · ${vinculo.prestadorId}` : ''}`;
     await this.auditoria.registrar({
       usuario, accion: 'Usuario modificado', entidad: `usuario/${id}`, detalle: actualizado.email,
+      // Rol y ficha en la traza: es justo lo que alguien querrá reconstruir dentro
+      // de seis meses, y el detalle genérico no lo contaba.
+      ...(comoEstaba !== comoQueda ? { estadoPrev: comoEstaba, estadoNext: comoQueda } : {}),
     });
     return actualizado;
+  }
+
+  /**
+   * RN-06.2 · la combinación de rol y ficha que queda, ya comprobada contra la base.
+   *
+   * La tabla de verdad vive en `acceso.reglas.ts`, pura; aquí solo lo que exige base:
+   * que la ficha exista y que no la tenga ya otra cuenta.
+   */
+  private async resolverFicha(
+    actual: { rol: Rol; prestadorId: string | null },
+    dto: ActualizarUsuarioDto,
+  ) {
+    let vinculo;
+    try {
+      vinculo = resolverVinculo({ actual, rol: dto.rol, prestadorId: dto.prestadorId });
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+
+    if (vinculo.prestadorId && vinculo.prestadorId !== actual.prestadorId) {
+      if (!(await this.prisma.prestador.findUnique({ where: { id: vinculo.prestadorId } }))) {
+        throw new NotFoundException('El prestador indicado no existe');
+      }
+      /*
+       * `Usuario.prestadorId` es único: sin esta comprobación, elegir una ficha ya
+       * tomada revienta con P2002 y la persona ve un 500 sin saber qué pasó. Se
+       * nombra la cuenta que la ocupa porque es lo único que permite resolverlo.
+       */
+      const ocupada = await this.prisma.usuario.findUnique({
+        where: { prestadorId: vinculo.prestadorId },
+        select: { email: true },
+      });
+      if (ocupada) {
+        throw new ConflictException(`Esa ficha ya está asociada a ${ocupada.email}`);
+      }
+    }
+
+    return vinculo;
   }
 
   async reiniciarClave(id: string, usuario: string) {

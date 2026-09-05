@@ -56,31 +56,7 @@ export function VistaPrestador({ prestadorId }: { prestadorId: string }) {
 
       <div className="card">
         <h3>Pacientes del día</h3>
-        <table className="tabla">
-          <thead>
-            <tr><th>Código</th><th>Paciente</th><th>Servicio</th><th>Tipo</th><th>Hora</th><th>Esperando</th><th>Prioridad</th></tr>
-          </thead>
-          <tbody>
-            {cola.map((t) => (
-              <tr key={t.id} className={t.estado === 'llamado' ? 'fila-activa' : 'fila-clickable'}
-                  onClick={() => setPriorizando(t)}>
-                <td><span className="chip">{t.cita.codigo}</span></td>
-                <td>{t.cita.paciente.apellidos}, {t.cita.paciente.nombres}</td>
-                {/* §2.15 · el prestador debe saber qué viene a cumplir cada paciente */}
-                <td>{t.cita.servicio.nombre}</td>
-                <td><EtiquetaTipo tipo={t.cita.tipo} /></td>
-                <td>{aHora(t.cita.horaInicio)}</td>
-                <td>{t.minutosEsperando} min</td>
-                <td>
-                  <span className={`tag ${t.prioridad === 'alta' ? 't-red' : t.prioridad === 'media' ? 't-amber' : 't-gray'}`}>
-                    {t.prioridad}
-                  </span>
-                </td>
-              </tr>
-            ))}
-            {cola.length === 0 && <tr><td colSpan={7} className="muted">No hay pacientes en espera</td></tr>}
-          </tbody>
-        </table>
+        <TablaCola turnos={cola} onFila={setPriorizando} />
       </div>
 
       {priorizando && (
@@ -90,8 +66,53 @@ export function VistaPrestador({ prestadorId }: { prestadorId: string }) {
   );
 }
 
+/**
+ * La cola, en tabla. Se exporta porque la vista de sala pinta exactamente la misma
+ * con una columna más: el profesional, que en la cola de un solo médico sobra.
+ */
+export function TablaCola({ turnos, conProfesional = false, onFila }: {
+  turnos: Turno[];
+  conProfesional?: boolean;
+  onFila: (t: Turno) => void;
+}) {
+  const columnas = conProfesional ? 8 : 7;
+
+  return (
+    <table className="tabla">
+      <thead>
+        <tr>
+          <th>Código</th><th>Paciente</th>
+          {conProfesional && <th>Profesional</th>}
+          <th>Servicio</th><th>Tipo</th><th>Hora</th><th>Esperando</th><th>Prioridad</th>
+        </tr>
+      </thead>
+      <tbody>
+        {turnos.map((t) => (
+          <tr key={t.id} className={t.estado === 'llamado' ? 'fila-activa' : 'fila-clickable'}
+              onClick={() => onFila(t)}>
+            <td><span className="chip">{t.cita.codigo}</span></td>
+            <td>{t.cita.paciente.apellidos}, {t.cita.paciente.nombres}</td>
+            {conProfesional && <td>{t.cita.prestador.nombre}</td>}
+            {/* §2.15 · el prestador debe saber qué viene a cumplir cada paciente */}
+            <td>{t.cita.servicio.nombre}</td>
+            <td><EtiquetaTipo tipo={t.cita.tipo} /></td>
+            <td>{aHora(t.cita.horaInicio)}</td>
+            <td>{t.minutosEsperando} min</td>
+            <td>
+              <span className={`tag ${t.prioridad === 'alta' ? 't-red' : t.prioridad === 'media' ? 't-amber' : 't-gray'}`}>
+                {t.prioridad}
+              </span>
+            </td>
+          </tr>
+        ))}
+        {turnos.length === 0 && <tr><td colSpan={columnas} className="muted">No hay pacientes en espera</td></tr>}
+      </tbody>
+    </table>
+  );
+}
+
 /** RN-07.4 · la nota del motivo es obligatoria; el backend también la exige. */
-function ModalPriorizar({ turno, onCerrar, onListo }: { turno: Turno; onCerrar: () => void; onListo: () => void }) {
+export function ModalPriorizar({ turno, onCerrar, onListo }: { turno: Turno; onCerrar: () => void; onListo: () => void }) {
   const [prioridad, setPrioridad] = useState(turno.prioridad);
   const [nota, setNota] = useState('');
   const [error, setError] = useState('');
