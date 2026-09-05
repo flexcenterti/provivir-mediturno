@@ -51,6 +51,16 @@ export class TurnosController {
     return this.turnos.llamarSiguiente(dto, usuario.id);
   }
 
+  /**
+   * RN-11.5 · repetir el llamado en la sala. Mismo permiso que llamar: repetir no es
+   * una autoridad nueva. La guarda de estado vive en el servicio.
+   */
+  @Post(':id/rellamar')
+  @Permisos('turnos.atender')
+  rellamar(@Param('id') id: string, @UsuarioActual() usuario: UsuarioAutenticado) {
+    return this.turnos.rellamar(id, usuario.id);
+  }
+
   /** RN-07.4 · priorización con nota obligatoria (la exige el DTO). */
   @Patch(':id/priorizar')
   @Permisos('turnos.atender')

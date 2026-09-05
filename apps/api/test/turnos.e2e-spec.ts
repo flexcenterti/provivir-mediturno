@@ -230,6 +230,89 @@ describe('Cola de sala (integración)', () => {
   });
 
   /**
+   * RN-11.5 · repetir el llamado, para cuando el paciente no lo oyó.
+   */
+  describe('repetir el llamado', () => {
+    async function yaLlamado() {
+      await enEspera('ao');
+      const t = await token('asistente@provivir.local');
+      const r = await request(http).post('/api/turnos/llamar-siguiente')
+        .set('Authorization', `Bearer ${t}`).send({ prestadorId: 'ao' }).expect(201);
+      return { id: r.body.id as string, t };
+    }
+
+    /*
+     * Mata: poner `llamadoTs: new Date()` en `rellamar`. Esa marca ES la métrica de
+     * espera (`metricas.service.ts`, `minutosEsperando(llegadaTs, llamadoTs)`):
+     * moverla haría que el tablero informara una cola más lenta cada vez que alguien
+     * repite un llamado, y nadie relacionaría jamás las dos cosas. Y de paso mueve el
+     * orden del televisor, que ordena por ese mismo campo.
+     */
+    it('no mueve la marca del llamado ni el estado', async () => {
+      const { id, t } = await yaLlamado();
+      const antes = await prisma.turno.findUniqueOrThrow({ where: { id } });
+
+      await request(http).post(`/api/turnos/${id}/rellamar`)
+        .set('Authorization', `Bearer ${t}`).expect(201);
+
+      const despues = await prisma.turno.findUniqueOrThrow({ where: { id } });
+      expect(despues.llamadoTs?.getTime()).toBe(antes.llamadoTs?.getTime());
+      expect(despues.estado).toBe('llamado');
+    });
+
+    /*
+     * Mata: usar `'Llamado de turno'` también aquí. La auditoría es el único rastro
+     * duradero del rellamado —no hay contador en la base— y es lo que responde «¿le
+     * llamamos antes de marcarlo ausente?». Con la misma acción, indistinguible.
+     */
+    it('queda auditado con acción propia', async () => {
+      const { id, t } = await yaLlamado();
+      const turno = await prisma.turno.findUniqueOrThrow({ where: { id }, include: { cita: true } });
+
+      await request(http).post(`/api/turnos/${id}/rellamar`)
+        .set('Authorization', `Bearer ${t}`).expect(201);
+
+      const registro = await prisma.auditoria.findFirst({
+        where: { entidad: `cita/${turno.cita.codigo}`, accion: 'Rellamado de turno' },
+      });
+      expect(registro).not.toBeNull();
+    });
+
+    /*
+     * Mata: quitar la guarda de estado. Se anunciaría a todo volumen en la sala a
+     * alguien que ya entró a consulta o que se fue hace rato.
+     */
+    it('no se puede repetir un turno ya cerrado', async () => {
+      const { id, t } = await yaLlamado();
+      await request(http).patch(`/api/turnos/${id}/finalizar`)
+        .set('Authorization', `Bearer ${t}`).expect(200);
+
+      await request(http).post(`/api/turnos/${id}/rellamar`)
+        .set('Authorization', `Bearer ${t}`).expect(409);
+    });
+
+    /* Mata: la misma guarda por el otro lado — repetir algo que nunca se llamó. */
+    it('no se puede repetir a quien todavía no se ha llamado', async () => {
+      const turno = await enEspera('ao');
+      const t = await token('asistente@provivir.local');
+      await request(http).post(`/api/turnos/${turno.id}/rellamar`)
+        .set('Authorization', `Bearer ${t}`).expect(409);
+    });
+
+    /*
+     * Mata: quitar `@Permisos('turnos.atender')`. La cuenta del televisor solo tiene
+     * `turnos.ver`; si pudiera rellamar, un televisor comprometido gritaría nombres
+     * en la sala.
+     */
+    it('exige permiso para atender turnos', async () => {
+      const { id } = await yaLlamado();
+      const t = await token('pantalla@provivir.local');
+      await request(http).post(`/api/turnos/${id}/rellamar`)
+        .set('Authorization', `Bearer ${t}`).expect(403);
+    });
+  });
+
+  /**
    * RN-07.6 · La constancia del cobro.
    *
    * Antes de esto, `registrarLlegada` escribía SIEMPRE en auditoría la cadena fija

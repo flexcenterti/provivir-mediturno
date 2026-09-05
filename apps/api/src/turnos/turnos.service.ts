@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { PrismaClient } from '@prisma/client';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { TurnosGateway } from './turnos.gateway';
@@ -268,33 +268,87 @@ export class TurnosService {
       estadoNext: 'llamado',
     });
 
-    // RN-11.1 · solo las pantallas configuradas para ese servicio muestran el llamado.
-    const pantallas = await this.prisma.pantalla.findMany({
-      where: { servicios: { has: turno.cita.servicioId } },
-      select: { id: true },
-    });
-
-    this.gateway.emitirLlamado(
-      pantallas.map((p) => p.id),
-      {
-        turnoId: turno.id,
-        codigo: turno.cita.codigo,
-        // Mismo criterio que el estado que consulta la pantalla: si divergieran,
-        // el nombre completo se colaría por el canal en vivo.
-        paciente: nombreParaPantalla(
-          turno.cita.paciente.nombres,
-          turno.cita.paciente.apellidos,
-          this.modoNombre(),
-        ),
-        prestador: turno.cita.prestador.nombre,
-        consultorio: turno.consultorio,
-        servicioId: turno.cita.servicioId,
-        ts: new Date().toISOString(),
-      },
-    );
+    await this.anunciar(turno, { repetido: false });
     this.gateway.emitirColaActualizada();
 
     return turno;
+  }
+
+  /**
+   * RN-11.5 · repetir el llamado de quien ya fue llamado.
+   *
+   * **No toca `llamadoTs` ni el estado**, y no es un detalle: esa marca es la métrica
+   * de espera (`metricas.service.ts`, `minutosEsperando(llegadaTs, llamadoTs)`).
+   * Reescribirla haría que el tablero informara una cola más lenta cada vez que
+   * alguien repite un llamado, y nadie relacionaría jamás las dos cosas. De paso sale
+   * gratis el comportamiento que quiere la sala: como `ultimosLlamados` ordena por
+   * `llamadoTs`, el repetido vuelve a sonar sin reordenar el televisor.
+   *
+   * Fuera de transacción a propósito: no cambia nada que dos personas puedan disputar,
+   * así que el lock de la cola aquí solo sería contención.
+   */
+  async rellamar(id: string, usuarioId: string) {
+    const turno = await this.prisma.turno.findUnique({ where: { id }, include: INCLUIR });
+    if (!turno) throw new NotFoundException('Turno no encontrado');
+    if (turno.estado !== 'llamado') {
+      throw new ConflictException(
+        turno.estado === 'en_espera'
+          ? 'Ese paciente todavía no ha sido llamado.'
+          : 'Ese turno ya se cerró; no se puede repetir el llamado.',
+      );
+    }
+
+    await this.anunciar(turno, { repetido: true });
+
+    // Acción propia y no la del llamado: es el único rastro duradero de que se repitió,
+    // y es el dato que responde «¿le llamamos antes de marcarlo ausente?».
+    await this.auditoria.registrar({
+      usuario: usuarioId,
+      accion: 'Rellamado de turno',
+      entidad: `cita/${turno.cita.codigo}`,
+      detalle: `${turno.cita.prestador.nombre} · ${turno.consultorio ?? 'sin consultorio'}`,
+    });
+
+    return turno;
+  }
+
+  /**
+   * RN-11.1 · solo las pantallas configuradas para ese servicio muestran el llamado.
+   *
+   * Compartido por el llamado y el rellamado a propósito: el día que alguien añada un
+   * campo al anuncio tiene que aparecer en los dos, o el repetido dirá menos que el
+   * original y nadie sabrá por qué.
+   */
+  private async anunciar(
+    turno: Prisma.TurnoGetPayload<{ include: typeof INCLUIR }>,
+    { repetido }: { repetido: boolean },
+  ): Promise<void> {
+    const pantallas = await this.pantallasDe(turno.cita.servicioId);
+
+    this.gateway.emitirLlamado(pantallas, {
+      turnoId: turno.id,
+      codigo: turno.cita.codigo,
+      // Mismo criterio que el estado que consulta la pantalla: si divergieran,
+      // el nombre completo se colaría por el canal en vivo.
+      paciente: nombreParaPantalla(
+        turno.cita.paciente.nombres,
+        turno.cita.paciente.apellidos,
+        this.modoNombre(),
+      ),
+      prestador: turno.cita.prestador.nombre,
+      consultorio: turno.consultorio,
+      servicioId: turno.cita.servicioId,
+      ts: new Date().toISOString(),
+      repetido,
+    });
+  }
+
+  private async pantallasDe(servicioId: string): Promise<string[]> {
+    const pantallas = await this.prisma.pantalla.findMany({
+      where: { servicios: { has: servicioId } },
+      select: { id: true },
+    });
+    return pantallas.map((p) => p.id);
   }
 
   /**
@@ -360,14 +414,28 @@ export class TurnosService {
       estadoNext: 'atendido',
     });
 
+    this.gateway.emitirRetiroLlamado(await this.pantallasDe(turno.cita.servicioId), turno.id);
     this.gateway.emitirColaActualizada();
     return actualizado;
   }
 
-  /** Últimos llamados, para que la pantalla los muestre al conectarse. */
+  /**
+   * Últimos llamados, para que la pantalla los muestre al conectarse.
+   *
+   * **Acotado al día**, como `cola()`. Nadie escribe nunca `ausente`, así que un turno
+   * llamado y no finalizado se queda en `llamado` para siempre: sin este filtro el
+   * televisor amanecía mostrando el llamado de ayer. No mordía porque nunca se había
+   * llamado a nadie en producción; habría mordido el segundo día.
+   *
+   * `en_atencion` no lo asigna nadie a un turno —`llamarSiguiente` lo pone en la CITA—,
+   * pero se deja por si el kiosko lo usa: aquí no estorba.
+   */
   async ultimosLlamados(servicios: string[], limite: number) {
     return this.prisma.turno.findMany({
-      where: { estado: { in: ['llamado', 'en_atencion'] }, cita: { servicioId: { in: servicios } } },
+      where: {
+        estado: { in: ['llamado', 'en_atencion'] },
+        cita: { servicioId: { in: servicios }, fecha: hoyEnSede() },
+      },
       include: INCLUIR,
       orderBy: { llamadoTs: 'desc' },
       take: limite,
