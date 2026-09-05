@@ -63,7 +63,7 @@
 	handle /tv* {
 		header {
 			# La TV embebe el frame de YouTube.
-			Content-Security-Policy "default-src 'self'; img-src 'self' data: https://i.ytimg.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://www.youtube.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self'"
+			Content-Security-Policy "default-src 'self'; img-src 'self' data: https://i.ytimg.com; style-src 'self' 'unsafe-inline'; script-src 'self' https://www.youtube.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self' wss://{$DOMINIO:provivir.exagos.co}"
 			X-Frame-Options "SAMEORIGIN"
 			# No se indexa: una pantalla en un buscador anularía el único control.
 			X-Robots-Tag "noindex, nofollow, noarchive"

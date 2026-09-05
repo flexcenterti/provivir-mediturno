@@ -17,6 +17,8 @@ export interface LlamadoEmitido {
   consultorio: string | null;
   servicioId: string;
   ts: string;
+  /** RN-11.5 · un rellamado se anuncia distinto; el tablero no lo distingue. */
+  repetido: boolean;
 }
 
 /**
@@ -27,6 +29,15 @@ export interface LlamadoEmitido {
  */
 @WebSocketGateway({
   namespace: '/tiempo-real',
+  /*
+   * El `path` es el montaje HTTP; el `namespace` es enrutado de protocolo dentro de
+   * él. No fijarlo dejaba el handshake en `/socket.io`, el valor por defecto, mientras
+   * el despliegue enruta `/tiempo-real` — así que **este canal no funcionó nunca**, ni
+   * en producción ni en desarrollo, y los dos clientes degradaban a su sondeo sin
+   * decir nada. Con el path puesto, lo que el Caddyfile ya documentaba pasa a ser
+   * cierto y no hace falta una ruta más en el proxy.
+   */
+  path: '/tiempo-real',
   cors: { origin: (process.env.CORS_ORIGINS ?? '').split(',').filter(Boolean) },
 })
 export class TurnosGateway implements OnGatewayConnection {
@@ -106,6 +117,19 @@ export class TurnosGateway implements OnGatewayConnection {
       this.server?.to(`pantalla:${id}`).emit('llamado', llamado);
     }
     this.server?.to('backoffice').emit('llamado', llamado);
+  }
+
+  /**
+   * El turno atendido sale del televisor en el acto.
+   *
+   * Sin esto se quedaba hasta el refetch de 60 s, y la sala veía llamado a alguien que
+   * ya había entrado a consulta. Solo va a las pantallas: el backoffice ya se entera
+   * por `cola-actualizada`.
+   */
+  emitirRetiroLlamado(pantallaIds: string[], turnoId: string): void {
+    for (const id of pantallaIds) {
+      this.server?.to(`pantalla:${id}`).emit('retirar-llamado', { turnoId });
+    }
   }
 
   emitirColaActualizada(): void {

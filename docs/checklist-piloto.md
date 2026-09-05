@@ -126,6 +126,9 @@ Consecuencias asumidas, y cómo se acotan:
   único control que queda.
 - ⬜ Definir con la clínica el procedimiento si un enlace se filtra: se crea una
   pantalla nueva y se retira la anterior, lo que invalida el enlace viejo.
+  Desde la fase 19 esto se hace desde **Pantallas de sala → Configurar → Retirar
+  pantalla**; hasta entonces el procedimiento estaba escrito pero era imposible de
+  ejecutar, porque el producto no tenía alta ni baja de pantallas.
 - ⬜ Tratar los enlaces como credenciales: no mandarlos por WhatsApp ni dejarlos en
   el historial de un televisor compartido.
 

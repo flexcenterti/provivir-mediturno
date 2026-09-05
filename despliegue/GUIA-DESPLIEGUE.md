@@ -140,12 +140,38 @@ Caddy emite y renueva el certificado solo. Todo cuelga de ese host:
 |---|---|
 | `/` | Backoffice (tras login) |
 | `/citas` | Portal público de autoagendamiento |
-| `/tv` | Pantallas de sala — **solo desde la red de la sede** |
+| `/tv` | Pantallas de sala |
 | `/api` | API |
 | `/api/webhooks/whatsapp` | Webhook de Meta |
-| `/tiempo-real` | WebSocket de llamados |
+| `/tiempo-real` | WebSocket de llamados (handshake y todo el tráfico en vivo) |
 
-Ajusta los rangos IP de `@redInterna` en el `Caddyfile` a la red real de la clínica.
+**Las pantallas de sala se sirven desde cualquier red.** Es decisión del cliente: los
+televisores se instalan y reinstalan sin un técnico de redes cerca, y atarlos a un rango de
+IP convertía cada cambio de router en una incidencia. Lo que las protege es que la URL lleva
+el UUID de la pantalla, que solo se ve desde el backoffice. Si un enlace se filtra, se retira
+la pantalla desde **Pantallas de sala → Configurar → Retirar pantalla** y se crea otra: el
+UUID nuevo invalida el viejo.
+
+> Esta guía decía «solo desde la red de la sede» y mandaba ajustar `@redInterna`. Ese matcher
+> **no existe** en el `Caddyfile` activo desde hace meses — solo en
+> `Caddyfile.subdominios.ejemplo`, que no se usa. Se corrige aquí para que la guía y el
+> archivo que corre digan lo mismo.
+
+### El sonido de los televisores
+
+El llamado suena con una campanita y una voz que lee el turno (RN-11.5). Los navegadores
+bloquean el audio hasta que alguien toca la pantalla, y un televisor en kiosko no tiene a
+nadie tocándola, así que hay dos caminos y conviene usar los dos:
+
+- **Al instalar el stick**, lanza el navegador con
+  `--autoplay-policy=no-user-gesture-required`. Con eso el sonido queda armado en cada
+  arranque y no hay que tocar nada nunca más.
+- **Si no se puede configurar el navegador**, la pantalla muestra una franja amarilla:
+  basta pulsar OK en el control una vez, después de cada reinicio. La franja no tapa los
+  turnos, y sin tocarla la pantalla funciona igual, muda.
+
+Si el televisor no trae voz en español, la cabecera lo dice («Sin voz en español») y queda
+solo la campanita: hay que instalarle el paquete de idioma al aparato.
 
 ### Cambiar al dominio definitivo
 

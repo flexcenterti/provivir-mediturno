@@ -50,6 +50,20 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
 .tv-cab { display: flex; align-items: center; gap: 1rem; padding: 1.2rem 2rem; background: rgba(0,0,0,.2); }
 .tv-cab h1 { font-size: 1.4rem; }
 .tv-sala { margin-left: auto; opacity: .75; font-size: 1rem; }
+/* Que el televisor no trae voz en español es un dato para quien lo instala. */
+.tv-aviso { background: rgba(255,255,255,.14); border-radius: 999px;
+  padding: .2rem .8rem; font-size: .85rem; opacity: .8; }
+
+/*
+ * Franja de activación del sonido. Va sobre el tablero y NO lo tapa: una sala de
+ * espera sin turnos visibles está peor que una sin sonido. Es un <button> con foco
+ * para que el OK del mando de un stick pueda pulsarla.
+ */
+.tv-armar { display: flex; flex-direction: column; align-items: center; gap: .2rem;
+  width: 100%; border: 0; cursor: pointer; font: inherit; text-align: center;
+  padding: .7rem 2rem; background: #F0B429; color: #3B2A02; }
+.tv-armar small { font-size: .8rem; opacity: .75; }
+.tv-armar:focus-visible { outline: 3px solid #fff; outline-offset: -6px; }
 .tv-cuerpo { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; padding: 1.5rem 2rem; }
 .tv-turnos { display: flex; flex-direction: column; gap: 1.2rem; }
 .tv-actual { background: rgba(255,255,255,.08); border-radius: 18px; padding: 2rem;

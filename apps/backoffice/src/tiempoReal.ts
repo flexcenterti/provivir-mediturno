@@ -16,6 +16,7 @@ import { refrescarSesion, token } from './api';
 type Escucha = (cantidad: number) => void;
 
 let socket: Socket | null = null;
+let refrescando = false;
 const escuchas = new Set<Escucha>();
 
 /**
@@ -37,6 +38,7 @@ export function alPulsoDeBandeja(fn: Escucha): () => void {
     if (escuchas.size === 0) {
       socket?.disconnect();
       socket = null;
+      refrescando = false;
     }
   };
 }
@@ -50,6 +52,10 @@ function conectar(): void {
   if (socket) return;
 
   socket = io('/tiempo-real', {
+    // El `path` es el montaje HTTP y el primer argumento es el namespace. Sin fijarlo,
+    // el handshake se pedía en `/socket.io`, que el despliegue no enruta: este socket
+    // no conectó nunca, ni aquí ni en la TV.
+    path: '/tiempo-real',
     transports: ['websocket'],
     // La sala reparte nombres de pacientes: el servidor exige sesión para entrar.
     auth: { token: token.leer() },
@@ -65,7 +71,15 @@ function conectar(): void {
    * viejo, que es como no reconectar. Hay que refrescarlo y reasignarlo antes de que
    * lo intente otra vez.
    */
+  socket.on('connect', () => { refrescando = false; });
   socket.on('connect_error', () => {
+    /*
+     * Una sola vez por racha. socket.io reintenta indefinidamente, así que refrescar
+     * en cada intento convierte un fallo de red —o de enrutado, que es lo que había—
+     * en una petición de refresco cada pocos segundos por pestaña abierta.
+     */
+    if (refrescando) return;
+    refrescando = true;
     void refrescarSesion().then((ok) => {
       if (ok && socket) socket.auth = { token: token.leer() };
     });

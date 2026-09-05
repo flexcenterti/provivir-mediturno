@@ -600,3 +600,116 @@ test('RN-01.2 · el control no ofrece «Porcentaje» como política de costo', a
   await expect(politica).toBeVisible();
   await expect(politica.getByRole('option', { name: 'Porcentaje' })).toHaveCount(0);
 });
+
+// ─────────────── Fase 19 · alta y baja de pantallas de sala ───────────────
+
+/**
+ * Deja la sección Pantallas abierta y sin ninguna fila.
+ *
+ * El seed crea tres desde el catálogo de demostración y se retiran **por la API**, no
+ * por la interfaz: hacerlo con clics tenía una carrera real —`count()` ve una fila que
+ * el `recargar()` en vuelo está a punto de quitar, y el clic se queda esperando un
+ * elemento ya desprendido—. El borrado por interfaz se prueba aparte, que es su sitio.
+ */
+async function pantallasVacias(page: import('@playwright/test').Page): Promise<void> {
+  const api = page.request;
+  const login = await api.post('http://localhost:3000/api/auth/login', { data: ADMIN });
+  const { accessToken, token } = await login.json();
+  const cabeceras = { Authorization: `Bearer ${accessToken ?? token}` };
+
+  const r = await api.get('http://localhost:3000/api/pantallas', { headers: cabeceras });
+  for (const p of await r.json()) {
+    await api.delete(`http://localhost:3000/api/pantallas/${p.id}`, { headers: cabeceras });
+  }
+
+  await entrar(page);
+  await page.getByRole('button', { name: 'Pantallas de sala' }).click();
+  await expect(page.getByRole('columnheader', { name: 'Pantalla' })).toBeVisible();
+}
+
+/*
+ * Mata: quitar el `<tr>` del estado vacío. Sin él la tabla son encabezados sobre el
+ * vacío y no hay nada que indique qué hacer — que es literalmente lo que el cliente
+ * estaba viendo en producción, con cero filas y sin forma de crear ninguna.
+ */
+test('RN-11 · sin ninguna pantalla, la tabla dice qué hacer', async ({ page }) => {
+  await pantallasVacias(page);
+  await expect(page.getByText(/Todavía no hay ninguna pantalla/)).toBeVisible();
+});
+
+/*
+ * Mata: que el alta no recargue la lista (parece que no se guardó y se crean tres), o
+ * que el formulario mande PATCH sobre una pantalla que no existe.
+ */
+test('RN-11 · se crea una pantalla desde cero y aparece en la lista', async ({ page }) => {
+  await pantallasVacias(page);
+
+  await page.getByRole('button', { name: 'Nueva pantalla' }).click();
+  await page.getByLabel('Nombre').fill('Sala de pruebas');
+  await page.getByRole('button', { name: 'Laboratorio clínico' }).click();
+  await page.getByRole('button', { name: 'Crear pantalla' }).click();
+
+  await expect(page.getByRole('cell', { name: /Sala de pruebas/ })).toBeVisible();
+  await expect(page.getByText(/Todavía no hay ninguna pantalla/)).toHaveCount(0);
+});
+
+/*
+ * Mata: copiar el enlace relativo (`/tv/?pantalla=…`). El punto entero del botón es
+ * que lo copiado se pega en un WhatsApp o en la barra de un stick, donde una ruta
+ * relativa no vale nada.
+ */
+test('RN-11 · «Copiar enlace» deja una URL absoluta con el id de la pantalla', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await pantallasVacias(page);
+
+  await page.getByRole('button', { name: 'Nueva pantalla' }).click();
+  await page.getByLabel('Nombre').fill('Sala del enlace');
+  await page.getByRole('button', { name: 'Crear pantalla' }).click();
+  await expect(page.getByRole('cell', { name: /Sala del enlace/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Copiar enlace' }).click();
+  await expect(page.getByRole('button', { name: 'Copiado' })).toBeVisible();
+
+  const copiado = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copiado).toMatch(/^https?:\/\/.+\?pantalla=[0-9a-f-]{36}$/);
+});
+
+/*
+ * Mata: retirar sin `confirm()`. El diálogo nunca dispararía y la aserción de que sí
+ * lo hizo falla — es a la vez el error de un clic de más y el procedimiento de
+ * revocación de un enlace filtrado, así que no puede ser silencioso.
+ */
+test('RN-11.6 · retirar una pantalla pide confirmación y avisa de que el enlace muere', async ({ page }) => {
+  await pantallasVacias(page);
+
+  await page.getByRole('button', { name: 'Nueva pantalla' }).click();
+  await page.getByLabel('Nombre').fill('Sala que se retira');
+  await page.getByRole('button', { name: 'Crear pantalla' }).click();
+  await expect(page.getByRole('cell', { name: /Sala que se retira/ })).toBeVisible();
+
+  let texto = '';
+  page.once('dialog', (d) => { texto = d.message(); void d.accept(); });
+
+  await page.getByRole('button', { name: 'Configurar' }).click();
+  await page.getByRole('button', { name: 'Retirar pantalla' }).click();
+
+  await expect(page.getByRole('cell', { name: /Sala que se retira/ })).toHaveCount(0);
+  expect(texto).toContain('Sala que se retira');
+  // Lo que hace útil el aviso no es preguntar, es decir qué se rompe.
+  expect(texto).toMatch(/dejará de funcionar/);
+});
+
+/*
+ * Mata: quitar el aviso de servicios vacíos. Una pantalla así no recibe un solo
+ * llamado en toda su vida y se instala sin que nadie lo note hasta verla muda.
+ */
+test('RN-11.1 · una pantalla sin servicios queda marcada en la lista y en el formulario', async ({ page }) => {
+  await pantallasVacias(page);
+
+  await page.getByRole('button', { name: 'Nueva pantalla' }).click();
+  await expect(page.getByText(/no mostrará ningún llamado/)).toBeVisible();
+  await page.getByLabel('Nombre').fill('Sala sin configurar');
+  await page.getByRole('button', { name: 'Crear pantalla' }).click();
+
+  await expect(page.getByText(/Sin servicios · no mostrará llamados/)).toBeVisible();
+});

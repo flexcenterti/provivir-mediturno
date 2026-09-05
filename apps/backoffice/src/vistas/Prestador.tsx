@@ -11,6 +11,12 @@ export function VistaPrestador({ prestadorId }: { prestadorId: string }) {
   const [cola, setCola] = useState<Turno[]>([]);
   const [error, setError] = useState('');
   const [priorizando, setPriorizando] = useState<Turno | null>(null);
+  /*
+   * El botón se apaga unos segundos tras cada pulsación. Sin eso, una asistente
+   * impaciente encadena cuatro anuncios solapados y la sala oye ruido. Se limita aquí
+   * y no en el servidor: al servidor no le incumbe con qué ritmo se pulsa un botón.
+   */
+  const [repitiendo, setRepitiendo] = useState(false);
 
   const recargar = useCallback(() => {
     api.cola(prestadorId).then(setCola).catch((e) => setError(e.message));
@@ -32,6 +38,17 @@ export function VistaPrestador({ prestadorId }: { prestadorId: string }) {
     }
   }
 
+  async function repetir(turnoId: string) {
+    setError('');
+    setRepitiendo(true);
+    setTimeout(() => setRepitiendo(false), 3_000);
+    try {
+      await api.rellamar(turnoId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error');
+    }
+  }
+
   const enAtencion = cola.find((t) => t.estado === 'llamado');
 
   return (
@@ -43,9 +60,15 @@ export function VistaPrestador({ prestadorId }: { prestadorId: string }) {
         <div className="acciones">
           <button className="btn btn-primary" onClick={llamar}>Llamar al siguiente</button>
           {enAtencion && (
-            <button className="btn btn-ghost" onClick={() => api.finalizar(enAtencion.id).then(recargar)}>
-              Finalizar atención de {enAtencion.cita.codigo}
-            </button>
+            <>
+              <button className="btn btn-ghost" disabled={repitiendo}
+                      onClick={() => void repetir(enAtencion.id)}>
+                {repitiendo ? 'Anunciando…' : 'Repetir llamado'}
+              </button>
+              <button className="btn btn-ghost" onClick={() => api.finalizar(enAtencion.id).then(recargar)}>
+                Finalizar atención de {enAtencion.cita.codigo}
+              </button>
+            </>
           )}
         </div>
         <p className="nota">

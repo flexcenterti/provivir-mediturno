@@ -44,6 +44,15 @@ export default defineConfig({
   // procesos de vite huérfanos, y heredarlos hace que el puerto lo atienda otra
   // app. Se paga medio minuto de arranque a cambio de que la suite sea honesta.
   use: { baseURL: 'http://localhost:5175/tv/' } },
+    /*
+     * El mismo televisor, pero bien instalado. El navegador de serie deja el
+     * `AudioContext` suspendido —el proyecto `tv` es por tanto el stick SIN
+     * configurar—, así que el flag de la guía de despliegue hay que pedirlo aquí.
+     * Proyecto aparte porque cambiar los argumentos obliga a otro worker.
+     */
+    { name: 'tv-con-flag', testMatch: 'tv-con-flag.spec.ts',
+      use: { baseURL: 'http://localhost:5175/tv/',
+             launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] } } },
   ],
 
   webServer: [

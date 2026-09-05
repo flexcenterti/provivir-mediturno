@@ -313,8 +313,12 @@ export const api = {
     pedir<{ clave: string; valor: string }>(`/configuracion/${clave}`, { method: 'PUT', body: JSON.stringify({ valor }) }),
 
   pantallas: () => pedir<Pantalla[]>('/pantallas'),
+  crearPantalla: (cuerpo: object) =>
+    pedir<Pantalla>('/pantallas', { method: 'POST', body: JSON.stringify(cuerpo) }),
   actualizarPantalla: (id: string, cuerpo: object) =>
     pedir<Pantalla>(`/pantallas/${id}`, { method: 'PATCH', body: JSON.stringify(cuerpo) }),
+  /** Retirar una pantalla revoca su enlace y no se puede deshacer (RN-11.6). */
+  eliminarPantalla: (id: string) => pedir<void>(`/pantallas/${id}`, { method: 'DELETE' }),
 
   kiosko: () => pedir<EstadoKiosko>('/kiosko/estado'),
 
@@ -329,6 +333,8 @@ export const api = {
   }) => pedir<Turno>('/turnos/llegada', { method: 'POST', body: JSON.stringify(cuerpo) }),
   llamarSiguiente: (prestadorId: string) =>
     pedir<Turno>('/turnos/llamar-siguiente', { method: 'POST', body: JSON.stringify({ prestadorId }) }),
+  /** RN-11.5 · vuelve a anunciar en la sala sin mover la métrica de espera. */
+  rellamar: (id: string) => pedir<Turno>(`/turnos/${id}/rellamar`, { method: 'POST' }),
   priorizar: (id: string, prioridad: string, nota: string) =>
     pedir<Turno>(`/turnos/${id}/priorizar`, { method: 'PATCH', body: JSON.stringify({ prioridad, nota }) }),
   finalizar: (id: string) => pedir<Turno>(`/turnos/${id}/finalizar`, { method: 'PATCH' }),
