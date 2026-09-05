@@ -245,20 +245,75 @@ function Auditoria() {
   );
 }
 
+/** La URL que se pega en el televisor. Absoluta: viaja por WhatsApp o en un papel. */
+function enlaceDe(pantallaId: string): string {
+  return new URL(`${URL_PANTALLAS}?pantalla=${pantallaId}`, location.origin).href;
+}
+
+/**
+ * Botón de copiar con acuse. `navigator.clipboard` exige contexto seguro (https o
+ * localhost); si no lo hay, se muestra el enlace para copiarlo a mano en vez de fallar
+ * en silencio, que es lo que hace un `catch` vacío.
+ */
+function CopiarEnlace({ pantallaId }: { pantallaId: string }) {
+  const [estado, setEstado] = useState<'listo' | 'copiado' | 'manual'>('listo');
+
+  if (estado === 'manual') {
+    return <input className="enlace-manual" readOnly value={enlaceDe(pantallaId)}
+                  onFocus={(e) => e.currentTarget.select()} />;
+  }
+  return (
+    <button className="btn btn-ghost" onClick={() => {
+      navigator.clipboard?.writeText(enlaceDe(pantallaId))
+        .then(() => { setEstado('copiado'); setTimeout(() => setEstado('listo'), 2000); })
+        .catch(() => setEstado('manual'));
+    }}>
+      {estado === 'copiado' ? 'Copiado' : 'Copiar enlace'}
+    </button>
+  );
+}
+
 /** RN-11 · Configuración por sala/servicio, con el frame multimedia. */
 function Pantallas() {
   const [pantallas, setPantallas] = useState<Pantalla[]>([]);
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [editando, setEditando] = useState<Pantalla | null>(null);
+  const [creando, setCreando] = useState(false);
   const [error, setError] = useState('');
 
   const recargar = () => { api.pantallas().then(setPantallas).catch((e: Error) => setError(e.message)); };
   useEffect(() => { recargar(); api.servicios().then(setServicios).catch(() => undefined); }, []);
 
+  async function eliminar(p: Pantalla) {
+    /*
+     * `confirm()` y no un modal propio: es lo que ya usa el borrado de perfiles. El
+     * texto dice qué se rompe, porque esto es a la vez el error de un clic de más y el
+     * procedimiento de revocación de un enlace filtrado — quien borra a propósito
+     * necesita saber que funcionó.
+     */
+    if (!confirm(
+      `¿Retirar «${p.nombre}»?\n\n`
+      + 'El televisor que tenga su enlace dejará de funcionar, y el enlace no se puede '
+      + 'recuperar: si vuelves a crear la pantalla tendrá uno nuevo.',
+    )) return;
+
+    setError('');
+    try {
+      await api.eliminarPantalla(p.id);
+      setEditando(null);
+      recargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error');
+    }
+  }
+
   return (
     <>
       {error && <div className="error">{error}</div>}
       <div className="card">
+        <div className="acciones">
+          <button className="btn btn-primary" onClick={() => setCreando(true)}>Nueva pantalla</button>
+        </div>
         <p className="nota">
           Cada televisor define qué servicios muestra, cuántos turnos y su contenido multimedia.
           La pantalla se abre en el TV con <code>/tv?pantalla=&lt;id&gt;</code>.
@@ -268,10 +323,26 @@ function Pantallas() {
             <tr><th>Pantalla</th><th>Servicios</th><th>Turnos</th><th>Sonido</th><th>Multimedia</th><th></th></tr>
           </thead>
           <tbody>
+            {/* Sin esto la tabla es encabezados sobre el vacío, sin decir qué hacer. */}
+            {pantallas.length === 0 && (
+              <tr><td colSpan={6} className="muted">
+                Todavía no hay ninguna pantalla. Crea una, elige qué servicios muestra y
+                abre su enlace en el televisor de la sala.
+              </td></tr>
+            )}
             {pantallas.map((p) => (
               <tr key={p.id}>
-                <td>{p.nombre}</td>
-                <td className="muted">{p.servicios.join(', ')}</td>
+                <td>
+                  {p.nombre}
+                  {/* El único modo de correlacionar «qué pantalla es ese televisor»
+                      cuando alguien te lee la barra del navegador por teléfono. */}
+                  <div className="uuid">{p.id}</div>
+                </td>
+                <td className="muted">
+                  {p.servicios.length
+                    ? p.servicios.join(', ')
+                    : <span className="tag t-amber">Sin servicios · no mostrará llamados</span>}
+                </td>
                 <td>{p.turnosVisibles}</td>
                 <td>{p.sonido ? 'Sí' : 'No'}</td>
                 <td>
@@ -285,6 +356,9 @@ function Pantallas() {
                       y en desarrollo el proxy de Vite lo resuelve igual. */}
                   <a className="btn btn-ghost" href={`${URL_PANTALLAS}?pantalla=${p.id}`}
                      target="_blank" rel="noreferrer">Abrir</a>
+                  {/* Quien configura está en un escritorio y el televisor está en otra
+                      sala: «Abrir» no sirve para la tarea real, copiar el enlace sí. */}
+                  <CopiarEnlace pantallaId={p.id} />
                 </td>
               </tr>
             ))}
@@ -292,10 +366,11 @@ function Pantallas() {
         </table>
       </div>
 
-      {editando && (
+      {(editando || creando) && (
         <FormPantalla pantalla={editando} servicios={servicios}
-                      onCerrar={() => setEditando(null)}
-                      onGuardado={() => { setEditando(null); recargar(); }} />
+                      onCerrar={() => { setEditando(null); setCreando(false); }}
+                      onEliminar={editando ? () => eliminar(editando) : undefined}
+                      onGuardado={() => { setEditando(null); setCreando(false); recargar(); }} />
       )}
     </>
   );
@@ -311,29 +386,35 @@ function PistaYoutube({ valor }: { valor: string }) {
   return <span className="p-ayuda mal">{r.motivo}</span>;
 }
 
-function FormPantalla({ pantalla, servicios, onCerrar, onGuardado }: {
-  pantalla: Pantalla; servicios: Servicio[]; onCerrar: () => void; onGuardado: () => void;
+/** Un solo formulario para los dos verbos: `pantalla` en `null` es crear. */
+function FormPantalla({ pantalla, servicios, onCerrar, onGuardado, onEliminar }: {
+  pantalla: Pantalla | null; servicios: Servicio[];
+  onCerrar: () => void; onGuardado: () => void; onEliminar?: () => void;
 }) {
   const [f, setF] = useState({
-    nombre: pantalla.nombre, turnosVisibles: pantalla.turnosVisibles, sonido: pantalla.sonido,
-    mensaje: pantalla.mensaje ?? '', media: pantalla.media,
-    canalYoutube: pantalla.canalYoutube ?? '',
-    videosPromo: pantalla.videosPromo.join('\n'),
-    intervaloInstitucionalMin: pantalla.intervaloInstitucionalMin,
+    nombre: pantalla?.nombre ?? '',
+    turnosVisibles: pantalla?.turnosVisibles ?? 4,
+    sonido: pantalla?.sonido ?? true,
+    mensaje: pantalla?.mensaje ?? '', media: pantalla?.media ?? false,
+    canalYoutube: pantalla?.canalYoutube ?? '',
+    videosPromo: (pantalla?.videosPromo ?? []).join('\n'),
+    intervaloInstitucionalMin: pantalla?.intervaloInstitucionalMin ?? 10,
   });
-  const [sel, setSel] = useState<string[]>(pantalla.servicios);
+  const [sel, setSel] = useState<string[]>(pantalla?.servicios ?? []);
   const [error, setError] = useState('');
 
   async function guardar() {
     setError('');
+    const cuerpo = {
+      nombre: f.nombre, servicios: sel, turnosVisibles: Number(f.turnosVisibles),
+      sonido: f.sonido, mensaje: f.mensaje, media: f.media,
+      canalYoutube: f.canalYoutube,
+      videosPromo: f.videosPromo.split('\n').map((v) => v.trim()).filter(Boolean),
+      intervaloInstitucionalMin: Number(f.intervaloInstitucionalMin),
+    };
     try {
-      await api.actualizarPantalla(pantalla.id, {
-        nombre: f.nombre, servicios: sel, turnosVisibles: Number(f.turnosVisibles),
-        sonido: f.sonido, mensaje: f.mensaje, media: f.media,
-        canalYoutube: f.canalYoutube,
-        videosPromo: f.videosPromo.split('\n').map((v) => v.trim()).filter(Boolean),
-        intervaloInstitucionalMin: Number(f.intervaloInstitucionalMin),
-      });
+      if (pantalla) await api.actualizarPantalla(pantalla.id, cuerpo);
+      else await api.crearPantalla(cuerpo);
       onGuardado();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error');
@@ -343,7 +424,7 @@ function FormPantalla({ pantalla, servicios, onCerrar, onGuardado }: {
   return (
     <div className="modal-fondo" onClick={onCerrar}>
       <div className="modal ancho" onClick={(e) => e.stopPropagation()}>
-        <h3>{pantalla.nombre}</h3>
+        <h3>{pantalla ? pantalla.nombre : 'Nueva pantalla'}</h3>
         {error && <div className="error">{error}</div>}
 
         <div className="field">
@@ -362,6 +443,12 @@ function FormPantalla({ pantalla, servicios, onCerrar, onGuardado }: {
               </button>
             ))}
           </div>
+          {/* Se avisa antes de guardar, no cuando alguien descubra el televisor mudo
+              en la sala. Se permite: es el estado normal de una pantalla a medio
+              configurar. */}
+          {sel.length === 0 && (
+            <span className="p-ayuda mal">Sin servicios esta pantalla no mostrará ningún llamado.</span>
+          )}
         </div>
 
         <div className="grid-2">
@@ -419,8 +506,13 @@ function FormPantalla({ pantalla, servicios, onCerrar, onGuardado }: {
         )}
 
         <div className="acciones">
-          <button className="btn btn-primary" onClick={guardar}>Guardar</button>
+          <button className="btn btn-primary" onClick={guardar}>
+            {pantalla ? 'Guardar' : 'Crear pantalla'}
+          </button>
           <button className="btn btn-ghost" onClick={onCerrar}>Cancelar</button>
+          {onEliminar && (
+            <button className="btn btn-danger" onClick={onEliminar}>Retirar pantalla</button>
+          )}
         </div>
       </div>
     </div>

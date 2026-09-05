@@ -334,6 +334,13 @@ tr.inactiva, .inactiva { opacity: .55; }
 .btn-green  { background: var(--green);      color: #fff; }
 .btn-amber  { background: var(--amber-soft); color: #8A5510; }
 .btn-block  { width: 100%; }
+
+/* Pantallas de sala: el id se lee por teléfono, así que tiene que ser copiable. */
+.uuid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .7rem;
+  color: var(--muted); margin-top: .15rem; user-select: all; }
+/* Respaldo de «Copiar enlace» donde el portapapeles no está disponible. */
+.enlace-manual { font-size: .75rem; padding: .3rem .5rem; border: 1px solid var(--line);
+  border-radius: 7px; min-width: 18rem; }
 .btn:hover:not(:disabled) { filter: brightness(1.06); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 /* `.btn-primary` heredó `width:100%` del login; dentro de una tarjeta tiene que
