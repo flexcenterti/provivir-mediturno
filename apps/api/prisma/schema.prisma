@@ -496,6 +496,11 @@ model Conversacion {
   /// inflaría las escalaciones de un mes ya reportado.
   reabiertaTs DateTime?         @map("reabierta_ts")
   reaperturas Int               @default(0)
+  /// Cuándo una asistente abrió la conversación desde el backoffice, sin que el
+  /// paciente hubiera escrito. Espejo de `reabiertaTs`, y por el mismo motivo: un
+  /// hilo sin escalar ni reabrir no entra en «pendientes», y ponerle `escalada: true`
+  /// falsearía las escalaciones de un mes ya reportado. Es también su reloj de espera.
+  iniciadaTs  DateTime?         @map("iniciada_ts")
   sedeId     String             @map("sede_id")
   creadoEn   DateTime           @default(now()) @map("creado_en")
 

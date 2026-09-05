@@ -12,6 +12,7 @@ import { fechaEnZona } from '@provivir/shared';
 import { ConversacionService } from '../src/whatsapp/conversacion.service';
 import { CLIENTE_LLM } from '../src/ia/ia.service';
 import { MetaCliente } from '../src/whatsapp/meta.cliente';
+import { ConfiguracionService } from '../src/configuracion/configuracion.service';
 import type { ClienteLlm, HerramientaLlm, MensajeLlm, RespuestaLlm } from '../src/ia/ia.tipos';
 
 /**
@@ -73,6 +74,12 @@ describe('Canal WhatsApp (e2e)', () => {
 
   let enviados: Array<{ telefono: string; texto: string }> = [];
   let botones: Array<{ telefono: string; texto: string; ids: string[] }> = [];
+  /*
+   * Se capturan los ARGUMENTOS y no solo el hecho de la llamada: afirmar «se envió»
+   * deja pasar mandar la plantilla equivocada, con los cuatro parámetros del ticket
+   * en vez del nombre, o al teléfono sin normalizar.
+   */
+  let plantillas: Array<{ telefono: string; nombre: string; parametros: string[] }> = [];
 
   beforeAll(async () => {
     llm = new LlmFalso();
@@ -102,6 +109,10 @@ describe('Canal WhatsApp (e2e)', () => {
       botones.push({ telefono, texto: t, ids: bs.map((b) => b.id) });
       return `wamid.btn.${botones.length}`;
     });
+    jest.spyOn(meta, 'enviarPlantilla').mockImplementation(async (telefono, nombre, parametros) => {
+      plantillas.push({ telefono, nombre, parametros });
+      return `wamid.tpl.${plantillas.length}`;
+    });
     jest.spyOn(meta, 'descargarMedia').mockResolvedValue('media/prueba.jpg');
 
     await app.init();
@@ -121,6 +132,7 @@ describe('Canal WhatsApp (e2e)', () => {
   beforeEach(async () => {
     enviados = [];
     botones = [];
+    plantillas = [];
     await prisma.mensaje.deleteMany({ where: { conversacion: { telefono: TEL } } });
     await prisma.conversacion.deleteMany({ where: { telefono: TEL } });
     await prisma.cita.deleteMany({ where: { paciente: { documento: { startsWith: '96' } } } });
@@ -1005,6 +1017,230 @@ describe('Canal WhatsApp (e2e)', () => {
           await prisma.mensaje.deleteMany({ where: { conversacionId: c.id } });
           await prisma.conversacion.deleteMany({ where: { telefono: SIN_NORMALIZAR } });
         }
+      });
+    });
+
+    /**
+     * Fase 16 · abrirle conversación a quien nunca ha escrito.
+     *
+     * Quien agenda por el portal no deja hilo —solo lo crea un entrante del webhook—,
+     * así que no había forma de escribirle. Y como nunca escribió, tampoco hay ventana
+     * de 24 h: lo único que Meta acepta es una plantilla aprobada.
+     */
+    describe('abrir conversación desde el backoffice', () => {
+      const CLAVE = 'plantilla_contacto_inicial';
+
+      async function conPlantilla(nombre: string) {
+        await prisma.configuracion.update({ where: { clave: CLAVE }, data: { valor: nombre } });
+        await app.get(ConfiguracionService).recargar();
+      }
+
+      let pacienteId: string;
+
+      beforeEach(async () => {
+        llm.programar();
+        await prisma.configuracion.upsert({
+          where: { clave: CLAVE },
+          update: { valor: '' },
+          create: { clave: CLAVE, valor: '', descripcion: 'prueba' },
+        });
+        await app.get(ConfiguracionService).recargar();
+        pacienteId = (await prisma.paciente.findUniqueOrThrow({ where: { documento: DOC } })).id;
+      });
+
+      const abrir = async (token: string, cuerpo: Record<string, unknown>, estado = 201) =>
+        (await request(http).post('/api/bandeja')
+          .set('Authorization', `Bearer ${token}`).send(cuerpo).expect(estado)).body;
+
+      it('crea el hilo, y se ve en la bandeja con el paciente identificado', async () => {
+        const token = await tokenAsistente();
+        const r = await abrir(token, { pacienteId });
+        expect(r.creada).toBe(true);
+
+        // Por HTTP y no por la columna recién escrita: lo que se pide es que la
+        // asistente lo VEA, y `iniciadaTs` es justo lo que lo mete en pendientes.
+        const lista = await request(http).get('/api/bandeja')
+          .set('Authorization', `Bearer ${token}`).expect(200);
+        const fila = lista.body.datos.find((c: { id: string }) => c.id === r.conversacionId);
+        expect(fila).toBeDefined();
+        // A diferencia del webhook, aquí sí se sabe de quién es el número.
+        expect(fila.paciente?.documento).toBe(DOC);
+        expect(fila.motivo).toMatch(/Contacto iniciado/);
+      });
+
+      it('dos clics no abren dos hilos ni gastan dos plantillas', async () => {
+        await conPlantilla('contacto_inicial_v1');
+        const token = await tokenAsistente();
+
+        const primera = await abrir(token, { pacienteId });
+        const segunda = await abrir(token, { pacienteId });
+
+        expect(segunda.conversacionId).toBe(primera.conversacionId);
+        expect(segunda.creada).toBe(false);
+        expect(await prisma.conversacion.count({ where: { pacienteId } })).toBe(1);
+        expect(plantillas).toHaveLength(1);
+        expect(segunda.plantilla).toBe('ya_enviada');
+      });
+
+      /**
+       * El hilo nace con el número normalizado, igual que lo entregará Meta.
+       *
+       * Mutación que la mata: guardar `paciente.whatsapp` tal cual. El paciente del
+       * portal queda como `3009991111`, su respuesta llega como `+573009991111` y se
+       * abre un SEGUNDO hilo: la asistente se queda mirando el suyo, vacío.
+       */
+      it('cuando el paciente responde, su mensaje cae en el hilo que se abrió', async () => {
+        await prisma.paciente.update({ where: { id: pacienteId }, data: { whatsapp: '3009991111' } });
+        const token = await tokenAsistente();
+        const r = await abrir(token, { pacienteId });
+
+        await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'aquí estoy' }) as never);
+
+        expect(await prisma.conversacion.count({ where: { pacienteId } })).toBe(1);
+        const m = await prisma.mensaje.findFirstOrThrow({
+          where: { direccion: 'entrante', contenido: 'aquí estoy' },
+        });
+        expect(m.conversacionId).toBe(r.conversacionId);
+
+        await prisma.paciente.update({ where: { id: pacienteId }, data: { whatsapp: TEL } });
+      });
+
+      it('sin plantilla configurada NO se intenta el envío, y queda dicho por qué', async () => {
+        const token = await tokenAsistente();
+        const r = await abrir(token, { pacienteId });
+
+        expect(r.plantilla).toBe('sin_configurar');
+        // Meta lo rechazaría: intentarlo solo gasta una llamada y ensucia la cuenta.
+        expect(plantillas).toHaveLength(0);
+        const a = await prisma.auditoria.findFirst({
+          where: { entidad: `conversacion/${r.conversacionId}` },
+          orderBy: { ts: 'desc' },
+        });
+        expect(a?.accion).toBe('Plantilla de contacto inicial no enviada');
+        expect(a?.detalle).toContain(CLAVE);
+      });
+
+      /**
+       * Se afirman los ARGUMENTOS. Mutación que la mata: pasar `parametrosTicket`
+       * (cuatro valores), el nombre completo en vez del primero, o el teléfono sin
+       * normalizar. Comprobar solo que se llamó deja pasar las tres.
+       */
+      it('con plantilla configurada la manda con el nombre y el número correctos', async () => {
+        await conPlantilla('contacto_inicial_v1');
+        const token = await tokenAsistente();
+        const r = await abrir(token, { pacienteId });
+
+        expect(r.plantilla).toBe('enviada');
+        expect(plantillas).toEqual([
+          { telefono: TEL, nombre: 'contacto_inicial_v1', parametros: ['Rosa'] },
+        ]);
+        // Y queda en el hilo, firmada por quien la mandó.
+        const m = await prisma.mensaje.findFirstOrThrow({
+          where: { conversacionId: r.conversacionId, tipo: 'plantilla' },
+        });
+        expect(m.autorId).not.toBeNull();
+      });
+
+      it('si la ventana está abierta no se gasta plantilla: cabe texto libre', async () => {
+        await conPlantilla('contacto_inicial_v1');
+        await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'buenas' }) as never);
+        const token = await tokenAsistente();
+
+        const r = await abrir(token, { pacienteId });
+        expect(r.plantilla).toBe('ventana_abierta');
+        expect(plantillas).toHaveLength(0);
+      });
+
+      it('un hilo ya cerrado se reabre en vez de crear otro al lado', async () => {
+        await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'buenas' }) as never);
+        const previa = await prisma.conversacion.findFirstOrThrow({ where: { telefono: TEL } });
+        await prisma.mensaje.updateMany({
+          where: { conversacionId: previa.id, direccion: 'entrante' },
+          data: { ts: new Date(Date.now() - 48 * 3600_000) },
+        });
+        await prisma.conversacion.update({
+          where: { id: previa.id }, data: { estado: 'resuelta', resueltaTs: new Date() },
+        });
+
+        const token = await tokenAsistente();
+        const r = await abrir(token, { pacienteId });
+
+        expect(r.conversacionId).toBe(previa.id);
+        expect(r.reabierta).toBe(true);
+        const reabierta = await prisma.conversacion.findUniqueOrThrow({ where: { id: previa.id } });
+        expect(reabierta.reaperturas).toBe(1);
+        expect(reabierta.resueltaTs).toBeNull();
+      });
+
+      /**
+       * Mutación que la mata: crear el hilo con `telefono: ''`. Esa cadena casaría con
+       * cualquier otro paciente sin número y les mezclaría las conversaciones.
+       */
+      it('sin número utilizable responde 400 y no escribe nada', async () => {
+        const solo = await prisma.paciente.create({
+          data: {
+            documento: '9600000099', nombres: 'Sin', apellidos: 'Numero',
+            telefono: '', whatsapp: '', origen: 'carga', sedeId: 'cdc-oriente',
+          },
+        });
+        const token = await tokenAsistente();
+        await request(http).post('/api/bandeja')
+          .set('Authorization', `Bearer ${token}`).send({ pacienteId: solo.id }).expect(400);
+
+        expect(await prisma.conversacion.count({ where: { pacienteId: solo.id } })).toBe(0);
+      });
+
+      it('no se puede estampar en el motivo la cita de otro paciente', async () => {
+        const otro = await prisma.paciente.create({
+          data: {
+            documento: '9600000098', nombres: 'Otro', apellidos: 'Paciente',
+            telefono: '+573009992222', whatsapp: '+573009992222', origen: 'carga', sedeId: 'cdc-oriente',
+          },
+        });
+        const cita = await prisma.cita.create({
+          data: {
+            codigo: 'ZZ-999', pacienteId: otro.id, prestadorId: 'ao', servicioId: 'mg',
+            tipo: 'general', fecha: new Date(`${LUNES}T00:00:00Z`), horaInicio: 480,
+            duracionMin: 20, origen: 'mostrador', sedeId: 'cdc-oriente',
+          },
+        });
+
+        const token = await tokenAsistente();
+        await request(http).post('/api/bandeja')
+          .set('Authorization', `Bearer ${token}`)
+          .send({ pacienteId, citaId: cita.id }).expect(400);
+      });
+
+      /**
+       * Mutación que la mata: quitar la guarda de `tomadaPor` en `asegurarConversacion`.
+       * `mandarPlantilla` pone la conversación a nombre de quien envía, así que sin
+       * ella una segunda asistente se la lleva sin que la primera se entere.
+       */
+      it('no le quita la conversación a la asistente que ya la tiene', async () => {
+        await conPlantilla('contacto_inicial_v1');
+        await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'buenas' }) as never);
+        const c = await prisma.conversacion.findFirstOrThrow({ where: { telefono: TEL } });
+        const otra = await prisma.usuario.findFirstOrThrow({ where: { email: 'admin@provivir.local' } });
+        await prisma.conversacion.update({
+          where: { id: c.id }, data: { tomadaPor: otra.id, estado: 'en_gestion' },
+        });
+
+        const token = await tokenAsistente();
+        const r = await request(http).post('/api/bandeja')
+          .set('Authorization', `Bearer ${token}`).send({ pacienteId }).expect(409);
+        expect(r.body.message).toMatch(/ya está atendiendo/);
+
+        const despues = await prisma.conversacion.findUniqueOrThrow({ where: { id: c.id } });
+        expect(despues.tomadaPor).toBe(otra.id);
+      });
+
+      it('un prestador no puede abrir conversaciones', async () => {
+        const login = await request(http).post('/api/auth/login')
+          .send({ email: 'osorio@provivir.local', password: 'Provivir2026!' }).expect(200);
+
+        await request(http).post('/api/bandeja')
+          .set('Authorization', `Bearer ${login.body.accessToken}`)
+          .send({ pacienteId }).expect(403);
       });
     });
 

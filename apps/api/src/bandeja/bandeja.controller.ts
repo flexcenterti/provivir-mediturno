@@ -3,7 +3,7 @@ import type { Response } from 'express';
 import { createReadStream } from 'node:fs';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { BandejaService } from './bandeja.service';
-import { BuscarBandejaDto } from './dto/bandeja.dto';
+import { AbrirConversacionDto, BuscarBandejaDto } from './dto/bandeja.dto';
 import { SeguimientoService } from '../seguimiento/seguimiento.service';
 import { Permisos } from '../auth/decorators/permisos.decorator';
 import { UsuarioActual } from '../auth/decorators/usuario-actual.decorator';
@@ -32,6 +32,22 @@ export class BandejaController {
   @Get()
   listar(@Query() dto: BuscarBandejaDto) {
     return this.bandeja.listar(dto);
+  }
+
+  /**
+   * Abrir conversación con un paciente que nunca ha escrito.
+   *
+   * Va aquí y no en citas porque lo que se crea es una `Conversacion`, que es el
+   * recurso de la bandeja, y porque todo lo que hace falta —ventana, plantilla,
+   * guarda de 24 h, `tomadaPor`, auditoría— ya vive en su servicio.
+   *
+   * Responde 200 con el desenlace en vez de 409: la acción siguiente es siempre la
+   * misma —abrir el hilo— y el cliente descarta el cuerpo de los errores, así que un
+   * 409 dejaría a la asistente sin el id al que ir.
+   */
+  @Post()
+  abrir(@Body() dto: AbrirConversacionDto, @UsuarioActual() usuario: UsuarioAutenticado) {
+    return this.bandeja.abrir(dto.pacienteId, dto.citaId, usuario.id);
   }
 
   /** Alimenta la burbuja roja del menú lateral (sin sonido). */

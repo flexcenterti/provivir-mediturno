@@ -1,11 +1,12 @@
 import {
-  BadRequestException, ConflictException, Injectable, Logger, NotFoundException,
+  BadGatewayException, BadRequestException, ConflictException, Injectable, Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Prisma } from '@prisma/client';
 import { existsSync } from 'node:fs';
 import { basename, resolve, sep } from 'node:path';
-import { finDelDiaEnZona, inicioDelDiaEnZona } from '@provivir/shared';
+import { finDelDiaEnZona, inicioDelDiaEnZona, SEDE_ID } from '@provivir/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
@@ -14,15 +15,21 @@ import { ConversacionService } from '../whatsapp/conversacion.service';
 import { FueraDeVentanaMeta, MetaCliente } from '../whatsapp/meta.cliente';
 import { VentanaService } from '../whatsapp/ventana.service';
 import { mimeDeExtension } from '../whatsapp/media.tipos';
-import { parametrosReapertura } from '../whatsapp/whatsapp.plantillas';
-import { variantesDeTelefono } from '../whatsapp/whatsapp.normalizador';
+import {
+  CLAVE_PLANTILLA_CONTACTO, CLAVE_PLANTILLA_REAPERTURA, parametrosReapertura,
+} from '../whatsapp/whatsapp.plantillas';
+import { esTelefono, normalizarIdentidad, variantesDeTelefono } from '../whatsapp/whatsapp.normalizador';
+import { numeroDeContacto } from '../comun/contacto';
 import { armarPagina } from '../comun/paginacion';
 import { esperaEnMinutos, ordenarPendientes } from './bandeja.orden';
 import { PENDIENTES } from './bandeja.filtros';
 import type { BuscarBandejaDto } from './dto/bandeja.dto';
 
-/** Nombre de la plantilla aprobada en Meta para retomar una conversación cerrada. */
-const CLAVE_PLANTILLA_REAPERTURA = 'plantilla_reapertura_conversacion';
+/** Cómo terminó el intento de mandar una plantilla. Cada llamante decide qué hacer. */
+type ResultadoPlantilla =
+  | { estado: 'enviada'; plantilla: string }
+  | { estado: 'sin_configurar' }
+  | { estado: 'ya_enviada' };
 
 const PACIENTE_RESUMIDO = {
   select: { id: true, nombres: true, apellidos: true, documento: true },
@@ -194,6 +201,187 @@ export class BandejaService {
 
   private nombrePlantillaReapertura(): string {
     return this.configuracion.texto(CLAVE_PLANTILLA_REAPERTURA, '').trim();
+  }
+
+  /**
+   * Abre —o recupera— la conversación de un paciente, y le manda la plantilla que le
+   * pide que conteste.
+   *
+   * Nace de que quien agenda por el portal no deja hilo: solo lo crea un mensaje
+   * entrante del webhook, así que a ese paciente no había forma de escribirle. Aquí
+   * lo crea una persona cuando decide que hace falta, y NO el portal al agendar: un
+   * hilo por cada agendamiento web llenaría la bandeja de conversaciones que nadie
+   * pidió, y la bandeja es para lo que necesita a alguien.
+   *
+   * Responde 200 con el desenlace en vez de 409, y no por comodidad: `pedir()` en el
+   * cliente se queda con `message` y tira el resto del cuerpo, así que un 409 con el
+   * id del hilo dentro es inalcanzable desde la interfaz — deja a la asistente con un
+   * error rojo y ningún sitio al que ir. Y como la acción siguiente es siempre la
+   * misma, abrir el hilo, tampoco era un error.
+   */
+  async abrir(pacienteId: string, citaId: string | undefined, usuarioId: string) {
+    const paciente = await this.prisma.paciente.findUnique({
+      where: { id: pacienteId },
+      select: { id: true, nombres: true, whatsapp: true, telefono: true },
+    });
+    if (!paciente) throw new NotFoundException('Paciente no encontrado');
+
+    const crudo = numeroDeContacto(paciente);
+    /*
+     * `normalizarIdentidad` a la entrada, igual que hace el webhook con lo que manda
+     * Meta. El portal guarda lo que teclee el paciente —`3009991111`—, así que sin
+     * esto el hilo nacería en un formato y su respuesta llegaría en otro: se abriría
+     * un segundo hilo y la asistente se quedaría mirando el suyo, vacío.
+     */
+    const telefono = crudo ? normalizarIdentidad(crudo) : null;
+    if (!telefono || !esTelefono(telefono)) {
+      // Antes de escribir nada: un hilo con `telefono: ''` casaría con cualquier otro
+      // paciente sin número y les mezclaría las conversaciones.
+      throw new BadRequestException(
+        'Este paciente no tiene un número de WhatsApp válido. Corrígelo en su ficha.',
+      );
+    }
+
+    let motivo = 'Contacto iniciado por una asistente';
+    if (citaId) {
+      const cita = await this.prisma.cita.findUnique({
+        where: { id: citaId },
+        select: { codigo: true, pacienteId: true },
+      });
+      // Sin esta comprobación se estamparía el código de la cita de otro en el motivo.
+      if (!cita || cita.pacienteId !== pacienteId) {
+        throw new BadRequestException('Esa cita no es de este paciente');
+      }
+      motivo = `Contacto iniciado por una asistente · cita ${cita.codigo}`;
+    }
+
+    const { conversacionId, creada, reabierta } = await this.asegurarConversacion(
+      pacienteId, telefono, motivo, usuarioId,
+    );
+
+    /*
+     * La plantilla va FUERA de la transacción: nunca se sostiene un lock de base
+     * durante una llamada HTTP a Meta.
+     *
+     * Y con la ventana abierta no se manda: significa que el paciente escribió hace
+     * poco, así que cabe texto libre. Las plantillas se pagan y Meta penaliza usarlas
+     * donde no hacen falta.
+     */
+    const ventana = await this.ventana.estado(telefono);
+    if (ventana.dentro) {
+      return { conversacionId, creada, reabierta, plantilla: 'ventana_abierta' as const };
+    }
+
+    let plantilla: 'enviada' | 'sin_configurar' | 'ya_enviada';
+    try {
+      const r = await this.mandarPlantilla({
+        conversacionId,
+        telefono,
+        clave: CLAVE_PLANTILLA_CONTACTO,
+        parametros: parametrosReapertura(paciente.nombres),
+        usuarioId,
+        etiqueta: 'Plantilla de contacto inicial',
+      });
+      plantilla = r.estado;
+    } catch (e) {
+      /*
+       * El hilo se creó antes de enviar, y se queda. Es el mismo razonamiento que ya
+       * estaba escrito en `responder()`: un hilo vacío con su motivo y su auditoría,
+       * que la asistente ve y puede resolver, es mejor que un mensaje enviado sin
+       * hilo donde conste que alguien lo intentó.
+       */
+      await this.auditoria.registrar({
+        usuario: usuarioId,
+        accion: 'Plantilla de contacto inicial no enviada',
+        entidad: `conversacion/${conversacionId}`,
+        detalle: `WhatsApp rechazó el envío: ${(e as Error).message.slice(0, 300)}`,
+      });
+      throw new BadGatewayException(
+        'La conversación quedó abierta en la bandeja, pero WhatsApp rechazó el mensaje.',
+      );
+    }
+
+    return { conversacionId, creada, reabierta, plantilla };
+  }
+
+  /**
+   * Un solo hilo vivo por número, pase lo que pase.
+   *
+   * El lock consultivo serializa de verdad: la comprobación dentro de la transacción
+   * que usa `reabrir` es *best effort*, porque en READ COMMITTED no impide un INSERT
+   * concurrente — y no hay índice único que lo impida. Dos asistentes pulsando a la
+   * vez, o el paciente escribiendo justo entonces, partirían la conversación en dos.
+   *
+   * Si solo hay hilos cerrados se REABRE el más reciente en vez de crear uno al lado,
+   * por lo mismo que argumenta `reabrir`: lo que se quiere es continuidad, y así
+   * `obtenerOCrear` vuelve a encontrarlo cuando el paciente responda.
+   */
+  private async asegurarConversacion(
+    pacienteId: string, telefono: string, motivo: string, usuarioId: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`conversacion:${telefono}`}))`;
+
+      const variantes = variantesDeTelefono(telefono);
+      const viva = await tx.conversacion.findFirst({
+        where: { telefono: { in: variantes }, resueltaTs: null },
+        orderBy: { creadoEn: 'desc' },
+        select: { id: true, tomadaPor: true, asistente: { select: { nombre: true } } },
+      });
+      if (viva) {
+        /*
+         * Si ya la tiene otra persona no se sigue: `mandarPlantilla` pone `tomadaPor`
+         * a nombre de quien envía, así que continuar le arrebataría la conversación a
+         * quien la está atendiendo, y en silencio. Es la misma guarda que `tomar()`, y
+         * con el nombre por el mismo motivo: «otra asistente» obliga a preguntar por
+         * el pasillo quién es.
+         */
+        if (viva.tomadaPor && viva.tomadaPor !== usuarioId) {
+          throw new ConflictException(
+            `${viva.asistente?.nombre ?? 'Otra asistente'} ya está atendiendo esta conversación`,
+          );
+        }
+        return { conversacionId: viva.id, creada: false, reabierta: false };
+      }
+
+      const cerrada = await tx.conversacion.findFirst({
+        where: { telefono: { in: variantes } },
+        orderBy: { resueltaTs: 'desc' },
+        select: { id: true },
+      });
+
+      if (cerrada) {
+        await tx.conversacion.update({
+          where: { id: cerrada.id },
+          data: {
+            resueltaTs: null,
+            reabiertaTs: new Date(),
+            reaperturas: { increment: 1 },
+            estado: 'en_gestion',
+            tomadaPor: usuarioId,
+            motivo,
+          },
+        });
+        return { conversacionId: cerrada.id, creada: false, reabierta: true };
+      }
+
+      const nueva = await tx.conversacion.create({
+        data: {
+          telefono,
+          // A diferencia del webhook, aquí SÍ se sabe quién es: la bandeja muestra su
+          // nombre y su documento en vez de un número suelto.
+          pacienteId,
+          estado: 'en_gestion',
+          tomadaPor: usuarioId,
+          // Lo que la hace visible en «pendientes» sin tocar `escalada`, que es métrica.
+          iniciadaTs: new Date(),
+          motivo,
+          sedeId: this.config.get<string>('SEDE_ID') ?? SEDE_ID,
+        },
+        select: { id: true },
+      });
+      return { conversacionId: nueva.id, creada: true, reabierta: false };
+    });
   }
 
   async tomar(id: string, usuarioId: string) {
@@ -419,68 +607,102 @@ export class BandejaService {
       throw new ConflictException('La ventana está abierta: responde con un mensaje normal');
     }
 
-    const plantilla = this.nombrePlantillaReapertura();
-    if (!plantilla) {
-      // Sin plantilla no se intenta: Meta lo rechazaría y reintentar no cambia nada.
-      await this.auditoria.registrar({
-        usuario: usuarioId,
-        accion: 'Plantilla de reapertura no enviada',
-        entidad: `conversacion/${id}`,
-        detalle: `Sin nombre en la configuración ${CLAVE_PLANTILLA_REAPERTURA}`,
-      });
+    const r = await this.mandarPlantilla({
+      conversacionId: id,
+      telefono: conversacion.telefono,
+      clave: CLAVE_PLANTILLA_REAPERTURA,
+      parametros: parametrosReapertura(conversacion.paciente?.nombres ?? null),
+      usuarioId,
+      etiqueta: 'Plantilla de reapertura',
+    });
+
+    if (r.estado === 'sin_configurar') {
       throw new ConflictException(
         'No hay plantilla de reapertura configurada. Se define en Administración → Reglas con el nombre aprobado en Meta.',
       );
     }
+    if (r.estado === 'ya_enviada') {
+      throw new ConflictException('Ya se le envió una plantilla en las últimas 24 h');
+    }
+    return { enviado: true, plantilla: r.plantilla };
+  }
 
-    // Una plantilla al día por conversación: si el paciente no contesta a la
-    // primera, insistir con la misma no lo cambia y a Meta le consta como spam.
+  /**
+   * Manda una plantilla aprobada y deja la conversación a nombre de quien la mandó.
+   *
+   * Lo comparten reabrir un hilo cerrado y abrir uno nuevo: son el mismo acto —pedirle
+   * al paciente que conteste, que es lo único que abre la ventana— sobre plantillas
+   * distintas. Devuelve el desenlace en vez de lanzar porque los dos llamantes lo
+   * traducen distinto: para la reapertura «no hay plantilla» es un 409, y para la
+   * apertura es parte de la respuesta.
+   */
+  private async mandarPlantilla(o: {
+    conversacionId: string;
+    telefono: string;
+    clave: string;
+    parametros: string[];
+    usuarioId: string;
+    etiqueta: string;
+  }): Promise<ResultadoPlantilla> {
+    const plantilla = this.configuracion.texto(o.clave, '').trim();
+    if (!plantilla) {
+      // Sin plantilla no se intenta: Meta lo rechazaría y reintentar no cambia nada.
+      await this.auditoria.registrar({
+        usuario: o.usuarioId,
+        accion: `${o.etiqueta} no enviada`,
+        entidad: `conversacion/${o.conversacionId}`,
+        detalle: `Sin nombre en la configuración ${o.clave}`,
+      });
+      return { estado: 'sin_configurar' };
+    }
+
+    /*
+     * Una plantilla al día POR NÚMERO, no por conversación: si el paciente no contesta
+     * a la primera, insistir no lo cambia y a Meta le consta como spam — y Meta cuenta
+     * por interlocutor, no por fila de nuestra base. Filtrando por `conversacionId` la
+     * guarda se burlaba sin querer: mandar plantilla, resolver el hilo y volver a
+     * abrirlo daba una conversación nueva con la guarda vacía.
+     */
     const yaEnviada = await this.prisma.mensaje.findFirst({
       where: {
-        conversacionId: id,
+        conversacion: { telefono: { in: variantesDeTelefono(o.telefono) } },
         direccion: 'saliente',
         tipo: 'plantilla',
         ts: { gte: new Date(Date.now() - 24 * 60 * 60_000) },
       },
       select: { id: true },
     });
-    if (yaEnviada) {
-      throw new ConflictException('Ya se le envió una plantilla en las últimas 24 h');
-    }
+    if (yaEnviada) return { estado: 'ya_enviada' };
 
-    const waMessageId = await this.meta.enviarPlantilla(
-      conversacion.telefono,
-      plantilla,
-      parametrosReapertura(conversacion.paciente?.nombres ?? null),
-    );
+    const waMessageId = await this.meta.enviarPlantilla(o.telefono, plantilla, o.parametros);
 
     await this.prisma.$transaction([
       this.prisma.mensaje.create({
         data: {
-          conversacionId: id,
+          conversacionId: o.conversacionId,
           direccion: 'saliente',
           tipo: 'plantilla',
           contenido: `Plantilla «${plantilla}»`,
           waMessageId: waMessageId || null,
-          autorId: usuarioId,
+          autorId: o.usuarioId,
         },
       }),
       // Quien manda la plantilla, atiende: es quien espera la respuesta.
       this.prisma.conversacion.update({
-        where: { id },
-        data: { tomadaPor: usuarioId, estado: 'en_gestion' },
+        where: { id: o.conversacionId },
+        data: { tomadaPor: o.usuarioId, estado: 'en_gestion' },
       }),
     ]);
 
     await this.auditoria.registrar({
-      usuario: usuarioId,
-      accion: 'Plantilla de reapertura enviada',
-      entidad: `conversacion/${id}`,
+      usuario: o.usuarioId,
+      accion: `${o.etiqueta} enviada`,
+      entidad: `conversacion/${o.conversacionId}`,
       detalle: `Plantilla ${plantilla}`,
     });
 
     this.gateway.emitirPendientesBandeja(await this.conteoPendientes());
-    return { enviado: true, plantilla };
+    return { estado: 'enviada', plantilla };
   }
 
   async resolver(id: string, usuarioId: string) {

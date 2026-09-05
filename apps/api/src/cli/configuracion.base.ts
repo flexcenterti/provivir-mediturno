@@ -110,6 +110,16 @@ export const CONFIGURACION_BASE = [
       'cita que contar. Sin este nombre la bandeja no ofrece el envío, y lo dice en pantalla.',
   },
   {
+    clave: 'plantilla_contacto_inicial',
+    valor: '',
+    descripcion:
+      'Plantilla aprobada en Meta para ESCRIBIRLE PRIMERO a un paciente que nunca ha usado el ' +
+      'chat —el que agenda por el portal—. UNA sola variable: {{1}} el nombre. No sirve la de ' +
+      'reapertura, que dice «sobre tu consulta anterior» cuando no hubo ninguna; si prefieres no ' +
+      'tramitar una sexta plantilla, pega aquí el mismo nombre aprobado que en aquella. Sin este ' +
+      'nombre el botón «Escribirle» sale deshabilitado, y dice por qué.',
+  },
+  {
     clave: 'plantilla_confirmacion_cita',
     valor: '',
     descripcion:

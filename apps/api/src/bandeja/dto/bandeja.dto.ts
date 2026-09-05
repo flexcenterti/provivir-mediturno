@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { PaginacionDto } from '../../comun/paginacion';
 
 export const VISTAS_BANDEJA = ['pendientes', 'cerradas', 'todas'] as const;
@@ -39,4 +39,19 @@ export class BuscarBandejaDto extends PaginacionDto {
    */
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100)
   override porPagina: number = 100;
+}
+
+/**
+ * Abrir conversación con un paciente desde el backoffice.
+ *
+ * La llave es el PACIENTE y no la cita: una conversación es de un número, no de una
+ * cita. `citaId` solo enriquece el motivo y la auditoría, para que en la bandeja se
+ * lea por qué se le escribió.
+ */
+export class AbrirConversacionDto {
+  @IsString() @IsUUID()
+  pacienteId!: string;
+
+  @IsOptional() @IsString() @IsUUID()
+  citaId?: string;
 }

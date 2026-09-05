@@ -1,4 +1,19 @@
 /**
+ * Nombres de las plantillas aprobadas en Meta que abren o retoman una conversación.
+ *
+ * Van juntas y aquí —un módulo sin dependencias— porque las lee tanto la bandeja, que
+ * las envía, como la ficha de la cita, que necesita saber si el botón puede funcionar.
+ *
+ * Son DOS y no una: el texto de la reapertura dice «sobre tu consulta anterior», y en
+ * un primer contacto eso es mentira. Además cada una corresponde a un endpoint
+ * distinto, así que no hay nada que decidir en tiempo de ejecución. A quien no quiera
+ * un sexto trámite ante Meta le basta con pegar el mismo nombre aprobado en las dos
+ * casillas: lo que se guarda en configuración es un nombre, no un texto.
+ */
+export const CLAVE_PLANTILLA_REAPERTURA = 'plantilla_reapertura_conversacion';
+export const CLAVE_PLANTILLA_CONTACTO = 'plantilla_contacto_inicial';
+
+/**
  * RN-09.3 · La confirmación de cita es TEXTO FORMATEADO tipo ticket, no una imagen.
  * Reemplaza el pantallazo que el cliente envía hoy a mano.
  */
