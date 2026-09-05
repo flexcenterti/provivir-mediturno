@@ -111,7 +111,7 @@ sudo docker compose -f despliegue/docker-compose.prod.yml \
 
 | | Si falta | Síntoma |
 |---|---|---|
-| `sudo` | el usuario no está en el grupo `docker` | `permission denied ... /var/run/docker.sock`, o `stat /etc/provivir/.env: permission denied` si ni siquiera puede leer los secretos |
+| `sudo` | **no** es por el socket: `crivas` sí está en el grupo `docker`, así que `docker` y `docker exec` funcionan sin él. Lo que exige `sudo` es **leer `/etc/provivir/.env`**, de `root` y con el directorio en `700` | `stat /etc/provivir/.env: permission denied`, o `required variable POSTGRES_PASSWORD is missing a value` si el `--env-file` no se pudo abrir |
 | `--env-file` | los secretos son de `root` y viven fuera del repo | `required variable POSTGRES_PASSWORD is missing a value` |
 | `--build` | la imagen de la API se compila desde el código fuente | **ninguno**: Compose reutiliza la imagen vieja y el despliegue parece correcto. Con el frontend ya copiado, quedas con pantallas nuevas contra una API vieja |
 
@@ -286,9 +286,10 @@ ls -lh ~/respaldo-*.sql.gz                 # y pesar bastante más de 20 bytes
 ```
 
 > **El repositorio ES el origen del despliegue.** Los contenedores se construyen desde
-> `/home/crivas/provivir` (compose en `despliegue/`), y no hay remoto configurado: no existe
-> `git pull` que traiga nada. **Se despliega lo que esté en el árbol de trabajo en ese momento.**
-> Antes de reconstruir, comprobar en qué commit está: `git log --oneline -1`.
+> `/home/crivas/provivir` (compose en `despliegue/`). Hay un remoto (`origin`), pero **da igual lo
+> que tenga**: no se despliega desde ahí, sino **lo que esté en el árbol de trabajo en ese
+> momento** — incluidos los cambios sin commitear. Antes de reconstruir, comprobar en qué commit
+> está y que no haya nada suelto: `git log --oneline -1 && git status --short`.
 >
 > Corolario incómodo: un `up -d --build` por cualquier motivo despliega lo que haya en disco,
 > aunque no fuera la intención.

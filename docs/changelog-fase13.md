@@ -1,7 +1,7 @@
 # Changelog · FASE 13 — Retomar conversaciones, modificar citas y buscar en el mostrador
 
-**Estado:** en verde, sin desplegar. 292 unitarias (API) + 39 (shared) + 265 e2e + 19 de navegador.
-Va encima de la fase 12, que tampoco está desplegada.
+**Estado:** desplegado en producción el 2026-09-04, junto con la fase 12. 292 unitarias (API) +
+39 (shared) + 265 e2e + 19 de navegador.
 
 ## Por qué
 
@@ -298,3 +298,36 @@ pantalla en la que el cliente tiene que escribir el nombre aprobado en Meta.
 - **El índice único parcial** sobre `conversacion(telefono) where resuelta_ts is null`, que cerraría
   del todo la carrera de la reapertura.
 - **El simulador de WhatsApp · IA** del prototipo sigue sin construirse.
+
+---
+
+## El despliegue, y lo que enseñó
+
+Desplegado el 2026-09-04 sobre `provivir.exagos.co`, junto con la fase 12. Las dos migraciones
+aplicadas y ningún dato movido: 235 conversaciones, 3.498 mensajes, 24 citas y 20 profesionales,
+exactamente los mismos que en el respaldo previo. Las dos claves de configuración nuevas
+aparecieron solas por la reconciliación al arrancar.
+
+**El respaldo salió vacío otra vez, por un motivo nuevo.** La guía ya avisaba del `-T` desde el
+23 de agosto, pero esta vez fue `sudo`: sin terminal para pedir la contraseña, el comando falla y
+`gzip` crea el archivo igual — **20 bytes**, el mismo tamaño delator de aquel día. La comprobación
+posterior es lo único que lo detectó. Vale la pena repetirlo: un `pg_dump` por tubería no falla
+ruidosamente nunca.
+
+**Dos afirmaciones de la guía estaban desfasadas** y costaron dos intentos:
+
+- decía que `crivas` no está en el grupo `docker` y que por eso todo va con `sudo`. **Sí está**, así
+  que `docker` y `docker exec` funcionan directos; lo que de verdad exige `sudo` es leer
+  `/etc/provivir/.env`, que es de `root` y con el directorio en 700. Es una distinción útil: el
+  respaldo y las consultas de comprobación no necesitan contraseña, y los comandos de `compose` sí.
+- decía que no hay remoto configurado. **Lo hay** (`origin`), aunque el despliegue siga saliendo del
+  árbol de trabajo, que es lo que importa del aviso.
+
+Ambas corregidas en `despliegue/GUIA-DESPLIEGUE.md`.
+
+### Verificado en vivo
+
+`/api/health/ready` en `ok` con la base y la configuración · las rutas nuevas responden 401 —existen
+y piden sesión— con 404 de control sobre una inventada · el bundle servido de las tres aplicaciones
+coincide con el compilado · ningún `dist` anidado bajo `citas/` ni `tv/` · el enum de turnos ya
+tiene `cancelado`.
