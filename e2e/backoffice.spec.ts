@@ -423,6 +423,55 @@ test('§2.10 · el mostrador deja constancia del cobro sin volverse un formulari
   await expect(fila.getByRole('button', { name: 'Registrar llegada' })).toBeEnabled();
 });
 
+/**
+ * Fase 16 · quien agenda por el portal no recibe la confirmación —nunca escribió, no
+ * hay ventana de 24 h y no hay plantilla aprobada— y esa cita se veía igual que
+ * cualquier otra. La ficha lo dice ahora, con el número a mano para llamar.
+ */
+test('la ficha de la cita dice si al paciente le pudo llegar el aviso', async ({ page }) => {
+  await entrar(page);
+
+  const token = await page.evaluate(() => sessionStorage.getItem('accessToken'));
+  const cabeceras = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  const hoy = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+
+  const pacientes = await (await page.request.get(
+    `/api/pacientes?q=${PACIENTE.documento}`, { headers: cabeceras })).json();
+  const cupos = await (await page.request.get(
+    `/api/cupos?servicioId=mg&fecha=${hoy}&limite=1`, { headers: cabeceras })).json();
+  test.skip(cupos.length === 0, 'Hoy no hay agenda de medicina general (domingo o festivo)');
+
+  const creada = await (await page.request.post('/api/citas', {
+    headers: cabeceras,
+    data: {
+      pacienteId: pacientes.datos[0].id, servicioId: 'mg', fecha: hoy,
+      hora: cupos[0].hora, prestadorId: cupos[0].prestadorId, origen: 'mostrador',
+    },
+  })).json();
+
+  await page.getByRole('button', { name: 'Mostrador' }).click();
+  await page.getByPlaceholder(/Código, documento, nombre o teléfono/).fill(PACIENTE.documento);
+  await page.getByRole('button', { name: 'Buscar', exact: true }).click();
+  await page.getByRole('row', { name: new RegExp(creada.cita.codigo) })
+    .getByRole('button', { name: creada.cita.codigo }).click();
+
+  // El seed no tiene conversaciones: este paciente nunca ha escrito por WhatsApp.
+  const modal = page.locator('.modal');
+  await expect(modal.getByText(/Nunca ha escrito por WhatsApp/)).toBeVisible();
+  // Y lo que la asistente puede hacer al respecto, con el número delante.
+  await expect(modal.getByText(/Llámalo al \+?\d/)).toBeVisible();
+
+  /*
+   * «Escribirle» queda inerte hasta que Meta apruebe la plantilla, y se afirma también
+   * el MOTIVO en pantalla: un botón apagado sin explicación se lee como un fallo de la
+   * plataforma, y comprobar solo `toBeDisabled()` pasaría verde con esa versión.
+   */
+  await expect(modal.getByRole('button', { name: 'Escribirle' })).toBeDisabled();
+  await expect(modal.getByText(/No hay plantilla aprobada en Meta/)).toBeVisible();
+});
+
 test('RN-07.6 · el mostrador nunca muestra una cifra', async ({ page }) => {
   await entrar(page);
   await page.getByRole('button', { name: 'Mostrador' }).click();

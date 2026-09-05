@@ -244,6 +244,16 @@ export const api = {
     for (const [k, v] of Object.entries(f)) if (v) q.set(k, String(v));
     return pedir<Pagina<Conversacion>>(`/bandeja${q.size ? `?${q}` : ''}`);
   },
+  /** Si al paciente le llegó el aviso de su cita, y si no, por qué (fase 16). */
+  contactoDeCita: (id: string) => pedir<ContactoCita>(`/citas/${id}/contacto`),
+  /**
+   * Abre conversación con quien nunca ha escrito, mandándole la plantilla que le pide
+   * que conteste. Responde 200 con el desenlace: no es un error que ya hubiera hilo.
+   */
+  abrirConversacion: (pacienteId: string, citaId?: string) =>
+    pedir<AperturaConversacion>('/bandeja', {
+      method: 'POST', body: JSON.stringify({ pacienteId, citaId }),
+    }),
   bandejaConteo: () => pedir<{ pendientes: number; sonido: boolean }>('/bandeja/pendientes/conteo'),
   conversacion: (id: string) => pedir<ConversacionDetalle>(`/bandeja/${id}`),
   tomarBandeja: (id: string) => pedir<Conversacion>(`/bandeja/${id}/tomar`, { method: 'PATCH' }),
@@ -540,6 +550,29 @@ export interface VentanaMeta {
 export interface ConversacionDetalle extends Omit<Conversacion, 'ultimoMensaje'> {
   mensajes: MensajeConversacion[];
   ventana: VentanaMeta;
+}
+
+/**
+ * Hechos sobre si se le pudo avisar al paciente. La frase la arma la interfaz: aquí
+ * no hay texto para el usuario, porque quien sabe a quién se lo dice es la pantalla.
+ */
+export interface ContactoCita {
+  telefono: string | null;
+  /** Sin un solo mensaje entrante no hay ventana que abrir: es el motivo más común. */
+  nuncaHaEscrito: boolean;
+  /** Si no, WhatsApp no deja salir un primer mensaje y «Escribirle» va deshabilitado. */
+  plantillaContactoConfigurada: boolean;
+  ventana: { dentro: boolean; ultimoEntranteTs: string | null; expiraTs: string | null };
+  conversacion: { id: string; estado: string; resuelta: boolean } | null;
+  /** La última fila de auditoría sobre esta cita. `null` = todavía no consta. */
+  ultimoEnvio: { accion: string; detalle: string | null; ts: string } | null;
+}
+
+export interface AperturaConversacion {
+  conversacionId: string;
+  creada: boolean;
+  reabierta: boolean;
+  plantilla: 'enviada' | 'sin_configurar' | 'ventana_abierta' | 'ya_enviada';
 }
 
 export interface FiltrosBandeja {

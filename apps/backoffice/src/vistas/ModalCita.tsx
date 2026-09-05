@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type Cita, type Cupo, type Prestador } from '../api';
+import { api, type AperturaConversacion, type Cita, type ContactoCita, type Cupo, type Prestador } from '../api';
 import { aHoraLocal } from './Dashboard';
 
 /**
@@ -81,6 +81,8 @@ export function ModalCita({ cita, onCerrar, onCambio }: {
         {cita.observacion && <p className="nota">Observación: {cita.observacion}</p>}
         {cita.motivoCancelacion && <p className="nota">Motivo de cancelación: {cita.motivoCancelacion}</p>}
 
+        <Contacto citaId={cita.id} pacienteId={cita.paciente.id} />
+
         {error && <div className="error">{error}</div>}
 
         {!viva && <p className="nota">Esta cita ya no se puede modificar.</p>}
@@ -150,6 +152,135 @@ export function ModalCita({ cita, onCerrar, onCambio }: {
     </div>
   );
 }
+
+/**
+ * Si al paciente le llegó el aviso de esta cita, y si no, por qué.
+ *
+ * El caso que lo motiva: quien agenda por el portal no recibe la confirmación —nunca
+ * escribió, así que no hay ventana de 24 h, y sin plantilla aprobada el envío se
+ * descarta—. Quedaba una línea de auditoría que nadie mira, y aquí esa cita se veía
+ * igual que cualquier otra. Ahora se dice, con el número a mano para llamar.
+ *
+ * Se pide aparte de la cita: la lista que contiene este modal ya la trae cargada, y
+ * añadir dos consultas a `GET /citas/:id` se las cobraría también al mostrador y al
+ * dashboard, que no miran esto.
+ */
+function Contacto({ citaId, pacienteId }: { citaId: string; pacienteId: string }) {
+  const [c, setC] = useState<ContactoCita | null>(null);
+  const [abriendo, setAbriendo] = useState(false);
+  const [desenlace, setDesenlace] = useState<AperturaConversacion | null>(null);
+  const [fallo, setFallo] = useState('');
+
+  useEffect(() => {
+    setC(null); setDesenlace(null); setFallo('');
+    // En silencio a propósito: esto necesita `pacientes.ver`, y a quien no lo tenga
+    // le sobra el bloque entero. Un error rojo aquí taparía la ficha, que sí puede ver.
+    api.contactoDeCita(citaId).then(setC).catch(() => undefined);
+  }, [citaId]);
+
+  if (!c) return null;
+
+  if (!c.telefono) {
+    return (
+      <div className="aviso-ventana">
+        <b>No tiene número en su ficha</b>, así que no hay por dónde avisarle. Agrégaselo en
+        Pacientes si lo consigues.
+      </div>
+    );
+  }
+
+  const envioFallido = c.ultimoEnvio?.accion.includes('no enviado') ?? false;
+  /*
+   * Con la ventana abierta no hace falta plantilla: el endpoint solo asegura el hilo.
+   * Solo se apaga cuando de verdad no hay por dónde.
+   */
+  const puedeAbrir = c.plantillaContactoConfigurada || c.ventana.dentro;
+
+  return (
+    <div className="aviso-ventana">
+      {/* Primero el hecho que decide si hay que hacer algo, y luego el número. */}
+      {c.ultimoEnvio === null ? (
+        <>
+          Todavía no consta ningún aviso de esta cita. Los envíos se procesan en segundo plano:
+          si acabas de agendarla, dale un momento.
+        </>
+      ) : envioFallido ? (
+        <>
+          <b>El aviso no le llegó</b> ({fechaCorta(c.ultimoEnvio.ts)}): {c.ultimoEnvio.detalle}
+        </>
+      ) : (
+        <>{c.ultimoEnvio.accion}, {fechaCorta(c.ultimoEnvio.ts)}. {c.ultimoEnvio.detalle}</>
+      )}
+      {' '}
+      {c.nuncaHaEscrito ? (
+        <>
+          Nunca ha escrito por WhatsApp, así que no hay ventana abierta y solo cabría una
+          plantilla aprobada en Meta. <b>Llámalo al {c.telefono}</b>.
+        </>
+      ) : c.ventana.dentro ? (
+        <>Escribió hace menos de 24 h: puedes escribirle por WhatsApp con normalidad.</>
+      ) : (
+        <>
+          Su último mensaje fue el {fechaCorta(c.ventana.ultimoEntranteTs!)} y pasaron más de
+          24 h: WhatsApp ya no admite texto libre. Su teléfono es el {c.telefono}.
+        </>
+      )}
+
+      {fallo && <p className="error">{fallo}</p>}
+      {desenlace ? (
+        <p>{EXPLICACION[desenlace.plantilla]}</p>
+      ) : (
+        <div className="acciones">
+          <button
+            className="btn btn-ghost"
+            disabled={abriendo || !puedeAbrir}
+            onClick={() => {
+              setAbriendo(true); setFallo('');
+              api.abrirConversacion(pacienteId, citaId)
+                .then(setDesenlace)
+                .catch((e: Error) => setFallo(e.message))
+                .finally(() => setAbriendo(false));
+            }}
+          >
+            {abriendo ? 'Abriendo…' : 'Escribirle'}
+          </button>
+          {/*
+            * El motivo va escrito al lado y no en un tooltip: un botón apagado sin
+            * explicación se lee como un fallo de la plataforma, y esto no lo arregla
+            * nadie de la clínica sin saber dónde mirar.
+            */}
+          {!puedeAbrir && (
+            <span className="muted">
+              No hay plantilla aprobada en Meta, así que WhatsApp no dejará salir un primer
+              mensaje. Se configura en Administración → Reglas.
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Qué pasó al abrir, en la lengua de quien lo pulsó. */
+const EXPLICACION: Record<AperturaConversacion['plantilla'], string> = {
+  enviada:
+    'Le enviamos la plantilla. La plantilla no abre la ventana: la abre su respuesta, y cuando '
+    + 'conteste la conversación te aparece en la Bandeja, a tu nombre.',
+  ventana_abierta:
+    'Ya tiene conversación abierta y escribió hace poco, así que no hacía falta plantilla: '
+    + 'respóndele directamente desde la Bandeja.',
+  ya_enviada:
+    'Ya se le envió una plantilla en las últimas 24 h. Insistir no cambia nada y a Meta le '
+    + 'consta como spam: espera su respuesta o llámalo.',
+  sin_configurar:
+    'No hay plantilla aprobada en Meta, así que no salió nada. Se configura en '
+    + 'Administración → Reglas.',
+};
+
+const fechaCorta = (iso: string) =>
+  new Date(iso).toLocaleString('es-CO', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
 
 /**
  * Fuera de la ventana de 24 h de Meta el aviso solo sale como plantilla aprobada, y
