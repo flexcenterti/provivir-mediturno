@@ -44,12 +44,24 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
   padding: .18rem .55rem; border-radius: 7px; font-size: .85rem; }
 
 /* ══════════ Pantalla de sala (kiosk) ══════════ */
-.tv { min-height: 100vh; background: #0C3B3A; color: #EAF4F2; display: flex; flex-direction: column; }
+/*
+ * `height` y no `min-height`, con `overflow:hidden`.
+ *
+ * Un televisor NO tiene barra de desplazamiento: lo que desborda no es scrolleable, es
+ * INVISIBLE, y nadie va a descubrirlo porque nadie mira de cerca una pantalla de sala.
+ * Con altura fija el desbordamiento se convierte en un apretón que se ve, en vez de en
+ * un pie que desaparece bajo el marco del aparato.
+ */
+.tv { height: 100vh; overflow: hidden; background: #0C3B3A; color: #EAF4F2;
+  display: flex; flex-direction: column; }
 .tv-error { min-height: 100vh; display: flex; align-items: center; justify-content: center;
   background: #0C3B3A; color: #EAF4F2; font-size: 1.4rem; }
 .tv-cab { display: flex; align-items: center; gap: 1rem; padding: 1.2rem 2rem; background: rgba(0,0,0,.2); }
 .tv-cab h1 { font-size: 1.4rem; }
-.tv-sala { margin-left: auto; opacity: .75; font-size: 1rem; }
+.tv-cab-derecha { margin-left: auto; display: flex; align-items: baseline; gap: 1.2rem; }
+.tv-sala { opacity: .75; font-size: 1rem; }
+.tv-reloj { font-size: 1rem; opacity: .85; letter-spacing: .01em; }
+.tv-reloj strong { font-family: var(--fm); font-size: 1.35rem; margin-right: .35rem; }
 /* Que el televisor no trae voz en español es un dato para quien lo instala. */
 .tv-aviso { background: rgba(255,255,255,.14); border-radius: 999px;
   padding: .2rem .8rem; font-size: .85rem; opacity: .8; }
@@ -64,12 +76,50 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
   padding: .7rem 2rem; background: #F0B429; color: #3B2A02; }
 .tv-armar small { font-size: .8rem; opacity: .75; }
 .tv-armar:focus-visible { outline: 3px solid #fff; outline-offset: -6px; }
-.tv-cuerpo { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; padding: 1.5rem 2rem; }
-.tv-turnos { display: flex; flex-direction: column; gap: 1.2rem; }
-.tv-actual { background: rgba(255,255,255,.08); border-radius: 18px; padding: 2rem;
-  display: flex; flex-direction: column; gap: .4rem; }
+/*
+ * RN-11.7 · El cuerpo, con el reparto de la guía de televisión: lista estrecha a la
+ * izquierda, video enmarcado a la derecha y la franja de anuncios debajo del video.
+ *
+ * Los CUATRO estados se declaran enteros y se eligen por atributos de datos. Componer
+ * clases deja combinaciones sin CSS que solo se descubren colgadas en una pared.
+ */
+.tv-cuerpo { flex: 1; min-height: 0; display: grid; gap: 1.25rem; padding: 1.25rem 1.75rem; }
+
+.tv-cuerpo[data-media="si"][data-anuncios="si"] {
+  grid-template-columns: minmax(19rem, 28fr) minmax(0, 72fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "turnos media" "turnos anuncios";
+}
+.tv-cuerpo[data-media="si"][data-anuncios="no"] {
+  grid-template-columns: minmax(19rem, 28fr) minmax(0, 72fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "turnos media";
+}
+/* Sin video la mitad derecha ya no queda en negro: es el defecto que arregla la fase. */
+.tv-cuerpo[data-media="no"][data-anuncios="si"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "turnos" "anuncios";
+}
+.tv-cuerpo[data-media="no"][data-anuncios="no"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "turnos";
+}
+
+.tv-turnos { grid-area: turnos; min-height: 0; display: flex; flex-direction: column; gap: 1rem; }
+.tv-actual { background: rgba(255,255,255,.08); border-radius: 18px; padding: 1.4rem 1.6rem;
+  display: flex; flex-direction: column; gap: .3rem; }
 .tv-etiqueta { text-transform: uppercase; letter-spacing: .12em; font-size: .9rem; opacity: .7; }
-.tv-codigo { font-family: var(--fm); font-size: 5rem; line-height: 1; letter-spacing: .06em; }
+/*
+ * A 1366 px —la resolución de la mayoría de los sticks— la columna mide ~382 px y la
+ * fuente queda en ~55 px: «MG-042» ocupa ~197 px y entra con holgura. Con los 5rem y
+ * .06em fijos de antes ocupaba ~288 px sobre ~300 útiles, o sea al filo.
+ */
+.tv-codigo { font-family: var(--fm); font-size: clamp(2.6rem, 4vw, 7rem); line-height: 1;
+  letter-spacing: .04em; overflow-wrap: anywhere; }
+/* Sin video la columna es toda la pantalla y el código puede crecer de verdad. */
+.tv-cuerpo[data-media="no"] .tv-codigo { font-size: clamp(4rem, 9vw, 12rem); }
 .tv-paciente { font-size: 1.8rem; }
 .tv-consultorio { font-size: 1.4rem; color: #7FD8CF; }
 .tv-lista { list-style: none; display: flex; flex-direction: column; gap: .5rem; }
@@ -77,13 +127,49 @@ input { font-family: inherit; font-size: .95rem; color: var(--ink); }
   border-radius: 12px; padding: .8rem 1.2rem; font-size: 1.2rem; }
 .tv-lista strong { font-family: var(--fm); font-size: 1.6rem; }
 .tv-consultorio-min { margin-left: auto; color: #7FD8CF; }
-.tv-media { position: relative; border-radius: 18px; overflow: hidden; background: #000; min-height: 320px; }
-.tv-frame { width: 100%; height: 100%; }
+/* Enmarcado, como en la guía de la foto. Fuera el `min-height:320px`, que peleaba con
+   cualquier fila `1fr` en pantallas bajas. */
+.tv-media { grid-area: media; position: relative; min-height: 0; border-radius: 16px;
+  overflow: hidden; background: #000;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.14), 0 18px 40px rgba(0,0,0,.35); }
+.tv-frame { width: 100%; height: 100%; border: 0; display: block; }
+
+/* ── RN-11.7 · la franja de anuncios ── */
+.tv-anuncios { grid-area: anuncios; display: grid; grid-auto-flow: column;
+  grid-auto-columns: 1fr; gap: 1rem; height: clamp(104px, 15vh, 190px); }
+/* Fondo blanco y no el verde del tema: el material que manda un comercio viene con
+   fondo blanco, y sobre verde oscuro se vería el rectángulo recortado. */
+.tv-anuncio { background: #fff; border-radius: 14px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; }
+.tv-anuncio img {
+  display: block; width: 100%; height: 100%;
+  /*
+   * `contain` y NUNCA `cover`. Un anuncio es una composición con un teléfono y un logo
+   * en los bordes, y `cover` recorta exactamente eso: lo que el anunciante pagó. Se
+   * prefiere la banda blanca al anuncio mutilado, y con la proporción recomendada
+   * (1200×480) la banda es cero.
+   */
+  object-fit: contain;
+}
 .tv-media-etiqueta { position: absolute; left: 1rem; bottom: 1rem; background: rgba(0,0,0,.6);
   padding: .3rem .8rem; border-radius: 999px; font-size: .85rem; }
 .tv-pie { padding: 1rem 2rem; background: rgba(0,0,0,.25); font-size: 1.1rem; text-align: center; }
 
-@media (max-width: 1100px) { .tv-cuerpo { grid-template-columns: 1fr; } }
+/*
+ * Por debajo del ancho útil, en columna. Hay que sobreescribir las columnas Y las
+ * áreas a la vez: dejar `grid-template-columns: 1fr` con unas áreas de dos columnas es
+ * una declaración incoherente que el navegador ignora entera.
+ */
+@media (max-width: 1100px) {
+  .tv-cuerpo[data-media="si"][data-anuncios="si"] {
+    grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: "turnos" "media" "anuncios";
+  }
+  .tv-cuerpo[data-media="si"][data-anuncios="no"] {
+    grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "turnos" "media";
+  }
+}
 
 /* Sin canal utilizable, se dice qué falta: el hueco negro con el error de YouTube
    no lo sabe interpretar nadie en una sala de espera. */
