@@ -1,6 +1,10 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { aHHMM, aMinutos, CONFIG, hoyEnSede, momentoEnSede, SEDE_ID, type TipoCita } from '@provivir/shared';
+import {
+  aHHMM, aMinutos, CONFIG, dentroDeFranja, fechasDeVentana, hoyEnSede, momentoEnSede,
+  parsearDias, parsearFranja, parsearVentana, SEDE_ID, ventanaPara,
+  type Franja, type TipoCita, type Ventana,
+} from '@provivir/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
@@ -14,10 +18,6 @@ import {
   cabeEnFranja,
 } from './citas.reglas';
 import { aFranjaAgenda } from '../agendas/agendas.reglas';
-import {
-  dentroDeFranja, fechasDeVentana, parsearDias, parsearFranja, parsearVentana, ventanaPara,
-  type Franja, type Ventana,
-} from './autoagendamiento.reglas';
 import { RecordatoriosService } from '../recordatorios/recordatorios.service';
 import { VentanaService } from '../whatsapp/ventana.service';
 import { variantesDeTelefono } from '../whatsapp/whatsapp.normalizador';

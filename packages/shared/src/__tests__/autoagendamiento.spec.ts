@@ -2,7 +2,7 @@ import fc from 'fast-check';
 import {
   dentroDeFranja, fechasDeVentana, parsearDias, parsearFranja, parsearVentana,
   serializarVentana, ventanaPara, VENTANA_BASE,
-} from './autoagendamiento.reglas';
+} from '../autoagendamiento';
 
 const dia = (iso: string) => new Date(`${iso}T00:00:00Z`);
 const dias = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / 86_400_000);

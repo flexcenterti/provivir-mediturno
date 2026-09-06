@@ -1,4 +1,4 @@
-import { diaSemanaIso } from '../agendas/agendas.reglas';
+import { diaSemanaIso } from './dominio.js';
 
 /**
  * RN-04.8 · Cuándo se permite el autoagendamiento.
@@ -8,6 +8,10 @@ import { diaSemanaIso } from '../agendas/agendas.reglas';
  *
  * Puro por contrato, como el resto de `citas.reglas.ts`: recibe `hoy` y si hoy es
  * festivo, nunca los averigua. Quien llama ya resolvió el reloj de la sede y la base.
+ *
+ * Vive en `shared` y no en la API porque el backoffice necesita las MISMAS reglas para
+ * pintar, debajo de la tabla de siete filas, qué ventana va a salir de lo que el
+ * operador acaba de escribir. Calcularla dos veces sería garantizar que un día difieran.
  */
 
 export interface FilaVentana {
