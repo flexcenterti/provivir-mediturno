@@ -17,6 +17,42 @@ export const CONFIGURACION_BASE = [
       'RN-04.6 · Días de anticipación que exigen el portal y el bot de WhatsApp. 1 = solo desde ' +
       'mañana. 0 apaga la regla. El personal en sede no queda sujeto a este parámetro.',
   },
+  {
+    clave: 'autoagendamiento_ventana_activa',
+    valor: 'true',
+    descripcion:
+      'RN-04.8 · Limita QUÉ DÍAS puede reservar quien se agenda solo, según el día en que '
+      + 'agenda. Apagarlo NO apaga el autoagendamiento: lo deja sin restricción de días.',
+  },
+  {
+    clave: 'autoagendamiento_ventana_dias',
+    valor: '1:3-5,2:4-5,3:1-5,4:1-5,5:2-5,6:2-5,7:3-5',
+    descripcion:
+      'RN-04.8 · Una fila por día de la semana en que se agenda: «día:desde-hasta», con '
+      + '1=lunes y 7=domingo. La fila 7 rige también los festivos. Se edita en '
+      + 'Administración → Autoagendamiento.',
+  },
+  {
+    clave: 'autoagendamiento_dias_excluidos',
+    valor: '6,7',
+    descripcion:
+      'RN-04.8 · Días de la semana que el autoservicio no ofrece nunca, aunque la ventana '
+      + 'los incluya. La clínica sí atiende sábados: se reservan para el mostrador.',
+  },
+  {
+    clave: 'autoagendamiento_horario_cita',
+    valor: '12:00-23:59',
+    descripcion:
+      'RN-04.8 · Franja horaria de las citas que se pueden agendar solo. Solo se ofrecen '
+      + 'cupos que empiecen dentro. «00:00-23:59» las permite todas.',
+  },
+  {
+    clave: 'autoagendamiento_horario_canal',
+    valor: '00:00-23:59',
+    descripcion:
+      'RN-04.8 · Horas del día en que el portal y el bot aceptan agendar, por reloj de la '
+      + 'sede. Fuera de esta franja piden llamar. No afecta a cancelar ni a consultar.',
+  },
   { clave: 'kiosko_activo', valor: 'false', descripcion: 'D3 · El kiosko queda construido pero apagado.' },
   {
     clave: 'whatsapp_botones_interactivos',

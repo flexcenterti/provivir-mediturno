@@ -30,6 +30,40 @@ const LIMITES: Record<string, number> = {
   kb_temas_prohibidos: 20_000,
 };
 
+/**
+ * Qué valores se aceptan, por clave.
+ *
+ * La pantalla de Reglas pinta **todas** las claves como una casilla de texto libre, así
+ * que sin esto cualquiera puede guardar basura en un parámetro que gobierna un canal
+ * público. Los lectores caen a un valor base cuando no entienden lo guardado —eso los
+ * hace robustos—, pero el operador tiene que enterarse al guardar y no tres días después
+ * al ver que la regla no hace lo que la pantalla dice.
+ *
+ * Devuelve el motivo del rechazo, o `null` si el valor sirve.
+ */
+const VALIDADORES: Record<string, (v: string) => string | null> = {
+  autoagendamiento_ventana_activa: (v) =>
+    v === 'true' || v === 'false' ? null : 'Debe ser exactamente «true» o «false».',
+  autoagendamiento_ventana_dias: (v) =>
+    /^[1-7]:[1-7]-[1-7](,[1-7]:[1-7]-[1-7]){6}$/.test(v.trim())
+      ? null
+      : 'Formato: siete filas «día:desde-hasta» separadas por comas, con 1=lunes y 7=domingo.',
+  autoagendamiento_dias_excluidos: (v) =>
+    v.trim() === '' || /^[1-7](,[1-7])*$/.test(v.trim())
+      ? null
+      : 'Días de la semana separados por comas, con 1=lunes y 7=domingo. Vacío = ninguno.',
+  autoagendamiento_horario_cita: validarFranja,
+  autoagendamiento_horario_canal: validarFranja,
+};
+
+function validarFranja(v: string): string | null {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/.exec(v.trim());
+  if (!m) return 'Formato: HH:MM-HH:MM en horas de 24, por ejemplo «12:00-18:00».';
+  const desde = Number(m[1]) * 60 + Number(m[2]);
+  const hasta = Number(m[3]) * 60 + Number(m[4]);
+  return hasta > desde ? null : 'La hora final tiene que ser posterior a la inicial.';
+}
+
 @Controller('configuracion')
 @Permisos('configuracion.editar')
 export class ConfiguracionController {
@@ -56,6 +90,9 @@ export class ConfiguracionController {
         `El valor de «${clave}» supera el máximo de ${limite} caracteres (${dto.valor.length}).`,
       );
     }
+
+    const motivo = VALIDADORES[clave]?.(dto.valor);
+    if (motivo) throw new BadRequestException(`«${clave}»: ${motivo}`);
 
     const anterior = this.config.texto(clave, '');
     await this.config.fijar(clave, dto.valor);

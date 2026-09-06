@@ -1,4 +1,4 @@
-import { aMinutos } from '@provivir/shared';
+import { aMinutos, diaSemanaIso } from '@provivir/shared';
 import type { FranjaAgenda } from '../citas/citas.reglas';
 
 /**
@@ -20,11 +20,9 @@ export interface Franja {
   slotMin: number;
 }
 
-/** 1 = lunes … 7 = domingo, que es el criterio de `Agenda.diasSemana`. */
-export function diaSemanaIso(fecha: Date): number {
-  const d = fecha.getUTCDay();
-  return d === 0 ? 7 : d;
-}
+// Vive en `@provivir/shared` desde la fase 22, junto al reloj de sede. Se reexporta para
+// no tocar a sus llamadores.
+export { diaSemanaIso };
 
 /** Pasa las horas de la fila a minutos, que es como las quiere el motor de cupos. */
 export function aFranjaAgenda(f: Pick<Franja, 'horaIni' | 'horaFin' | 'slotMin'>): FranjaAgenda {

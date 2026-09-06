@@ -37,6 +37,20 @@ export class DiasNoLaborablesService {
    * ¿Está cerrada la sede ese día? Devuelve el motivo, o null si se atiende.
    * Lo consulta el motor de citas en cada consulta de cupos y antes de crear.
    */
+  /**
+   * Los días cerrados dentro de un rango, en una sola consulta.
+   *
+   * Lo usa la ventana de autoagendamiento (RN-04.8) para no ANUNCIAR fechas cerradas.
+   * El rechazo sigue siendo de `motivoDeCierre`, que dice el motivo; esto solo evita que
+   * el bot ofrezca el 25 de diciembre con confianza y queme un turno.
+   */
+  entreFechas(desde: Date, hasta: Date) {
+    return this.prisma.diaNoLaborable.findMany({
+      where: { sedeId: SEDE_ID, fecha: { gte: desde, lte: hasta } },
+      select: { fecha: true, motivo: true },
+    });
+  }
+
   async motivoDeCierre(fecha: Date): Promise<string | null> {
     const dia = await this.prisma.diaNoLaborable.findUnique({
       where: { sedeId_fecha: { sedeId: SEDE_ID, fecha } },

@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { aHHMM, aMinutos, CONFIG, hoyEnSede, SEDE_ID, type TipoCita } from '@provivir/shared';
+import { aHHMM, aMinutos, CONFIG, hoyEnSede, momentoEnSede, SEDE_ID, type TipoCita } from '@provivir/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { ConfiguracionService } from '../configuracion/configuracion.service';
@@ -14,6 +14,10 @@ import {
   cabeEnFranja,
 } from './citas.reglas';
 import { aFranjaAgenda } from '../agendas/agendas.reglas';
+import {
+  dentroDeFranja, fechasDeVentana, parsearDias, parsearFranja, parsearVentana, ventanaPara,
+  type Franja, type Ventana,
+} from './autoagendamiento.reglas';
 import { RecordatoriosService } from '../recordatorios/recordatorios.service';
 import { VentanaService } from '../whatsapp/ventana.service';
 import { variantesDeTelefono } from '../whatsapp/whatsapp.normalizador';
@@ -95,7 +99,17 @@ export class CitasService {
    */
   async cupos(dto: ConsultarCuposDto, opciones?: OpcionesAgendamiento): Promise<CupoOfrecido[]> {
     const fecha = aFechaUtc(dto.fecha);
+    /*
+     * RN-04.8 · El reloj va ANTES que todo: si el canal está cerrado da igual qué día se
+     * pidió, y el mensaje correcto habla de la hora, no del calendario.
+     */
+    this.validarCanalAbierto(opciones);
     await this.validarDiaLaborable(fecha);
+    /*
+     * Y la ventana DESPUÉS del día no laborable, para que gane el mensaje del cierre:
+     * «No atendemos el 25: Navidad» dice mucho más que «esa fecha está fuera de la ventana».
+     */
+    await this.validarVentanaAutoagendamiento(fecha, opciones);
     this.validarAnticipacion(fecha, opciones);
     const servicio = await this.prisma.servicio.findUnique({ where: { id: dto.servicioId } });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
@@ -143,8 +157,18 @@ export class CitasService {
           duracionMin,
         );
 
+        /*
+         * RN-04.8 · Se filtran los cupos YA GENERADOS; nunca se recorta `horaIni` de la
+         * franja antes de generarlos. Recortarla movería la rejilla —`cabeEnFranja`
+         * alinea con `(inicio - horaIni) % slotMin`— y `crear()` valida contra la franja
+         * sin recortar: `cupos()` ofrecería horas que la creación rechaza.
+         *
+         * Y aquí dentro, no al final: después de `intercalarPorPrestador` el `limite` ya
+         * se aplicó, y devolveríamos tres cupos donde había diez.
+         */
         const validos = brutos.filter(
-          (c) => !chocaConAlguna(c, citasDelDia) && !violaIntercaladoEnAgenda(c, tipo, citasDelDia),
+          (c) => !chocaConAlguna(c, citasDelDia) && !violaIntercaladoEnAgenda(c, tipo, citasDelDia)
+            && this.horaPermitidaEnAutoservicio(c.horaInicio, opciones),
         );
 
         for (const cupo of ordenarPorCompactacion(validos, citasDelDia, huecoMax)) {
@@ -216,6 +240,17 @@ export class CitasService {
     if (!servicio.activo) throw new NotFoundException('El servicio ya no está disponible');
 
     this.validarAgendablePorAutoservicio(servicio, opciones);
+
+    /*
+     * RN-04.8 · Aquí, al nivel superior, y NO dentro de `validarCupo()`: ese lo comparten
+     * `crear` y `reprogramar`, así que la regla quedaría latente sobre las
+     * reprogramaciones y se activaría sola el día que alguien cablee una en el portal. El
+     * cliente pidió explícitamente que cancelar y reprogramar sigan siempre activos, y
+     * esto es lo que lo garantiza por construcción y no por casualidad.
+     */
+    this.validarCanalAbierto(opciones);
+    await this.validarVentanaAutoagendamiento(aFechaUtc(dto.fecha), opciones);
+    this.validarHoraDeCita(dto.hora, opciones);
 
     const paciente = await this.prisma.paciente.findUnique({ where: { id: dto.pacienteId } });
     if (!paciente) throw new NotFoundException('Paciente no encontrado');
@@ -821,6 +856,123 @@ export class CitasService {
     if (args.tipo === 'control') {
       await this.validarVentanaControl(args.citaOrigenId, args.fecha, [args.prestadorId]);
     }
+  }
+
+  // ─────────────── RN-04.8 · cuándo se permite el autoagendamiento ───────────────
+
+  /** ¿Está la regla de ventana encendida? Por defecto sí: el respaldo va hacia restringir. */
+  private get ventanaActiva(): boolean {
+    return this.configuracion.booleano(CONFIG.AUTOAGENDAMIENTO_VENTANA_ACTIVA, true);
+  }
+
+  private franjaDeCita(): Franja {
+    return parsearFranja(
+      this.configuracion.texto(CONFIG.AUTOAGENDAMIENTO_HORARIO_CITA, ''),
+      { desde: 0, hasta: 1440 },
+    );
+  }
+
+  /**
+   * RN-04.8 · Las horas del día en que el canal acepta agendar, por reloj de la sede.
+   *
+   * El mensaje es neutro a propósito: el motor no distingue el portal del bot
+   * —`OpcionesAgendamiento` solo lleva `autoservicio`—, así que decir «escríbenos por
+   * WhatsApp» sería absurdo cuando quien lo recibe ES el bot.
+   */
+  private validarCanalAbierto(opciones?: OpcionesAgendamiento): void {
+    if (!opciones?.autoservicio || !this.ventanaActiva) return;
+
+    const franja = parsearFranja(
+      this.configuracion.texto(CONFIG.AUTOAGENDAMIENTO_HORARIO_CANAL, ''),
+      { desde: 0, hasta: 1440 },
+    );
+    if (dentroDeFranja(momentoEnSede().minutos, franja)) return;
+
+    throw new BadRequestException(
+      `El agendamiento en línea está disponible de ${aHHMM(franja.desde)} a ${aHHMM(franja.hasta)}. `
+      + 'Fuera de ese horario, comunícate con una asistente y te ayudamos a coordinarlo.',
+    );
+  }
+
+  /**
+   * RN-04.8 · La fecha pedida tiene que caer en la ventana que corresponde al día de hoy.
+   *
+   * El mensaje dice qué días SÍ, no solo que ese no: es el mismo criterio de RN-04.6, y
+   * es lo que separa un rechazo accionable de un «no hay horarios» que además sería falso.
+   */
+  private async validarVentanaAutoagendamiento(fecha: Date, opciones?: OpcionesAgendamiento): Promise<void> {
+    if (!opciones?.autoservicio || !this.ventanaActiva) return;
+
+    const permitidas = await this.fechasDeAutoservicio();
+    if (permitidas.includes(fecha.toISOString().slice(0, 10))) return;
+
+    throw new BadRequestException(
+      permitidas.length === 0
+        ? 'Por este medio no hay días disponibles en este momento. Comunícate con una asistente.'
+        : `Por este medio puedes agendar del ${permitidas[0]} al ${permitidas[permitidas.length - 1]}. `
+          + 'Para otra fecha, comunícate con una asistente y te ayudamos a coordinarlo.',
+    );
+  }
+
+  /** ¿Esta hora de inicio entra en la franja que el autoservicio puede reservar? */
+  private horaPermitidaEnAutoservicio(horaInicio: number, opciones?: OpcionesAgendamiento): boolean {
+    if (!opciones?.autoservicio || !this.ventanaActiva) return true;
+    return dentroDeFranja(horaInicio, this.franjaDeCita());
+  }
+
+  /**
+   * La misma comprobación al crear. `cupos()` filtra y esto rechaza: filtrar en la
+   * consulta es lo que ya hace el motor con todo lo demás, y rechazar en la creación es
+   * la garantía — sin ella, el bot o un cliente manipulado se la saltarían.
+   */
+  private validarHoraDeCita(hora: string, opciones?: OpcionesAgendamiento): void {
+    if (!opciones?.autoservicio || !this.ventanaActiva) return;
+
+    const franja = this.franjaDeCita();
+    if (dentroDeFranja(aMinutos(hora), franja)) return;
+
+    throw new BadRequestException(
+      `Por este medio se agenda de ${aHHMM(franja.desde)} a ${aHHMM(franja.hasta)}. `
+      + 'Para un horario fuera de esa franja, comunícate con una asistente.',
+    );
+  }
+
+  /**
+   * Las fechas que el autoservicio puede ofrecer hoy, ya sin días excluidos ni cerrados.
+   *
+   * Es la **única** fuente: la consume la guarda, el endpoint del portal y el prompt del
+   * bot. Calcularla en dos sitios sería ofrecerle al paciente fechas que el motor rechaza.
+   */
+  async ventanaDeAutoservicio(): Promise<{ fechas: string[]; horarioCita: Franja; canal: Franja } | null> {
+    if (!this.ventanaActiva) return null;
+    return {
+      fechas: await this.fechasDeAutoservicio(),
+      horarioCita: this.franjaDeCita(),
+      canal: parsearFranja(
+        this.configuracion.texto(CONFIG.AUTOAGENDAMIENTO_HORARIO_CANAL, ''),
+        { desde: 0, hasta: 1440 },
+      ),
+    };
+  }
+
+  private async fechasDeAutoservicio(): Promise<string[]> {
+    const hoy = hoyEnSede();
+    const ventana = this.ventanaDeHoy(hoy, await this.diasNoLaborables.motivoDeCierre(hoy) !== null);
+    const excluidos = parsearDias(
+      this.configuracion.texto(CONFIG.AUTOAGENDAMIENTO_DIAS_EXCLUIDOS, ''), [],
+    );
+
+    const cerradas = new Set(
+      (await this.diasNoLaborables.entreFechas(ventana.inicio, ventana.fin)).map(
+        (d) => d.fecha.toISOString().slice(0, 10),
+      ),
+    );
+    return fechasDeVentana(ventana, excluidos, cerradas);
+  }
+
+  private ventanaDeHoy(hoy: Date, hoyEsFestivo: boolean): Ventana {
+    const filas = parsearVentana(this.configuracion.texto(CONFIG.AUTOAGENDAMIENTO_VENTANA_DIAS, ''));
+    return ventanaPara(hoy, filas, hoyEsFestivo);
   }
 
   /**

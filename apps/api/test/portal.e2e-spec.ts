@@ -2,6 +2,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { apagarVentana, encenderVentana } from './utiles-autoagendamiento';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { CitasService } from '../src/citas/citas.service';
 import { fechaEnZona } from '@provivir/shared';
@@ -32,6 +33,13 @@ describe('Portal público (e2e)', () => {
     await app.init();
     http = app.getHttpServer();
 
+    /*
+     * RN-04.8 · Esta suite no va de la ventana de autoagendamiento: se apaga para que sus
+     * fechas fijas no dependan del día de la semana en que se ejecute. La regla tiene su
+     * propia suite.
+     */
+    await apagarVentana(app);
+
     await limpiar();
     await prisma.paciente.create({
       data: {
@@ -41,7 +49,7 @@ describe('Portal público (e2e)', () => {
     });
   });
 
-  afterAll(async () => { await limpiar(); await app.close(); });
+  afterAll(async () => { await encenderVentana(app); await limpiar(); await app.close(); });
 
   /**
    * Las citas se borran ANTES de cada prueba, no solo al final del fichero.

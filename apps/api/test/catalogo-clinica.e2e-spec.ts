@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import { SEDE_ID } from '@provivir/shared';
 import { AppModule } from '../src/app.module';
+import { apagarVentana, encenderVentana } from './utiles-autoagendamiento';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { CitasService } from '../src/citas/citas.service';
 import { cargarCatalogoClinica, PRESTADORES, SERVICIOS } from '../src/cli/catalogo.clinica';
@@ -36,6 +37,13 @@ describe('Catálogo real de la clínica (integración)', () => {
     citas = app.get(CitasService);
     await app.init();
 
+    /*
+     * RN-04.8 · Esta suite no va de la ventana de autoagendamiento: se apaga para que sus
+     * fechas fijas no dependan del día de la semana en que se ejecute. La regla tiene su
+     * propia suite.
+     */
+    await apagarVentana(app);
+
     await cargarCatalogoClinica(prisma, SEDE_ID);
   });
 
@@ -45,6 +53,7 @@ describe('Catálogo real de la clínica (integración)', () => {
    * con los tres de demostración. Las suites comparten base y corren en serie.
    */
   afterAll(async () => {
+    await encenderVentana(app);
     const ids = PRESTADORES.map((p) => p.id);
     await prisma.cita.deleteMany({ where: { prestadorId: { in: ids } } });
     await prisma.agenda.deleteMany({ where: { prestadorId: { in: ids } } });
