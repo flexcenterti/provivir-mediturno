@@ -61,7 +61,7 @@ para afirmar lo que ahora corresponde.
 
 ## Números
 
-333 unitarias (API) · 91 (shared) · 416 e2e de API · las de navegador.
+333 unitarias (API) · 91 (shared) · 416 e2e de API · 68 de navegador. Todo verde.
 
 ## Riesgos, con medidas de producción
 

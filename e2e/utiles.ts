@@ -82,10 +82,11 @@ export async function fijarConfig(
   valores: Record<string, string>,
 ): Promise<void> {
   const login = await request.post('http://localhost:3000/api/auth/login', { data: ADMIN });
-  const { token } = await login.json();
+  const { accessToken, token } = await login.json();
+  const headers = { Authorization: `Bearer ${accessToken ?? token}` };
   for (const [clave, valor] of Object.entries(valores)) {
     const r = await request.put(`http://localhost:3000/api/configuracion/${clave}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers,
       data: { valor },
     });
     // Sin esto, un valor rechazado por el validador dejaría la prueba corriendo contra
