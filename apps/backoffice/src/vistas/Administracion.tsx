@@ -5,9 +5,12 @@ import {
   type TrabajoCarga,
 } from '../api';
 import { Acceso } from './Acceso';
+import { Autoagendamiento } from './Autoagendamiento';
 import { interpretarYoutube } from '@provivir/shared';
 
-type Seccion = 'acceso' | 'carga' | 'auditoria' | 'pantallas' | 'kiosko' | 'festivos' | 'configuracion';
+type Seccion =
+  | 'acceso' | 'carga' | 'auditoria' | 'pantallas' | 'kiosko' | 'festivos'
+  | 'autoagendamiento' | 'configuracion';
 
 /**
  * En producción las tres apps comparten dominio y la TV vive en /tv.
@@ -22,6 +25,7 @@ const SECCIONES: Array<{ id: Seccion; etiqueta: string }> = [
   { id: 'pantallas', etiqueta: 'Pantallas' },
   { id: 'kiosko', etiqueta: 'Kiosko' },
   { id: 'festivos', etiqueta: 'Días no laborables' },
+  { id: 'autoagendamiento', etiqueta: 'Autoagendamiento' },
   { id: 'configuracion', etiqueta: 'Reglas' },
 ];
 
@@ -44,6 +48,7 @@ export function Administracion({ inicial = 'acceso' }: { inicial?: Seccion } = {
       {seccion === 'pantallas' && <Pantallas />}
       {seccion === 'kiosko' && <Kiosko />}
       {seccion === 'festivos' && <DiasNoLaborables />}
+      {seccion === 'autoagendamiento' && <Autoagendamiento />}
       {seccion === 'configuracion' && <Configuracion />}
     </div>
   );
