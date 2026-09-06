@@ -53,6 +53,22 @@ export class PortalController {
     return this.portal.servicios();
   }
 
+  /**
+   * RN-04.8 · Qué días y horas puede agendar este canal ahora mismo.
+   *
+   * Existe para que el paciente no adivine: sin esto el selector de fecha es libre y la
+   * mayoría de las fechas devolverían un 400. Sale del **mismo** cálculo que usa la
+   * guarda del motor —`ventanaDeAutoservicio()`— porque publicar fechas por un camino y
+   * validarlas por otro es ofrecerle al paciente días que luego se le rechazan.
+   *
+   * Devuelve `null` cuando la regla está apagada: entonces no hay ventana que anunciar.
+   */
+  @Get('ventana')
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
+  ventana() {
+    return this.portal.ventana();
+  }
+
   /** Límite estricto: identificarse es la superficie que permitiría enumerar documentos. */
   @Post('identificar')
   @Throttle({ default: { limit: 8, ttl: 60_000 } })

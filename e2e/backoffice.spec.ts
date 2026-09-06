@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ADMIN, ASISTENTE, MEDICO, PACIENTE } from './utiles';
+import { ADMIN, enTresDias, fijarConfig, SIN_VENTANA, ventanaDeUnSoloDia, ASISTENTE, MEDICO, PACIENTE } from './utiles';
 
 /**
  * Backoffice · lo que usan las asistentes todo el día.
@@ -885,3 +885,91 @@ test('RN-06.6 · retirar una franja pide confirmación, y se puede reactivar', a
   await page.getByLabel('Ver retiradas').uncheck();
   await expect(page.getByRole('row').filter({ hasText: marca })).toContainText('Lun, Mar');
 });
+
+// ─────────────── Fase 22 · RN-04.8 · la ventana de autoagendamiento ───────────────
+
+/*
+ * Envueltas en un `describe` con su propio `afterAll` a propósito: un `afterEach` al nivel
+ * del archivo se aplicaría también a las 45 pruebas anteriores, y cada pasada dejaría una
+ * entrada más en auditoría por una regla que esas pruebas ni tocan.
+ */
+test.describe('RN-04.8 · la ventana de autoagendamiento', () => {
+  // El estado de configuración lo hereda todo lo que corra después.
+  test.afterAll(async ({ request }) => { await fijarConfig(request, SIN_VENTANA); });
+
+  /**
+   * Mata: quitar el «Resultado de hoy» y dejar solo los siete desplegables.
+   *
+   * Siete filas de días de la semana no dicen qué va a pasar hoy. Sin el resultado en
+   * texto, la única forma de saber qué se acaba de configurar es abrir el portal y probar.
+   */
+  test('RN-04.8 · la pantalla dice qué ventana sale de la tabla, no solo la tabla', async ({ page, request }) => {
+    await fijarConfig(request, {
+      autoagendamiento_ventana_activa: 'true',
+      autoagendamiento_ventana_dias: ventanaDeUnSoloDia(enTresDias()),
+      autoagendamiento_dias_excluidos: '',
+    });
+
+    await entrar(page);
+    await page.getByRole('button', { name: 'Administración' }).click();
+    // `exact`: en el menú lateral ya existe «Autoagendamiento web», que es otra cosa
+    // —el enlace público y el QR— y sin esto el localizador resuelve a dos botones.
+    await page.getByRole('button', { name: 'Autoagendamiento', exact: true }).click();
+
+    const resultado = page.locator('.card', { hasText: 'Resultado de hoy' });
+    await expect(resultado).toContainText('Hoy es');
+    // El día concreto, escrito como lo lee una persona: «viernes, 11 de septiembre».
+    await expect(resultado).toContainText(
+      new Date(`${enTresDias()}T12:00:00`).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' }),
+    );
+  });
+
+  /**
+   * Mata: guardar sin invalidar la caché de configuración.
+   *
+   * El servicio cachea en memoria; si `fijar()` no invalidara, el operador guardaría, la
+   * pantalla se lo confirmaría, y el portal seguiría ofreciendo la ventana anterior hasta
+   * el siguiente reinicio. Por eso la comprobación no es que la pantalla se actualice
+   * —eso solo prueba que releyó— sino que **el endpoint público ya responde distinto**.
+   */
+  test('RN-04.8 · cambiar la tabla cambia de inmediato lo que el portal ofrece', async ({ page, request }) => {
+    await fijarConfig(request, {
+      autoagendamiento_ventana_activa: 'true',
+      autoagendamiento_dias_excluidos: '',
+      autoagendamiento_ventana_dias: ventanaDeUnSoloDia(enTresDias()),
+    });
+
+    const antes = await (await request.get('http://localhost:3000/api/portal/ventana')).json();
+    expect(antes.fechas).toEqual([enTresDias()]);
+
+    await entrar(page);
+    await page.getByRole('button', { name: 'Administración' }).click();
+    // `exact`: en el menú lateral ya existe «Autoagendamiento web», que es otra cosa
+    // —el enlace público y el QR— y sin esto el localizador resuelve a dos botones.
+    await page.getByRole('button', { name: 'Autoagendamiento', exact: true }).click();
+
+    // Se corre la ventana un día: la fila de hoy pasa a apuntar a mañana del día objetivo.
+    const objetivo = new Date(`${enTresDias()}T12:00:00Z`);
+    objetivo.setUTCDate(objetivo.getUTCDate() + 1);
+    const nuevoIso = objetivo.toISOString().slice(0, 10);
+    const nuevoDia = ((objetivo.getUTCDay() + 6) % 7) + 1;
+
+    // El día de la semana de HOY en la sede, que es la fila que gobierna la ventana de hoy.
+    const hoySede = new Date(`${enTresDias()}T12:00:00Z`);
+    hoySede.setUTCDate(hoySede.getUTCDate() - 3);
+    const hoyDia = DIAS_ES[((hoySede.getUTCDay() + 6) % 7)]!;
+
+    // Por la etiqueta, no por la posición: cada desplegable dice qué fila y qué extremo
+    // gobierna, que es lo que también necesita quien usa un lector de pantalla.
+    await page.getByLabel(`Desde · si agenda un ${hoyDia}`).selectOption(String(nuevoDia));
+    await page.getByLabel(`Hasta · si agenda un ${hoyDia}`).selectOption(String(nuevoDia));
+    await page.getByRole('button', { name: 'Guardar la tabla' }).click();
+    await expect(page.getByText(/Regla actualizada/)).toBeVisible({ timeout: 15_000 });
+
+    const despues = await (await request.get('http://localhost:3000/api/portal/ventana')).json();
+    expect(despues.fechas).toEqual([nuevoIso]);
+  });
+
+});
+
+const DIAS_ES = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];

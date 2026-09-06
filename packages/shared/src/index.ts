@@ -4,6 +4,7 @@ export * from './youtube.js';
 export * from './llamado-voz.js';
 export * from './imagenes.js';
 export * from './dominio.js';
+export * from './autoagendamiento.js';
 export * from './config-claves.js';
 export * from './festivos.js';
 export * from './bandeja-presentacion.js';

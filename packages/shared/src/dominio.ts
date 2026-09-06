@@ -92,6 +92,38 @@ export function fechaEnZona(momento: Date = new Date(), zona: string = ZONA_SEDE
   }).format(momento);
 }
 
+/**
+ * Día de la semana en ISO: 1 = lunes … 7 = domingo, que es el criterio de
+ * `Agenda.diasSemana`. Sobre `getUTCDay()` porque toda fecha del sistema es medianoche UTC.
+ */
+export function diaSemanaIso(fecha: Date): number {
+  const d = fecha.getUTCDay();
+  return d === 0 ? 7 : d;
+}
+
+/**
+ * Un instante ya trasladado a la zona de la sede: qué día es y cuántos minutos lleva.
+ *
+ * `hoyEnSede()` solo da el DÍA, y hasta ahora no había forma de saber la hora en Cali —
+ * el reloj del servidor puede estar en cualquier otra zona. Estaba a medias y privado
+ * dentro del módulo de seguimiento; aquí queda disponible y con una sola convención de
+ * día (ISO 1-7), que es la del resto del dominio.
+ */
+export function momentoEnSede(momento: Date = new Date(), zona: string = ZONA_SEDE): { diaIso: number; minutos: number } {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: zona, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(momento);
+
+  const valor = (tipo: string): string => partes.find((p) => p.type === tipo)?.value ?? '0';
+  const dias: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+
+  return {
+    diaIso: dias[valor('weekday')] ?? 7,
+    // Algunas plataformas dan "24" para la medianoche.
+    minutos: (Number(valor('hour')) % 24) * 60 + Number(valor('minute')),
+  };
+}
+
 /** El día de hoy en la sede, como Date UTC a medianoche (así se guardan las fechas). */
 export function hoyEnSede(zona: string = ZONA_SEDE): Date {
   return new Date(`${fechaEnZona(new Date(), zona)}T00:00:00Z`);

@@ -7,6 +7,7 @@ import request from 'supertest';
 import { json } from 'express';
 import type { IncomingMessage } from 'node:http';
 import { AppModule } from '../src/app.module';
+import { apagarVentana, encenderVentana } from './utiles-autoagendamiento';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { fechaEnZona } from '@provivir/shared';
 import { ConversacionService } from '../src/whatsapp/conversacion.service';
@@ -118,6 +119,13 @@ describe('Canal WhatsApp (e2e)', () => {
     await app.init();
     http = app.getHttpServer();
 
+    /*
+     * RN-04.8 · Esta suite no va de la ventana de autoagendamiento: se apaga para que sus
+     * fechas fijas no dependan del día de la semana en que se ejecute. La regla tiene su
+     * propia suite.
+     */
+    await apagarVentana(app);
+
     await limpiar();
     await prisma.paciente.create({
       data: {
@@ -127,7 +135,7 @@ describe('Canal WhatsApp (e2e)', () => {
     });
   });
 
-  afterAll(async () => { await limpiar(); await app.close(); });
+  afterAll(async () => { await encenderVentana(app); await limpiar(); await app.close(); });
 
   beforeEach(async () => {
     enviados = [];

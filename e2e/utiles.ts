@@ -69,3 +69,52 @@ export function proximoLunes(): string {
   hoy.setUTCDate(hoy.getUTCDate() + faltan);
   return hoy.toISOString().slice(0, 10);
 }
+
+/**
+ * RN-04.8 · Fija parámetros de configuración por API, como administrador.
+ *
+ * Las pruebas de navegador comparten una sola base y corren con `workers: 1`, así que
+ * esto es seguro; lo que no lo sería es dejarlo cambiado, porque el siguiente proyecto
+ * hereda el estado. Cada prueba que lo use restaura al terminar.
+ */
+export async function fijarConfig(
+  request: import('@playwright/test').APIRequestContext,
+  valores: Record<string, string>,
+): Promise<void> {
+  const login = await request.post('http://localhost:3000/api/auth/login', { data: ADMIN });
+  const { accessToken, token } = await login.json();
+  const headers = { Authorization: `Bearer ${accessToken ?? token}` };
+  for (const [clave, valor] of Object.entries(valores)) {
+    const r = await request.put(`http://localhost:3000/api/configuracion/${clave}`, {
+      headers,
+      data: { valor },
+    });
+    // Sin esto, un valor rechazado por el validador dejaría la prueba corriendo contra
+    // la configuración anterior y pasando por el motivo equivocado.
+    if (!r.ok()) throw new Error(`No se pudo fijar ${clave}: ${r.status()} ${await r.text()}`);
+  }
+}
+
+/** El interruptor apagado: el comportamiento anterior a RN-04.8. */
+export const SIN_VENTANA = { autoagendamiento_ventana_activa: 'false' };
+
+/**
+ * Dentro de tres días, en la zona de la sede.
+ *
+ * Es la fecha que hace determinista la ventana: con las siete filas puestas a ese mismo
+ * día de la semana, la ventana es exactamente ese día, sea cual sea el día en que corra
+ * la suite. Y nunca coincide con «mañana», que es lo que el `min` tenía cableado.
+ */
+export function enTresDias(): string {
+  const hoy = new Date(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date()) + 'T12:00:00Z');
+  hoy.setUTCDate(hoy.getUTCDate() + 3);
+  return hoy.toISOString().slice(0, 10);
+}
+
+/** Las siete filas apuntando al mismo día de la semana: la ventana es un solo día. */
+export function ventanaDeUnSoloDia(iso: string): string {
+  const dia = ((new Date(`${iso}T12:00:00Z`).getUTCDay() + 6) % 7) + 1;
+  return [1, 2, 3, 4, 5, 6, 7].map((d) => `${d}:${dia}-${dia}`).join(',');
+}

@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import { ConflictException } from '@nestjs/common';
 import { AppModule } from '../src/app.module';
+import { apagarVentana, encenderVentana } from './utiles-autoagendamiento';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { CitasService } from '../src/citas/citas.service';
 import { fechaEnZona, SEDE_ID } from '@provivir/shared';
@@ -32,6 +33,13 @@ describe('Motor de citas (integración)', () => {
     citas = app.get(CitasService);
     await app.init();
 
+    /*
+     * RN-04.8 · Esta suite no va de la ventana de autoagendamiento: se apaga para que sus
+     * fechas fijas no dependan del día de la semana en que se ejecute. La regla tiene su
+     * propia suite.
+     */
+    await apagarVentana(app);
+
     const p1 = await prisma.paciente.upsert({
       where: { documento: `${DOC}0001` },
       update: {},
@@ -47,6 +55,7 @@ describe('Motor de citas (integración)', () => {
   });
 
   afterAll(async () => {
+    await encenderVentana(app);
     await limpiar();
     await prisma.paciente.deleteMany({ where: { documento: { startsWith: DOC } } });
     await app.close();

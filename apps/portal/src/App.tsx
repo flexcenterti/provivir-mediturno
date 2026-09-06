@@ -1,5 +1,16 @@
 import { useEffect, useState } from 'react';
-import { api, fechaLarga, primeraFechaAgendable, type Confirmacion, type Cupo, type Servicio } from './api';
+import { api, fechaLarga, primeraFechaAgendable, type Confirmacion, type Cupo, type Servicio, type Ventana } from './api';
+
+/** ¿La ventana deja fuera algún día intermedio? Si no, `min`/`max` ya la expresan entera. */
+function huecosEnLaVentana(v: Ventana | null): boolean {
+  if (!v || v.fechas.length === 0) return false;
+  const dia = 86_400_000;
+  const span = (Date.parse(`${v.fechas.at(-1)!}T00:00:00Z`) - Date.parse(`${v.fechas[0]!}T00:00:00Z`)) / dia + 1;
+  return span !== v.fechas.length;
+}
+
+const diaCorto = (iso: string): string =>
+  new Date(`${iso}T12:00:00`).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
 
 type Paso = 'inicio' | 'registrado' | 'nuevo' | 'servicio' | 'cupos' | 'confirmada';
 
@@ -18,10 +29,27 @@ export function App() {
   const [fecha, setFecha] = useState(primeraFechaAgendable());
   const [cupos, setCupos] = useState<Cupo[]>([]);
   const [confirmacion, setConfirmacion] = useState<Confirmacion | null>(null);
+  const [ventana, setVentana] = useState<Ventana | null>(null);
   const [error, setError] = useState('');
   const [ocupado, setOcupado] = useState(false);
 
   useEffect(() => { api.servicios().then(setServicios).catch(() => undefined); }, []);
+
+  /*
+   * RN-04.8 · La ventana la calcula el motor y el portal solo la pinta. Si la
+   * petición falla se queda en `null`, que es el comportamiento de antes: el
+   * selector vuelve a abrirse desde mañana y el motor sigue rechazando lo que no
+   * corresponda. Ningún límite de esta pantalla es una garantía.
+   */
+  useEffect(() => {
+    api.ventana()
+      .then((v) => {
+        setVentana(v);
+        const primera = v?.fechas[0];
+        if (primera) setFecha(primera);
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (paso !== 'cupos' || !servicioId) return;
@@ -124,9 +152,21 @@ export function App() {
             <h2>{servicio?.nombre}</h2>
             <label className="p-fecha">
               Fecha
-              <input id="fecha" type="date" value={fecha} min={primeraFechaAgendable()} onChange={(e) => setFecha(e.target.value)} />
+              <input id="fecha" type="date" value={fecha}
+                     min={ventana?.fechas[0] ?? primeraFechaAgendable()}
+                     max={ventana?.fechas.at(-1)}
+                     onChange={(e) => setFecha(e.target.value)} />
             </label>
             <p className="p-sub">{fechaLarga(fecha)}</p>
+            {/*
+              * Entre el primer y el último día de la ventana puede haber huecos —un
+              * sábado excluido, un festivo—, y un `<input type="date">` no sabe
+              * deshabilitar días sueltos. Cuando los hay se listan, que es lo único
+              * que evita que el paciente elija un día que el motor va a rechazar.
+              */}
+            {huecosEnLaVentana(ventana) && (
+              <p className="p-sub">Por aquí solo se puede reservar el {ventana!.fechas.map(diaCorto).join(', ')}.</p>
+            )}
 
             <div className="p-cupos">
               {cupos.map((c, i) => (
@@ -136,7 +176,12 @@ export function App() {
                   <span>{c.prestadorNombre}</span>
                 </button>
               ))}
-              {cupos.length === 0 && <p className="p-sub">No hay horarios disponibles ese día. Prueba otra fecha.</p>}
+              {cupos.length === 0 && !error && (
+                <p className="p-sub">
+                  No hay horarios disponibles ese día. Prueba otra fecha.
+                  {ventana && ` Ten en cuenta que por aquí solo se reservan citas entre las ${ventana.horarioCita.desde} y las ${ventana.horarioCita.hasta}; para otra hora, comunícate con la clínica.`}
+                </p>
+              )}
             </div>
 
             <button className="btn btn-ghost" onClick={() => setPaso('servicio')}>Cambiar servicio</button>
