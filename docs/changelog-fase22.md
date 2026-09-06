@@ -33,7 +33,9 @@ disponibles ese día» cuando sí los había, solo que no para ese canal.
 
 **El bot recibe las fechas y la franja como dato**, igual que ya recibía la primera fecha
 agendable — y cuando la franja vacía la lista le dice al modelo por qué, en vez de un
-«no hay disponibilidad» que le hacía contarle al paciente que la agenda estaba llena.
+«no hay disponibilidad» que le hacía contarle al paciente que la agenda estaba llena. Y
+ofrece pasar con una asistente, escalando solo si el paciente acepta: hacerlo a la primera
+llenaría la bandeja de quien solo estaba mirando fechas.
 
 El detalle de las decisiones —el `+N` derivado y no guardado, el festivo que no puede abrir
 la ventana antes que un día laborable, por qué las guardas no van en `validarCupo()`— está
@@ -63,7 +65,7 @@ para afirmar lo que ahora corresponde.
 
 ## Números
 
-333 unitarias (API) · 91 (shared) · 419 e2e de API · 68 de navegador. Todo verde.
+333 unitarias (API) · 91 (shared) · 421 e2e de API · 68 de navegador. Todo verde.
 
 ## Riesgos, con medidas de producción
 

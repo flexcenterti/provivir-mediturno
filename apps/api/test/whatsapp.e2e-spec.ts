@@ -1310,6 +1310,54 @@ describe('Canal WhatsApp (e2e)', () => {
     });
 
     /**
+     * Mata: quitar del prompt la regla de ofrecer y escalar al aceptar.
+     *
+     * Sin ella, la lista de «Cuándo escalar» no cubre este caso y la conversación puede
+     * morir en un «no puedo» sin que nadie en la clínica se entere de que esa persona
+     * quiso una cita. Es una afirmación sobre el prompt y no sobre la conducta del
+     * modelo, que es lo único que se puede fijar aquí: lo otro se mide con el set
+     * anotado antes del piloto.
+     */
+    it('el prompt manda ofrecer la asistente y escalar solo cuando el paciente acepte', async () => {
+      llm.programar(texto('Con gusto.'));
+      await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'Hola' }) as never);
+
+      const system = llm.llamadas[0]!.system;
+      expect(system).toMatch(/no se puede reservar/);
+      expect(system).toMatch(/cuando acepte\*{0,2}, no antes/);
+    });
+
+    /**
+     * Cubre el CAMINO, no un aserto propio: que una conversación que ya pasó por un
+     * rechazo de cupos siga llegando a la IA y pueda escalar con su motivo. Importa
+     * porque el estado de la conversación sí decide si vuelve a pasar por el modelo
+     * —una ya escalada no lo hace—, y sin esto el consejo del prompt podría ser un
+     * callejón sin salida.
+     *
+     * La mutación que la mata —perder el motivo al escalar— mata también la prueba de
+     * más arriba que ya cubría la escalada directa. Se comprobó. Está aquí por el
+     * camino completo, no por el aserto.
+     */
+    it('cuando el paciente acepta, la conversación llega a la bandeja con su motivo', async () => {
+      llm.programar(
+        usaHerramienta('ofrecer_cupos', { servicioId: 'mg', fecha: lunes, prestadorId: 'ao' }),
+        texto('Ese día solo hay mañana. ¿Quieres que una asistente te la coordine?'),
+      );
+      await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'Quiero cita el lunes' }) as never);
+
+      llm.programar(
+        usaHerramienta('escalar_a_asistente', {
+          motivo: 'Quiere una hora fuera de la franja del canal', prioridad: 'media',
+        }),
+      );
+      await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'Sí, por favor' }) as never);
+
+      const c = await prisma.conversacion.findFirstOrThrow({ where: { telefono: TEL } });
+      expect(c.escalada).toBe(true);
+      expect(c.motivo).toBe('Quiere una hora fuera de la franja del canal');
+    });
+
+    /**
      * Mata: anunciar la franja en el prompt aunque cubra el día entero.
      *
      * «Solo en horario de 00:00 a 23:59» no es una restricción, es ruido que el modelo

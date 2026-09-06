@@ -117,6 +117,13 @@ Una regla que solo se descubre chocando contra un 400 no es una regla, es una tr
   autoservicio — lo único que cambia entre las dos es el filtro horario, porque las demás
   reglas del canal lanzan en vez de filtrar y ya habrían lanzado, así que el sondeo es
   exacto y solo se paga cuando la lista viene vacía.
+
+  **Y ofrece la asistente, pero escala solo si el paciente acepta.** Escalar en cuanto un día
+  se queda sin tardes llenaría la bandeja de gente que solo estaba mirando fechas: con 14 de
+  27 franjas de mañana, tres días probados serían tres casos. Así que la regla del prompt es
+  ofrecerlo siempre y traspasar cuando diga que sí. Sigue dependiendo de que el modelo
+  obedezca —el único corte duro del orquestador es `escalar_a_asistente`—, y eso se mide con
+  el set anotado, no con estas pruebas.
 - **El backoffice** pinta, debajo de la tabla, la ventana que sale de lo que el operador
   acaba de escribir. Por eso las reglas puras están en `packages/shared` y no en la API:
   calcularlas dos veces sería garantizar que un día difieran.

@@ -494,7 +494,8 @@ export class IaService {
     return {
       motivoSinDisponibilidad:
         `Ese dia SI hay agenda, pero por este canal solo se reservan citas entre las ${desde} y las ${hasta}. `
-        + 'Diselo asi al paciente y ofrecele que una asistente le coordine un horario de manana.',
+        + 'Diselo asi al paciente y preguntale directamente si quiere que una asistente le '
+        + 'coordine una hora fuera de esa franja. Si acepta, escala; si no, no escales.',
     };
   }
 
