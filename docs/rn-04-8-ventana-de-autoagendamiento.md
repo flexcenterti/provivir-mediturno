@@ -106,10 +106,17 @@ Una regla que solo se descubre chocando contra un 400 no es una regla, es una tr
   los lista, porque un `<input type="date">` no sabe deshabilitar días sueltos. Y el vacío
   de cupos deja de mentir: antes decía «no hay horarios disponibles ese día» cuando sí los
   había, solo que no para este canal.
-- **El bot** recibe las fechas como **dato** en el prompt, igual que ya recibía
-  `primeraFechaAgendable`. Escribir la tabla de siete filas en el prompt la convertiría en
-  una sugerencia que el modelo puede reinterpretar. Puede seguir pidiendo lo que quiera: la
-  invariante vive en el motor.
+- **El bot** recibe las fechas **y la franja horaria** como dato en el prompt, igual que ya
+  recibía `primeraFechaAgendable`. Escribir la tabla de siete filas en el prompt la
+  convertiría en una sugerencia que el modelo puede reinterpretar. Puede seguir pidiendo lo
+  que quiera: la invariante vive en el motor.
+
+  Y cuando la franja vacía la lista, `ofrecer_cupos` le dice al modelo **por qué**. Sin eso
+  el bot le contaba al paciente que la agenda estaba llena, que es falso: los cupos existen,
+  no son para ese canal. Se distingue repitiendo la misma consulta sin la marca de
+  autoservicio — lo único que cambia entre las dos es el filtro horario, porque las demás
+  reglas del canal lanzan en vez de filtrar y ya habrían lanzado, así que el sondeo es
+  exacto y solo se paga cuando la lista viene vacía.
 - **El backoffice** pinta, debajo de la tabla, la ventana que sale de lo que el operador
   acaba de escribir. Por eso las reglas puras están en `packages/shared` y no en la API:
   calcularlas dos veces sería garantizar que un día difieran.

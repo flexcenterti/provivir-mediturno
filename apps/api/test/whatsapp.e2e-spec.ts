@@ -7,7 +7,9 @@ import request from 'supertest';
 import { json } from 'express';
 import type { IncomingMessage } from 'node:http';
 import { AppModule } from '../src/app.module';
-import { apagarVentana, encenderVentana } from './utiles-autoagendamiento';
+import {
+  apagarVentana, encenderVentana, restaurarVentana, ventanaSoloElProximoLunes,
+} from './utiles-autoagendamiento';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { fechaEnZona } from '@provivir/shared';
 import { ConversacionService } from '../src/whatsapp/conversacion.service';
@@ -1258,6 +1260,78 @@ describe('Canal WhatsApp (e2e)', () => {
 
       await request(http).get('/api/bandeja')
         .set('Authorization', `Bearer ${login.body.accessToken}`).expect(403);
+    });
+  });
+  /*
+   * RN-04.8 · Único bloque de esta suite que enciende la ventana. Va al final y restaura
+   * en su `afterAll`: la base es compartida y la configuración la hereda lo que corra
+   * después.
+   */
+  describe('RN-04.8 · lo que el agente sabe de la ventana', () => {
+    let lunes: string;
+
+    beforeAll(async () => { lunes = await ventanaSoloElProximoLunes(app, '12:00-23:59'); });
+    afterAll(async () => { await restaurarVentana(app); await apagarVentana(app); });
+
+    /**
+     * Mata: devolver solo `sinDisponibilidad` cuando la franja vacía la lista.
+     *
+     * Es lo que hacía antes, y hacía que el bot le dijera al paciente que la agenda
+     * estaba llena. No lo estaba: el lunes tiene mañana entera y ninguna hora de tarde,
+     * así que por este canal no hay nada — pero la razón no es la que el paciente oía.
+     */
+    it('cuando la franja deja la lista vacía, el modelo recibe el motivo, no un «no hay»', async () => {
+      llm.programar(
+        usaHerramienta('ofrecer_cupos', { servicioId: 'mg', fecha: lunes, prestadorId: 'ao' }),
+        texto('Ese día solo tenemos mañana; te paso con una asistente.'),
+      );
+
+      await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'Quiero cita el lunes' }) as never);
+
+      // El resultado de la herramienta viaja en los mensajes de la SIGUIENTE llamada.
+      const visto = JSON.stringify(llm.llamadas[1]!.mensajes);
+      expect(visto).toContain('sinDisponibilidad');
+      expect(visto).toContain('12:00');
+      expect(visto).toMatch(/SI hay agenda/);
+    });
+
+    /**
+     * Mata: dejar el horario solo en el resultado de `ofrecer_cupos`.
+     *
+     * Sin el dato en el prompt, el modelo abre la conversación prometiendo «tenemos por
+     * la mañana» y se desdice después de consultar. Rectificar es peor que no prometer.
+     */
+    it('el prompt lleva la franja horaria, no solo las fechas', async () => {
+      llm.programar(texto('Con gusto.'));
+      await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'Hola' }) as never);
+
+      expect(llm.llamadas[0]!.system).toContain('12:00 a 23:59');
+      expect(llm.llamadas[0]!.system).toContain(lunes);
+    });
+
+    /**
+     * Mata: anunciar la franja en el prompt aunque cubra el día entero.
+     *
+     * «Solo en horario de 00:00 a 23:59» no es una restricción, es ruido que el modelo
+     * puede acabar repitiéndole al paciente como si lo fuera.
+     *
+     * La segunda afirmación —que tampoco aparece el motivo— no la mata quitar su atajo
+     * en `motivoDelVacio`: con la franja abierta el sondeo devuelve cero igual y sale
+     * por el mismo sitio. Se comprobó mutándolo. Se afirma de todos modos porque es la
+     * conducta observable que le importa al paciente, pero el atajo es un ahorro de
+     * consulta y así está anotado donde vive.
+     */
+    it('una franja de día entero no se anuncia ni como motivo ni en el prompt', async () => {
+      await ventanaSoloElProximoLunes(app, '00:00-23:59');
+
+      llm.programar(
+        usaHerramienta('ofrecer_cupos', { servicioId: 'mg', fecha: lunes, prestadorId: 'ao' }),
+        texto('Estos son los horarios.'),
+      );
+      await conversaciones.procesar(entrante({ tipo: 'texto', texto: 'Quiero cita el lunes' }) as never);
+
+      expect(llm.llamadas[0]!.system).not.toContain('00:00 a 23:59');
+      expect(JSON.stringify(llm.llamadas[1]!.mensajes)).not.toContain('motivoSinDisponibilidad');
     });
   });
 });

@@ -36,6 +36,12 @@ export function promptSistema(opciones: {
    * sigue en `citas.service`, que rechaza la fecha aunque el modelo la pida igual.
    */
   fechasAgendables?: string[] | null;
+  /**
+   * RN-04.8 · La franja horaria que este canal puede reservar, `HH:MM-HH:MM`, o `null`.
+   * Va aquí y no solo en el resultado de `ofrecer_cupos` para que el modelo no ofrezca
+   * de entrada «tenemos por la mañana»: rectificar después es peor que no prometer.
+   */
+  horarioAgendable?: string | null;
 }): string {
   const hoy = fechaEnZona();
 
@@ -45,7 +51,11 @@ Atiendes por WhatsApp. Hoy es ${hoy}. ${opciones.fechasAgendables?.length
       ? `Por este canal solo se puede agendar en estas fechas: ${opciones.fechasAgendables.join(', ')}. `
         + 'Para cualquier otra, la persona tiene que comunicarse con una asistente.'
       : `La cita más próxima que se puede agendar por este canal es del ${opciones.primeraFechaAgendable} `
-        + 'en adelante; para hoy mismo, la persona debe acercarse a la sede.'}`,
+        + 'en adelante; para hoy mismo, la persona debe acercarse a la sede.'}${
+      opciones.horarioAgendable
+        ? ` Y solo en horario de ${opciones.horarioAgendable}: si la persona pide otra hora, `
+          + 'una asistente se lo coordina.'
+        : ''}`,
 
     `## Tu trabajo
 Ya te presentaste al empezar la conversación: NO vuelvas a saludar ni a decir quién eres,

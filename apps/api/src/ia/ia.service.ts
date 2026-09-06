@@ -69,7 +69,7 @@ export class IaService {
       ofrecerWeb: !ctx.yaOfrecioWeb,
       conocimientoDisponible: kbConContenido,
       primeraFechaAgendable: this.citas.primeraFechaAgendableAutoservicio(),
-      fechasAgendables: (await this.citas.ventanaDeAutoservicio())?.fechas ?? null,
+      ...(await this.datosDeLaVentana()),
     });
 
     const mensajes: MensajeLlm[] = [
@@ -342,6 +342,9 @@ export class IaService {
             })),
             // Que el modelo no confunda "no hay" con un error.
             sinDisponibilidad: cupos.length === 0,
+            ...(cupos.length === 0
+              ? await this.motivoDelVacio(String(args.servicioId), String(args.fecha), args.prestadorId || undefined)
+              : {}),
           };
         }
 
@@ -430,6 +433,69 @@ export class IaService {
       // para poder ofrecer alternativas, no para reinterpretarlo.
       return { error: mensaje };
     }
+  }
+
+  /**
+   * RN-04.8 · La ventana vigente, como DATO para el prompt.
+   *
+   * Datos y no reglas: escribir la tabla de siete filas en el prompt la convertiría en
+   * una sugerencia que el modelo puede reinterpretar. La invariante vive en el motor,
+   * que rechaza la fecha y la hora aunque el modelo las pida igual.
+   */
+  private async datosDeLaVentana(): Promise<{
+    fechasAgendables: string[] | null; horarioAgendable: string | null;
+  }> {
+    const v = await this.citas.ventanaDeAutoservicio();
+    if (!v) return { fechasAgendables: null, horarioAgendable: null };
+
+    const cubreElDia = v.horarioCita.desde === 0 && v.horarioCita.hasta >= 1439;
+    return {
+      fechasAgendables: v.fechas,
+      // Una franja de día entero no es una restricción: decirla solo añade ruido.
+      horarioAgendable: cubreElDia ? null : `${aHHMM(v.horarioCita.desde)} a ${aHHMM(v.horarioCita.hasta)}`,
+    };
+  }
+
+  /**
+   * RN-04.8 · Por qué la lista salió vacía, cuando la respuesta honesta no es «no hay».
+   *
+   * Con la franja horaria del autoservicio, un día con agenda entera de mañana no
+   * devuelve un solo cupo por este canal. Decirle al modelo solo `sinDisponibilidad`
+   * hace que le prometa al paciente que la agenda está llena, que es falso: los cupos
+   * existen, no son para este canal. Es la misma mentira que el portal dejó de contar.
+   *
+   * Se comprueba repitiendo la MISMA consulta sin la marca de autoservicio. Lo único
+   * que cambia entre las dos es el filtro horario: las demás reglas del canal —el día
+   * no laborable, la ventana, la anticipación, una cita por día— **lanzan** en vez de
+   * filtrar, así que si se llegó hasta aquí es que ya pasaron todas. Por eso el sondeo
+   * es exacto y no una aproximación, y por eso solo se paga cuando la lista viene vacía.
+   */
+  private async motivoDelVacio(
+    servicioId: string, fecha: string, prestadorId?: string,
+  ): Promise<{ motivoSinDisponibilidad: string } | Record<string, never>> {
+    const ventana = await this.citas.ventanaDeAutoservicio();
+    if (!ventana) return {};
+
+    const desde = aHHMM(ventana.horarioCita.desde);
+    const hasta = aHHMM(ventana.horarioCita.hasta);
+    /*
+     * Atajo, NO una guarda de corrección: con la franja abierta el sondeo devolvería lo
+     * mismo que la consulta filtrada —cero— y se saldría por el `return` de abajo. Se
+     * comprobó mutándolo, y ninguna prueba cae. Está por lo que ahorra: una consulta de
+     * cupos por cada día sin disponibilidad, en el camino caliente del bot.
+     */
+    if (ventana.horarioCita.desde === 0 && ventana.horarioCita.hasta >= 1439) return {};
+
+    const sinFiltro = await this.citas.cupos(
+      { servicioId, fecha, prestadorId, limite: 1 } as never,
+    );
+    if (sinFiltro.length === 0) return {};
+
+    return {
+      motivoSinDisponibilidad:
+        `Ese dia SI hay agenda, pero por este canal solo se reservan citas entre las ${desde} y las ${hasta}. `
+        + 'Diselo asi al paciente y ofrecele que una asistente le coordine un horario de manana.',
+    };
   }
 
   /** Umbral de confianza configurable (RN-08.2, Arquitectura §7.3). */
