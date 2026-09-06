@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { SEDE_ID } from '@provivir/shared';
+import { SEDE_ID, aHHMM } from '@provivir/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { CitasService } from '../citas/citas.service';
@@ -33,6 +33,17 @@ export class PortalService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
   ) {}
+
+  /** RN-04.8 · La ventana vigente, tal cual la calcula el motor. Ver el controlador. */
+  async ventana() {
+    const v = await this.citas.ventanaDeAutoservicio();
+    if (!v) return null;
+    return {
+      fechas: v.fechas,
+      horarioCita: { desde: aHHMM(v.horarioCita.desde), hasta: aHHMM(v.horarioCita.hasta) },
+      canal: { desde: aHHMM(v.canal.desde), hasta: aHHMM(v.canal.hasta) },
+    };
+  }
 
   /** Catálogo visible en el portal. Sin datos internos: solo lo que el paciente elige. */
   async servicios() {

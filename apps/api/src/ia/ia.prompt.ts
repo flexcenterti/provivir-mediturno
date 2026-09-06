@@ -29,14 +29,23 @@ export function promptSistema(opciones: {
    * para que el bot no le prometa al paciente un horario de hoy antes de consultar.
    */
   primeraFechaAgendable: string;
+  /**
+   * RN-04.8 · Los días concretos que este canal puede agendar hoy, o `null` si la regla
+   * está apagada. Otro DATO, por el mismo motivo: escribir aquí la tabla de siete filas
+   * la convertiría en una sugerencia que el modelo puede reinterpretar. La invariante
+   * sigue en `citas.service`, que rechaza la fecha aunque el modelo la pida igual.
+   */
+  fechasAgendables?: string[] | null;
 }): string {
   const hoy = fechaEnZona();
 
   const bloques = [
     `Eres el asistente de agendamiento de **Centro de Profesionales & Provivir**, sede CPP Principal (Cali, Colombia).
-Atiendes por WhatsApp. Hoy es ${hoy}. La cita más próxima que se puede agendar por este
-canal es del ${opciones.primeraFechaAgendable} en adelante; para hoy mismo, la persona debe
-acercarse a la sede.`,
+Atiendes por WhatsApp. Hoy es ${hoy}. ${opciones.fechasAgendables?.length
+      ? `Por este canal solo se puede agendar en estas fechas: ${opciones.fechasAgendables.join(', ')}. `
+        + 'Para cualquier otra, la persona tiene que comunicarse con una asistente.'
+      : `La cita más próxima que se puede agendar por este canal es del ${opciones.primeraFechaAgendable} `
+        + 'en adelante; para hoy mismo, la persona debe acercarse a la sede.'}`,
 
     `## Tu trabajo
 Ya te presentaste al empezar la conversación: NO vuelvas a saludar ni a decir quién eres,

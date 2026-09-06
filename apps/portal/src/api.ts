@@ -11,6 +11,18 @@ export interface Confirmacion {
   codigo: string; paciente: string; servicio: string; prestador: string;
   fecha: string; hora: string; duracionMin: number; indicaciones: string;
 }
+/**
+ * RN-04.8 · La ventana de autoagendamiento que el motor está aplicando ahora mismo.
+ * `null` cuando la regla está apagada, y entonces el portal se comporta como antes.
+ */
+export interface Ventana {
+  /** Los días concretos que se pueden reservar hoy, en orden. Puede venir vacía. */
+  fechas: string[];
+  /** Franja de las citas ofrecidas, HH:MM. */
+  horarioCita: { desde: string; hasta: string };
+  /** Reloj en que el canal está abierto, HH:MM. */
+  canal: { desde: string; hasta: string };
+}
 export interface Aviso {
   responsable: string; finalidad: string; derechos: string; base: string; captchaActivo: boolean;
 }
@@ -48,6 +60,7 @@ type Sesion = { sesion: string; paciente: { nombres: string; apellidos: string }
 export const api = {
   aviso: () => pedir<Aviso>('/aviso-privacidad'),
   servicios: () => pedir<Servicio[]>('/servicios'),
+  ventana: () => pedir<Ventana | null>('/ventana'),
   identificar: (documento: string, telefonoUltimos4: string) =>
     pedirProtegido<Sesion>('/identificar', { documento, telefonoUltimos4 }),
   registrar: (datos: object) =>

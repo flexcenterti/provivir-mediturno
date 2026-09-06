@@ -69,6 +69,7 @@ export class IaService {
       ofrecerWeb: !ctx.yaOfrecioWeb,
       conocimientoDisponible: kbConContenido,
       primeraFechaAgendable: this.citas.primeraFechaAgendableAutoservicio(),
+      fechasAgendables: (await this.citas.ventanaDeAutoservicio())?.fechas ?? null,
     });
 
     const mensajes: MensajeLlm[] = [
