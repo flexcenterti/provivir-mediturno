@@ -128,3 +128,21 @@ prueba cuya única razón de existir es esa— y por la estructura: la guarda mi
 autoservicio por ningún canal, y esta fase no se notará. Cuando se desbloqueen, se sumarán
 dos restricciones a la vez —la ventana de días y la franja de tardes— y ahí es donde hay
 que mirar si «solo tardes» deja fuera las 14 franjas de mañana.
+
+---
+
+## Segundo despliegue · el bot (2026-09-06, 23:01)
+
+Solo API: sin migración y sin frontend —los tres bundles salen idénticos a los que ya
+servía Caddy, que es lo que debía pasar—.
+
+- Código nuevo confirmado **dentro del contenedor**: la regla de escalada en
+  `ia.prompt.js`, y `motivoSinDisponibilidad` con su sondeo en `ia.service.js`.
+- `/api/health/ready` en `ok` (db, sede, configuración), contenedor `healthy`, **cero
+  errores** en el arranque —las dos coincidencias del registro son las rutas
+  `errores.csv`—.
+- `/api/portal/ventana` sigue devolviendo del 9 al 11 de septiembre.
+- Datos intactos y con tráfico real: 100 pacientes (dos nuevos desde el despliegue de la
+  tarde), 25 citas, 27 agendas, 36 parámetros.
+- Respaldo previo verificado por contenido: 12 474 líneas, 27 bloques `COPY`, marcador de
+  cierre.
