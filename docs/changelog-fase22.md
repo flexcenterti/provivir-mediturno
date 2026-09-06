@@ -85,3 +85,42 @@ vez. Sigue siendo lo urgente, y sigue sin ser de esta fase.
 Abrir el portal y comprobar que **solo ofrece las fechas de la ventana y solo horarios de
 tarde**, y que el mostrador sigue agendando cualquier día. Es la única verificación que
 importa de verdad.
+
+---
+
+## El despliegue
+
+Desplegado el 2026-09-06 a las 20:39. **Sin migración**, y `migrate status` lo confirma
+contra la base real: siguen siendo 13, ninguna pendiente.
+
+### Verificado en vivo
+
+- **Las cinco claves sembradas solas** al arrancar, con los valores de la tabla: la
+  configuración pasa de 31 a 36 parámetros. Nadie tuvo que tocar la base.
+- **`GET /api/portal/ventana` registrada y respondiendo** por el dominio real. Hoy es
+  domingo, así que rige la fila 7 —miércoles a viernes— y devuelve exactamente
+  `2026-09-09`, `10` y `11`.
+- **La regla muerde, y con el mensaje correcto.** Pedir cupos para mañana por el portal
+  devuelve *«Por este medio puedes agendar del 2026-09-09 al 2026-09-11»*, no un «no hay
+  horarios» que sería falso.
+- `/api/health/ready` en `ok` (db, sede y configuración), contenedor `healthy`, **cero
+  errores** en el registro de arranque.
+- Bundles: backoffice `index-BM9gd5_d.js`, portal `index-tEhqizmz.js`. **La TV no cambia**
+  —`index-_5pAeNb5.js`, el mismo de la fase 21—, que es lo que debía pasar. Sin `dist`
+  anidado; los tres `index.html` apuntan al bundle nuevo servido por Caddy.
+- Caddy no se tocó. Datos intactos: 98 pacientes, 25 citas, 27 agendas, 13 migraciones.
+- Respaldo previo verificado **por contenido** antes de tocar nada: 12 363 líneas, 27
+  bloques `COPY` y el marcador de cierre del volcado.
+
+### Lo que NO se pudo verificar en vivo
+
+**Que el mostrador siga agendando cualquier día.** No por un problema de la fase: con las
+27 agendas bloqueadas, dentro de la ventana el portal devuelve `[]` igual que devolvería el
+mostrador, así que la comprobación no distinguiría nada. Queda cubierta por la suite —una
+prueba cuya única razón de existir es esa— y por la estructura: la guarda mira
+`opciones.autoservicio`, que el controlador del backoffice no envía nunca.
+
+**Y sigue pendiente lo de siempre:** las 27 agendas bloqueadas. Mientras sigan así no hay
+autoservicio por ningún canal, y esta fase no se notará. Cuando se desbloqueen, se sumarán
+dos restricciones a la vez —la ventana de días y la franja de tardes— y ahí es donde hay
+que mirar si «solo tardes» deja fuera las 14 franjas de mañana.
